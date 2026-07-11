@@ -34,9 +34,11 @@ $last5=$tradeDates | Select-Object -Last 5
 
 Write-Host "[3/8] T86 x5 days: $($last5 -join ',')"
 $chip=@{}
+$t86ok=0
 foreach($d in $last5){
   $r=GetJson "https://www.twse.com.tw/rwd/zh/fund/T86?date=$d&selectType=ALL&response=json"
   if($r -and $r.stat -eq 'OK'){
+    $t86ok++
     foreach($row in $r.data){
       $c="$($row[0])".Trim()
       if(-not $chip.ContainsKey($c)){ $chip[$c]=@{f=@();t=@();tot=@()} }
@@ -45,6 +47,7 @@ foreach($d in $last5){
   }
   Start-Sleep -Milliseconds 800
 }
+if($t86ok -lt 5){ Write-Host "  WARNING: only $t86ok/5 T86 days fetched - chip screening degraded. Consider re-run later." }
 
 Write-Host "[4/8] BFI82U (market inst amount)..."
 $instNet=$null
@@ -103,13 +106,17 @@ $short = $cands | Sort-Object -Property @{e='chip';Descending=$true}, @{e='tSum'
 $picks=@()
 $curMM=$d0.ToString('yyyyMM01'); $prvMM=$d0.AddMonths(-1).ToString('yyyyMM01'); $prv2MM=$d0.AddMonths(-2).ToString('yyyyMM01'); $prv3MM=$d0.AddMonths(-3).ToString('yyyyMM01')
 foreach($s in $short){
-  $c=$s.code; $ser=@()
+  $c=$s.code; $serF=@()
   foreach($mm in @($prv3MM,$prv2MM,$prvMM,$curMM)){
     $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$c&response=json"
-    if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){ $ser += [double](Num $d[6]) } }
+    if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
+      $dp="$($d[0])".Split('/')
+      $serF += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double](Num $d[6]); chg=(Num $d[7]); v=[math]::Round((Num $d[1])/1000,0) }
+    } }
     Start-Sleep -Milliseconds 700
   }
-  if($ser.Count -lt 25){ continue }
+  if($serF.Count -lt 25){ continue }
+  $ser=@($serF | ForEach-Object { $_.c })
   $cl=$ser[$ser.Count-1]
   $ma20=SMAlast $ser 20; $ma60=SMAlast $ser 60
   $ma20p = if($ser.Count -ge 25){ SMAlast ($ser[0..($ser.Count-6)]) 20 } else { $null }
@@ -143,6 +150,7 @@ foreach($s in $short){
   $fd=$fin[$c]; $finDelta = if($fd -and $fd.today -ne $null -and $fd.prev -ne $null){ [int]($fd.today-$fd.prev) } else { $null }
   $spark=@(); $nS=[math]::Min(40,$ser.Count)
   foreach($v in $ser[($ser.Count-$nS)..($ser.Count-1)]){ $spark += [math]::Round($v,2) }
+  $nK=[math]::Min(60,$serF.Count); $kline=@($serF[($serF.Count-$nK)..($serF.Count-1)])
   $picks += [pscustomobject]@{
     code=$c; name=$px[$c].name; ind=$ind; close=$cl; chgPct=[math]::Round((Num $px[$c].chg)/($cl-(Num $px[$c].chg))*100,2)
     score=($s.chip+$tech+$fund); chip=$s.chip; tech=$tech; fund=$fund
@@ -150,7 +158,7 @@ foreach($s in $short){
     finDelta=$finDelta; yoy=$y; pe=$peV; dy=$dyV
     ret5=[math]::Round($ret5*100,1); dist=[math]::Round($dist*100,1)
     ma20=[math]::Round($ma20,2); ma60=[math]::Round($ma60,2)
-    spark=$spark
+    spark=$spark; kline=$kline
   }
 }
 $picks = $picks | Sort-Object -Property @{e='score';Descending=$true}
@@ -220,15 +228,17 @@ if($closedR.Count -gt 0 -or $openR.Count -gt 0){
     avgRetOpen=$(if($openR.Count -gt 0){[math]::Round(($openR|Measure-Object -Property ret -Average).Average,2)}else{$null})
   }
 }
-# append today's picks: skip if code already open or already logged today
+# append today's picks: ONE snapshot per trade date (reruns never append), plus open-code dedupe
 $openCodes=@{}; foreach($o in $norm){ if($o.status -eq 'open'){ $openCodes[$o.code]=$true } }
-$todayCodes=@{}; foreach($o in $norm){ if($o.date -eq $lastDate){ $todayCodes[$o.code]=$true } }
+$dateLogged=($norm | Where-Object { $_.date -eq $lastDate }).Count -gt 0
 $newLogged=0
-foreach($p in $top5){
-  if($openCodes.ContainsKey($p.code) -or $todayCodes.ContainsKey($p.code)){ continue }
-  $norm += ,@{ date=$lastDate; code=$p.code; name=$p.name; price=$p.close; score=$p.score; status='open' }
-  $newLogged++
-}
+if(-not $dateLogged){
+  foreach($p in $top5){
+    if($openCodes.ContainsKey($p.code)){ continue }
+    $norm += ,@{ date=$lastDate; code=$p.code; name=$p.name; price=$p.close; score=$p.score; status='open' }
+    $newLogged++
+  }
+} else { Write-Host "  date $lastDate already logged - snapshot preserved, no append" }
 @{ picks=$norm } | ConvertTo-Json -Depth 5 | Out-File $logPath -Encoding UTF8
 
 $out=@{
@@ -240,5 +250,23 @@ $out=@{
   meta=@{ candidates=$cands.Count; shortlist=@($short).Count; newLogged=$newLogged }
 }
 $out | ConvertTo-Json -Depth 6 | Out-File (Join-Path $root 'screen-result.json') -Encoding UTF8
+
+# splice PICKS_KLINE (full OHLCV for pick modals) directly into index.html
+$idxPath=Join-Path $root 'index.html'
+if(Test-Path $idxPath){
+  $enc=New-Object System.Text.UTF8Encoding($false)
+  $html=[IO.File]::ReadAllText($idxPath,$enc)
+  $startTag='<script id="pkline">'
+  $i1=$html.IndexOf($startTag)
+  if($i1 -ge 0){
+    $i2=$html.IndexOf('</script>',$i1)
+    $kd=[ordered]@{}
+    foreach($p in $top5){ $kd[$p.code]=@{ chgPct=$p.chgPct; dist=$p.dist; kline=$p.kline } }
+    $js='window.PICKS_KLINE='+($kd|ConvertTo-Json -Depth 6 -Compress)+';'
+    $html=$html.Substring(0,$i1+$startTag.Length)+$js+$html.Substring($i2)
+    [IO.File]::WriteAllText($idxPath,$html,$enc)
+    Write-Host "  spliced PICKS_KLINE into index.html ($($js.Length) bytes)"
+  } else { Write-Host "  pkline marker not found - skip splice" }
+}
 Write-Host "DONE. light=$light idx=$idxLast picks=$($top5.Count) newLogged=$newLogged openPos=$($openR.Count) closed=$($closedR.Count)"
 foreach($p in $top5){ Write-Host ("  {0} {1} score={2} (chip{3}/tech{4}/fund{5}) spark={6}pts" -f $p.code,$p.name,$p.score,$p.chip,$p.tech,$p.fund,$p.spark.Count) }
