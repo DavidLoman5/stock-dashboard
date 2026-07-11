@@ -1,5 +1,5 @@
-# screen.ps1 - TWSE quant screening engine (ASCII source only)
-# Output: screen-result.json + updates picks-log.json
+# screen.ps1 - TWSE quant screening engine v2 (ASCII source only)
+# v2: regime-aware scoring, 20-day auto-close tracking, dedupe, spark output
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 function Num($s){ if($null -eq $s){return $null}; $t=("$s" -replace '[^0-9\.\-]',''); if($t -eq '' -or $t -eq '-'){return $null}; [double]$t }
@@ -67,6 +67,17 @@ $r=GetJson "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
 if($r){ foreach($row in $r){ $p=@($row.PSObject.Properties); $c="$($p[2].Value)".Trim(); $rev[$c]=@{ ind="$($p[4].Value)".Trim(); yoy=(Num $p[9].Value); name="$($p[3].Value)".Trim() } } }
 Write-Host "  pe=$($pe.Count) rev=$($rev.Count)"
 
+# ----- regime light (computed BEFORE scoring so weights can adapt) -----
+$pts=0
+if($idxLast -gt $idxMA20){ $pts++ }
+if($instNet -ne $null -and $instNet -gt 0){ $pts++ }
+if($upN -gt $dnN){ $pts++ }
+$light='red'
+if($idxMA60 -ne $null -and $idxLast -lt $idxMA60){ $light='red' }
+elseif($pts -eq 3){ $light='green' }
+elseif($pts -ge 2 -or ($idxMA60 -ne $null -and $idxLast -gt $idxMA60)){ $light='yellow' }
+Write-Host "  regime = $light (pts=$pts)"
+
 Write-Host "[7/8] screening..."
 $cands=@()
 foreach($c in $chip.Keys){
@@ -78,10 +89,9 @@ foreach($c in $chip.Keys){
   $tPos=($t | Where-Object {$_ -gt 0}).Count
   $fPos=($f | Where-Object {$_ -gt 0}).Count
   $tSum=($t | Measure-Object -Sum).Sum; $fSum=($f | Measure-Object -Sum).Sum
-  # gate: trust bought >=3 of 5 days with positive sum, OR foreign >=4 of 5 with meaningful size
   $ok=$false
-  if($tPos -ge 3 -and $tSum -gt 300000){ $ok=$true }          # >300 lots trust net
-  if($fPos -ge 4 -and $fSum -gt 3000000){ $ok=$true }         # >3000 lots foreign net
+  if($tPos -ge 3 -and $tSum -gt 300000){ $ok=$true }
+  if($fPos -ge 4 -and $fSum -gt 3000000){ $ok=$true }
   if(-not $ok){ continue }
   $chipScore = [math]::Min(25, $tPos*5) + [math]::Min(10, $fPos*2)
   $fd=$fin[$c]; if($fd -and $fd.today -ne $null -and $fd.prev -ne $null -and $fd.today -lt $fd.prev){ $chipScore += 5 }
@@ -114,6 +124,9 @@ foreach($s in $short){
   if($ma20p -ne $null -and $ma20 -gt $ma20p){ $tech+=5 }
   if($dist -ge -0.08){ $tech+=4 }
   if($px[$c].chg -gt 0 -and $px[$c].val -gt 3e8){ $tech+=3 }
+  # regime-aware: green light rewards momentum
+  if($light -eq 'green' -and $ret5 -ge 0.03 -and $ret5 -le 0.15){ $tech+=3 }
+  if($tech -gt 30){ $tech=30 }
   $fund=0; $y=$null; $ind=''
   if($rev.ContainsKey($c)){ $y=$rev[$c].yoy; $ind=$rev[$c].ind }
   if($y -ne $null){ if($y -ge 100){$fund+=15}elseif($y -ge 30){$fund+=12}elseif($y -ge 10){$fund+=8}elseif($y -gt 0){$fund+=4} }
@@ -121,8 +134,15 @@ foreach($s in $short){
   if($pe.ContainsKey($c)){ $peV=$pe[$c].pe; $dyV=$pe[$c].dy }
   if($peV -ne $null -and $peV -gt 0){ if($peV -le 15){$fund+=10}elseif($peV -le 25){$fund+=7}elseif($peV -le 40){$fund+=4} }
   if($dyV -ne $null -and $dyV -ge 3){ $fund+=5 }
+  # regime-aware: non-green rewards defensive traits
+  if($light -ne 'green'){
+    if($dyV -ne $null -and $dyV -ge 4){ $fund+=3 }
+    if($peV -ne $null -and $peV -gt 0 -and $peV -le 15){ $fund+=2 }
+  }
   if($fund -gt 30){ $fund=30 }
   $fd=$fin[$c]; $finDelta = if($fd -and $fd.today -ne $null -and $fd.prev -ne $null){ [int]($fd.today-$fd.prev) } else { $null }
+  $spark=@(); $nS=[math]::Min(40,$ser.Count)
+  foreach($v in $ser[($ser.Count-$nS)..($ser.Count-1)]){ $spark += [math]::Round($v,2) }
   $picks += [pscustomobject]@{
     code=$c; name=$px[$c].name; ind=$ind; close=$cl; chgPct=[math]::Round((Num $px[$c].chg)/($cl-(Num $px[$c].chg))*100,2)
     score=($s.chip+$tech+$fund); chip=$s.chip; tech=$tech; fund=$fund
@@ -130,10 +150,10 @@ foreach($s in $short){
     finDelta=$finDelta; yoy=$y; pe=$peV; dy=$dyV
     ret5=[math]::Round($ret5*100,1); dist=[math]::Round($dist*100,1)
     ma20=[math]::Round($ma20,2); ma60=[math]::Round($ma60,2)
+    spark=$spark
   }
 }
 $picks = $picks | Sort-Object -Property @{e='score';Descending=$true}
-# diversity: prefer at least one non-electronics in top5 (industry codes 24-31 = electronics)
 $elec=@('24','25','26','27','28','29','30','31')
 $top5=@($picks | Select-Object -First 5)
 if($top5.Count -eq 5 -and ($top5 | Where-Object { $elec -notcontains $_.ind }).Count -eq 0){
@@ -141,49 +161,75 @@ if($top5.Count -eq 5 -and ($top5 | Where-Object { $elec -notcontains $_.ind }).C
   if($alt -and ($top5[4].score - $alt.score) -le 15){ $top5 = @($top5[0..3]) + @($alt) }
 }
 
-# regime light
-$pts=0
-if($idxLast -gt $idxMA20){ $pts++ }
-if($instNet -ne $null -and $instNet -gt 0){ $pts++ }
-if($upN -gt $dnN){ $pts++ }
-$light='red'
-if($idxMA60 -ne $null -and $idxLast -lt $idxMA60){ $light='red' }
-elseif($pts -eq 3){ $light='green' }
-elseif($pts -ge 2 -or ($idxMA60 -ne $null -and $idxLast -gt $idxMA60)){ $light='yellow' }
-
-Write-Host "[8/8] picks-log + output..."
+Write-Host "[8/8] picks-log (20-day auto-close, dedupe) + output..."
 $logPath=Join-Path $root 'picks-log.json'
-$log=@{ picks=@() }
-if(Test-Path $logPath){ try{ $log=Get-Content $logPath -Raw -Encoding UTF8 | ConvertFrom-Json }catch{} }
-$logPicks=@(); if($log.picks){ $logPicks=@($log.picks) }
-# performance of past picks (different date)
+$norm=@()
+if(Test-Path $logPath){
+  try{
+    $lg=Get-Content $logPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach($p in @($lg.picks)){
+      $o=@{ date="$($p.date)"; code="$($p.code)"; name="$($p.name)"; price=[double]$p.price; score=[int]$p.score }
+      $o.status = if($p.PSObject.Properties['status'] -and $p.status){ "$($p.status)" } else { 'open' }
+      if($p.PSObject.Properties['exit'] -and $p.exit -ne $null){ $o.exit=[double]$p.exit }
+      if($p.PSObject.Properties['retFinal'] -and $p.retFinal -ne $null){ $o.retFinal=[double]$p.retFinal }
+      if($p.PSObject.Properties['alphaFinal'] -and $p.alphaFinal -ne $null){ $o.alphaFinal=[double]$p.alphaFinal }
+      if($p.PSObject.Properties['closedOn'] -and $p.closedOn){ $o.closedOn="$($p.closedOn)" }
+      if($p.PSObject.Properties['days'] -and $p.days -ne $null){ $o.days=[int]$p.days }
+      $norm += ,$o
+    }
+  }catch{}
+}
+$idxMap=@{}; for($i=0;$i -lt $tradeDates.Count;$i++){ $idxMap[$tradeDates[$i]]=$idxC[$i] }
 $perfRows=@()
-foreach($p in $logPicks){
-  if("$($p.date)" -eq $lastDate){ continue }
-  $c="$($p.code)"
+foreach($o in $norm){
+  if($o.date -eq $lastDate -and $o.status -eq 'open'){ continue }   # logged today, no perf yet
+  if($o.status -eq 'closed'){
+    $al = if($o.ContainsKey('alphaFinal')){ $o.alphaFinal } else { $null }
+    $dy2 = if($o.ContainsKey('days')){ $o.days } else { 20 }
+    $perfRows += [pscustomobject]@{ date=$o.date; code=$o.code; name=$o.name; entry=$o.price; cur=$o.exit; ret=$o.retFinal; alpha=$al; days=$dy2; status='closed' }
+    continue
+  }
+  $c=$o.code
   if(-not $px.ContainsKey($c)){ continue }
-  $cur=$px[$c].c; $entry=[double]$p.price
-  if($entry -le 0){ continue }
-  $daysHeld=($tradeDates | Where-Object { $_ -gt "$($p.date)" -and $_ -le $lastDate }).Count
-  $idxEntryArr = @(); for($i=0;$i -lt $tradeDates.Count;$i++){ if($tradeDates[$i] -eq "$($p.date)"){ $idxEntryArr += $idxC[$i] } }
-  $alpha=$null; $ret=[math]::Round(($cur/$entry-1)*100,2)
-  if($idxEntryArr.Count -gt 0){ $ir=[math]::Round(($idxLast/$idxEntryArr[0]-1)*100,2); $alpha=[math]::Round($ret-$ir,2) }
-  $perfRows += [pscustomobject]@{ date=$p.date; code=$c; name=$p.name; entry=$entry; cur=$cur; ret=$ret; alpha=$alpha; days=$daysHeld }
+  $cur=$px[$c].c
+  if($o.price -le 0){ continue }
+  $days=($tradeDates | Where-Object { $_ -gt $o.date -and $_ -le $lastDate }).Count
+  $ret=[math]::Round(($cur/$o.price-1)*100,2)
+  $alpha=$null
+  if($idxMap.ContainsKey($o.date)){ $alpha=[math]::Round($ret - (($idxLast/$idxMap[$o.date]-1)*100),2) }
+  if($days -ge 20){
+    $o.status='closed'; $o.exit=$cur; $o.retFinal=$ret; $o.days=$days; $o.closedOn=$lastDate
+    if($alpha -ne $null){ $o.alphaFinal=$alpha }
+    $perfRows += [pscustomobject]@{ date=$o.date; code=$c; name=$o.name; entry=$o.price; cur=$cur; ret=$ret; alpha=$alpha; days=$days; status='closed' }
+  } else {
+    $perfRows += [pscustomobject]@{ date=$o.date; code=$c; name=$o.name; entry=$o.price; cur=$cur; ret=$ret; alpha=$alpha; days=$days; status='open' }
+  }
 }
+$closedR=@($perfRows | Where-Object {$_.status -eq 'closed'})
+$openR=@($perfRows | Where-Object {$_.status -eq 'open'})
 $perfSummary=$null
-if($perfRows.Count -gt 0){
-  $avg=[math]::Round(($perfRows | Measure-Object -Property ret -Average).Average,2)
-  $win=($perfRows | Where-Object { $_.alpha -ne $null -and $_.alpha -gt 0 }).Count
-  $tot=($perfRows | Where-Object { $_.alpha -ne $null }).Count
-  $avgA= if($tot -gt 0){ [math]::Round((($perfRows | Where-Object { $_.alpha -ne $null } | Measure-Object -Property alpha -Average).Average),2) } else { $null }
-  $perfSummary=@{ n=$perfRows.Count; avgRet=$avg; winRate=$(if($tot -gt 0){[math]::Round($win/$tot*100,0)}else{$null}); avgAlpha=$avgA }
+if($closedR.Count -gt 0 -or $openR.Count -gt 0){
+  $cw=($closedR | Where-Object {$_.alpha -ne $null -and $_.alpha -gt 0}).Count
+  $ct=($closedR | Where-Object {$_.alpha -ne $null}).Count
+  $perfSummary=@{
+    closedN=$closedR.Count
+    winRate=$(if($ct -gt 0){[math]::Round($cw/$ct*100,0)}else{$null})
+    avgRetClosed=$(if($closedR.Count -gt 0){[math]::Round(($closedR|Measure-Object -Property ret -Average).Average,2)}else{$null})
+    avgAlphaClosed=$(if($ct -gt 0){[math]::Round((($closedR|Where-Object {$_.alpha -ne $null}|Measure-Object -Property alpha -Average).Average),2)}else{$null})
+    openN=$openR.Count
+    avgRetOpen=$(if($openR.Count -gt 0){[math]::Round(($openR|Measure-Object -Property ret -Average).Average,2)}else{$null})
+  }
 }
-# append today's picks if not already logged
-$already=($logPicks | Where-Object { "$($_.date)" -eq $lastDate }).Count -gt 0
-if(-not $already){
-  foreach($p in $top5){ $logPicks += [pscustomobject]@{ date=$lastDate; code=$p.code; name=$p.name; price=$p.close; score=$p.score } }
+# append today's picks: skip if code already open or already logged today
+$openCodes=@{}; foreach($o in $norm){ if($o.status -eq 'open'){ $openCodes[$o.code]=$true } }
+$todayCodes=@{}; foreach($o in $norm){ if($o.date -eq $lastDate){ $todayCodes[$o.code]=$true } }
+$newLogged=0
+foreach($p in $top5){
+  if($openCodes.ContainsKey($p.code) -or $todayCodes.ContainsKey($p.code)){ continue }
+  $norm += ,@{ date=$lastDate; code=$p.code; name=$p.name; price=$p.close; score=$p.score; status='open' }
+  $newLogged++
 }
-@{ picks=$logPicks } | ConvertTo-Json -Depth 5 | Out-File $logPath -Encoding UTF8
+@{ picks=$norm } | ConvertTo-Json -Depth 5 | Out-File $logPath -Encoding UTF8
 
 $out=@{
   date=$lastDate
@@ -191,8 +237,8 @@ $out=@{
   picks=$top5
   perf=$perfSummary
   perfRows=$perfRows
-  meta=@{ candidates=$cands.Count; shortlist=@($short).Count }
+  meta=@{ candidates=$cands.Count; shortlist=@($short).Count; newLogged=$newLogged }
 }
 $out | ConvertTo-Json -Depth 6 | Out-File (Join-Path $root 'screen-result.json') -Encoding UTF8
-Write-Host "DONE. light=$light idx=$idxLast MA20=$([math]::Round($idxMA20,0)) picks=$($top5.Count) candidates=$($cands.Count)"
-foreach($p in $top5){ Write-Host ("  {0} {1} score={2} (chip{3}/tech{4}/fund{5}) trust+{6}d yoy={7}% pe={8}" -f $p.code,$p.name,$p.score,$p.chip,$p.tech,$p.fund,$p.tPos,$p.yoy,$p.pe) }
+Write-Host "DONE. light=$light idx=$idxLast picks=$($top5.Count) newLogged=$newLogged openPos=$($openR.Count) closed=$($closedR.Count)"
+foreach($p in $top5){ Write-Host ("  {0} {1} score={2} (chip{3}/tech{4}/fund{5}) spark={6}pts" -f $p.code,$p.name,$p.score,$p.chip,$p.tech,$p.fund,$p.spark.Count) }

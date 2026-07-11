@@ -179,6 +179,15 @@
   .pk-note{font-size:12px;color:var(--ink);margin-top:8px;padding:8px 10px;background:var(--surface-2);border-radius:8px;line-height:1.6}
   .perfbox{padding:13px 18px;margin-top:14px;font-size:12.5px;color:var(--ink-soft);line-height:1.7}
   .perfbox b{color:var(--ink)}
+  .perfbox details{margin-top:8px}
+  .perfbox summary{cursor:pointer;font-size:12px;color:var(--accent);font-weight:700}
+  .stale{margin-bottom:14px;padding:11px 14px;border-radius:10px;background:var(--hold-bg);border:1px solid color-mix(in srgb,var(--hold) 35%,transparent);font-size:13px;color:var(--ink);font-weight:600}
+  .pkspark{width:100%;height:38px;display:block;margin:2px 0 8px}
+  .costpanel{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:12px}
+  .costpanel label{font-size:11.5px;color:var(--ink-soft);display:flex;flex-direction:column;gap:4px;font-weight:600}
+  .cin{padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-size:13.5px;font-family:var(--font);font-variant-numeric:tabular-nums;width:100%}
+  .cin:focus{outline:2px solid var(--accent);outline-offset:0}
+  .divchip{color:var(--accent);font-weight:700}
 
   .disc{margin-top:32px;padding:16px 18px;border-radius:12px;border:1px dashed var(--line);font-size:12.5px;color:var(--ink-faint);line-height:1.7}
   .disc b{color:var(--ink-soft)}
@@ -190,15 +199,17 @@
   <header>
     <h1>台股投資報告</h1>
     <div class="subhead">
-      <span>報告日期：<b>2026/07/11（六）</b></span>
-      <span>行情基準：<b>2026/07/09 收盤（證交所）</b></span>
+      <span>報告日期：<b>2026/07/12（日）</b></span>
+      <span>行情基準：<b id="baseDate">—</b></span>
       <span>新聞範圍：<b>近 24 小時</b></span>
     </div>
   </header>
 
+  <div class="stale" id="staleWarn" hidden>⚠ 資料可能未更新：行情基準已超過 5 天（排程可能未執行，請確認電腦上的 Claude App 有開啟）。</div>
+
   <div class="card hero">
-    <div><div class="k">持股市值</div><div class="tot num">267,920</div></div>
-    <div><div class="k">今日估計損益</div><div class="v2 up-txt num">+1,210</div><div class="sub up-txt num">+0.46%</div></div>
+    <div><div class="k">持股市值</div><div class="tot num" id="heroVal">—</div></div>
+    <div><div class="k">最近交易日損益</div><div class="v2 num" id="heroDay">—</div><div class="sub num" id="heroDayPct"></div></div>
     <div><div class="k">未實現損益（依成本）</div><div class="v2 num" id="pfPL">—</div><div class="sub num" id="pfPLpct" style="color:var(--ink-faint)">點個股輸入成本價</div></div>
     <div class="stance-wrap">
       <span class="pill hold"><span class="dot"></span>整體傾向：核心續抱 · 法說前不追高</span>
@@ -210,13 +221,13 @@
   <div class="card market">
     <div>
       <div class="idx-name">加權指數 TAIEX</div>
-      <div class="idx-val num down-txt">45,354.61</div>
-      <div class="idx-chg num down-txt">▼ 379.80　−0.83%</div>
+      <div class="idx-val num" id="idxVal">—</div>
+      <div class="idx-chg num" id="idxChg"></div>
     </div>
     <canvas class="mchart" id="mchart"></canvas>
     <div class="mmeta">
-      <div class="mi">成交金額<b class="num">9,968 億</b></div>
-      <div class="mi">距 6/22 波段高<b class="down-txt num">−5.0%</b></div>
+      <div class="mi">成交金額<b class="num" id="mAmt">—</b></div>
+      <div class="mi">距波段高<b class="num" id="mDist">—</b></div>
       <div class="mi">半導體(週)<b class="up-txt num">+7.55%</b></div>
       <div class="mi">市場風向<b class="down-txt">高檔震盪</b></div>
     </div>
@@ -230,6 +241,8 @@
   <div class="card" style="padding:18px 22px">
     <div class="alloc-bar" id="allocBar"></div>
     <div class="legend" id="legend"></div>
+    <button id="costBtn" class="machip" style="margin-top:12px">⚙ 一次設定全部成本價</button>
+    <div class="costpanel" id="costPanel" hidden></div>
     <div class="warn">
       <span class="ic">⚠ 集中度提醒</span>
       <span>5 檔中 4 檔（0050、00935、00947、00981A）重壓台股半導體與科技權值，且本波<b>全數同步自 6/22 高點回檔</b>（00990A 更回落約 17%、且為唯一跌破季線者）——這正是「高相關性風險」的實證：題材一起漲、也一起跌。僅 <b>00990A</b>（約 58% 美股）提供海外分散。<b>7/16 台積電法說會是全投組的關鍵風險日。</b></span>
@@ -246,7 +259,7 @@
   <div class="card perfbox" id="perfBox"></div>
 
   <div class="disc">
-    <b>免責聲明：</b>本報告由 AI 自動彙整公開新聞與證交所行情資料生成，屬<b>資訊整理與決策輔助</b>，<b>不構成投資建議、買賣要約或個股推介</b>。文中三面分析之「多方／空方／整理訊號」與操作傾向僅為情境說明，非下單指令；作者非持牌投資顧問。行情為 2026/07/09 收盤（週末休市）；法人買賣超與融資融券單位為「張」，來源證交所（T86／MI_MARGN）；ETF 本身無 EPS／本益比，基本面以成分題材與產業景氣替代。實際交易前請以券商即時報價為準，自行評估風險並為自身決策負責。投資有風險，過往績效不代表未來表現。
+    <b>免責聲明：</b>本報告由 AI 自動彙整公開新聞與證交所行情資料生成，屬<b>資訊整理與決策輔助</b>，<b>不構成投資建議、買賣要約或個股推介</b>。文中三面分析之「多方／空方／整理訊號」與操作傾向僅為情境說明，非下單指令；作者非持牌投資顧問。行情為最近交易日收盤（見頁首行情基準）；法人買賣超與融資融券單位為「張」，來源證交所（T86／MI_MARGN）；ETF 本身無 EPS／本益比，基本面以成分題材與產業景氣替代。實際交易前請以券商即時報價為準，自行評估風險並為自身決策負責。投資有風險，過往績效不代表未來表現。
   </div>
   <footer>台股投資報告　|　每個交易日（週一至五）08:30 自動更新</footer>
 </div>
@@ -274,7 +287,7 @@ const setCost=(c,v)=>{const o=getCosts();if(v>0)o[c]=v;else delete o[c];localSto
 const SHARES={'0050':1000,'00935':1000,'00947':1000,'00990A':2000,'00981A':1000};
 
 const H=[
- {code:'0050',name:'元大台灣50',type:'被動',theme:'台灣50大權值股',lots:1,color:'#b6842f',weight:39.5,
+ {code:'0050',name:'元大台灣50',type:'被動',theme:'台灣50大權值股',lots:1,color:'#b6842f',weight:39.5,divNote:'7/21 除息',
   price:105.80,chg:-0.25,pct:-0.24,dd:-4.8,
   sig:{tech:['neu','整理'],chip:['neu','觀望'],fund:['bull','偏多']},
   tech:'收 105.80 跌破月線（MA20≈106.5），但守住上揚的季線（MA60≈99.3）、且站穩其上。7/7 爆量長黑（12.5 萬張）宣洩後，7/9 量縮至 5.7 萬張、價守穩，屬「量縮價穩」的健康回檔，而非帶量破線的崩跌。均線短空、中多，觀察能否重新站回月線。',
@@ -299,7 +312,7 @@ const H=[
    {t:'台股 ETF 九悍將報酬翻倍，00935 居前三',s:'鉅亨網',u:'https://news.cnyes.com/news/id/6471981'},
    {t:'00935、00947 年漲破 230% 奪冠亞',s:'聯合新聞網',u:'https://udn.com/news/story/123006/9543273'}]},
 
- {code:'00947',name:'台新臺灣IC設計',type:'被動',theme:'IC 設計＋記憶體',lots:1,color:'#5b8fb0',weight:13.9,
+ {code:'00947',name:'台新臺灣IC設計',type:'被動',theme:'IC 設計＋記憶體',lots:1,color:'#5b8fb0',weight:13.9,divNote:'7/15 除息',
   price:37.30,chg:0.85,pct:2.33,dd:-13.3,
   sig:{tech:['neu','整理'],chip:['neu','偏多'],fund:['bull','多方']},
   tech:'收 37.30 跌破月線（MA20≈39.0）、守季線（MA60≈35.9）。7/9 雖反彈 +2.33%，但量縮至僅 5,157 張 → 「無量反彈」，力道待確認。波動度為投組之最（6/8 低 35.83 → 6/22 高 43.02，區間逾 20%），追高風險高。',
@@ -339,6 +352,48 @@ const H=[
 ];
 const HByCode={};H.forEach(h=>HByCode[h.code]=h);
 
+/* ---------- single source of truth: derive all numbers from official DASH data ---------- */
+window.META={generated:'2026/07/12',lastTrade:'2026-07-09'};
+(function hydrate(){
+ let tv=0;
+ H.forEach(h=>{
+  const s=DASH[h.code].series,l=s[s.length-1];
+  h.price=l.c; h.chg=l.chg; h.pct=+((l.chg/(l.c-l.chg))*100).toFixed(2);
+  const cl=s.map(x=>x.c); const hi=Math.max(...cl.slice(-Math.min(40,cl.length)));
+  h.dd=+(((l.c/hi)-1)*100).toFixed(1);
+  h.mv=l.c*SHARES[h.code]; tv+=h.mv;
+ });
+ H.forEach(h=>{ h.weight=+((h.mv/tv)*100).toFixed(1); });
+ window.__totVal=tv;
+})();
+function fillTop(){
+ const tv=window.__totVal; let dp=0; H.forEach(h=>dp+=h.chg*SHARES[h.code]);
+ const hv=document.getElementById('heroVal'); if(hv) hv.textContent=fmt(Math.round(tv));
+ const hd=document.getElementById('heroDay'),hp=document.getElementById('heroDayPct');
+ if(hd){const pct=dp/(tv-dp)*100;
+  hd.textContent=fmtSignI(Math.round(dp)); hd.className='v2 num '+plColor(dp);
+  hp.textContent=fmtSign(pct,2)+'%'; hp.className='sub num '+plColor(dp);}
+ const tx=DASH.TAIEX,tl=tx[tx.length-1];
+ const iv=document.getElementById('idxVal'),ic=document.getElementById('idxChg');
+ if(iv){iv.textContent=fmt(tl.c,2); iv.className='idx-val num '+(tl.chg>=0?'up-txt':'down-txt');
+  ic.textContent=(tl.chg>=0?'▲ ':'▼ ')+fmt(Math.abs(tl.chg),2)+'　'+fmtSign(tl.chg/(tl.c-tl.chg)*100,2)+'%';
+  ic.className='idx-chg num '+(tl.chg>=0?'up-txt':'down-txt');}
+ const ma=document.getElementById('mAmt'); if(ma) ma.textContent=fmt(tl.amt)+' 億';
+ const mx=Math.max(...tx.map(d=>d.c)); const ddI=(tl.c/mx-1)*100;
+ const md=document.getElementById('mDist'); if(md){md.textContent=fmtSign(ddI,1)+'%'; md.className='num '+plColor(ddI);}
+ const bd=document.getElementById('baseDate'); if(bd) bd.textContent=META.lastTrade.replace(/-/g,'/')+' 收盤（證交所）';
+ const diff=(Date.now()-new Date(META.lastTrade+'T14:00:00+08:00').getTime())/86400000;
+ if(diff>5) document.getElementById('staleWarn').hidden=false;
+}
+/* ---------- one-shot cost panel ---------- */
+function buildCostPanel(){
+ const p=document.getElementById('costPanel'); if(!p) return;
+ const costs=getCosts();
+ p.innerHTML=H.map(h=>`<label>${h.code} ${h.name}<input class="cin" type="number" step="0.01" inputmode="decimal" data-c="${h.code}" value="${costs[h.code]||''}" placeholder="平均成本價"></label>`).join('');
+ p.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>{const v=parseFloat(inp.value);setCost(inp.dataset.c,v>0?v:0);updatePL();}));
+}
+(function(){const b=document.getElementById('costBtn');if(b)b.addEventListener('click',()=>{const p=document.getElementById('costPanel');p.hidden=!p.hidden;if(!p.hidden)buildCostPanel();});})();
+
 /* ---------- allocation ---------- */
 (function(){const bar=document.getElementById('allocBar'),leg=document.getElementById('legend');
  H.forEach(h=>{const s=document.createElement('span');s.style.width=h.weight+'%';s.style.background=h.color;s.title=h.code;bar.appendChild(s);
@@ -351,7 +406,7 @@ function plColor(v){return v>0?'up-txt':v<0?'down-txt':'';}
   el.className='h-card';el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',h.name+' 詳細分析');
   el.innerHTML=`<div class="h-accent" style="background:${h.color}"></div><div class="h-body">
     <div class="h-head"><div><div class="h-name">${h.name} <span class="code">${h.code}</span></div>
-    <div class="h-tag">${h.type} · ${h.theme} · ${h.lots} 張</div></div>
+    <div class="h-tag">${h.type} · ${h.theme} · ${h.lots} 張${h.divNote?` · <span class="divchip">💰${h.divNote}</span>`:''}</div></div>
     <div class="h-price"><div class="p num ${up?'up-txt':'down-txt'}">${h.price.toFixed(2)}</div>
     <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(h.chg).toFixed(2)}　${fmtSign(h.pct)}%</div></div></div>
     <canvas class="spark" data-i="${i}"></canvas>
@@ -460,7 +515,7 @@ function openModal(i){
   document.getElementById('mAccent').style.background=h.color;
   document.getElementById('mContent').innerHTML=`
     <div class="m-head"><div><div class="m-title" id="mTitle">${h.name} <span class="code">${h.code}</span></div>
-    <div class="m-tag">${h.type} · ${h.theme} · 持有 ${h.lots} 張 · 權重 ${h.weight}%</div></div>
+    <div class="m-tag">${h.type} · ${h.theme} · 持有 ${h.lots} 張 · 權重 ${h.weight}%${h.divNote?` · <span class="divchip">💰${h.divNote}</span>`:''}</div></div>
     <div class="m-price"><div class="p num ${up?'up-txt':'down-txt'}">${h.price.toFixed(2)}</div>
     <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(h.chg).toFixed(2)}　${fmtSign(h.pct)}% · 距高 ${fmtSign(h.dd,1)}%</div></div></div>
 
@@ -525,20 +580,26 @@ window.PICKS={
  regime:{light:'yellow',idx:45354.61,ma20:45869,ma60:42878,instNet:-350,up:540,down:670},
  funnel:'全市場 1,369 檔 → 籌碼初選 119 檔 → 風控＋技術複審 12 檔 → 三面評分 Top 5（資料：證交所 T86／融資券／月營收／本益比）',
  perf:null,
+ perfRows:[],
  picks:[
+  {code:'5876',name:'上海商銀',ind:'金融保險業',close:42.8,chip:36,tech:30,fund:24,score:90,overlap:'low',
+   spark:[40.3,40.1,39.8,40.55,40.1,40.15,40.05,39.75,39.45,39.45,38.65,39.75,39.8,41,40.8,40.75,40.75,40.15,42.65,42.05,42,42.5,42.9,42.6,42.8,42.5,41.45,41.8,41.55,42,42.4,42.8,42.7,42.4,41.85,42,41.7,42.4,42.55,42.8],
+   ev:'投信<b>連 5 日</b>買超 2,275 張・融資減 78 張・PE <b>13.6</b>・殖利率 <b>4.2%</b>・技術面滿分・距 40 日高 −0.2%',
+   note:'低本益比＋高殖利率的防禦型金融，投信默默連買、股價貼著波段高整理——「易漲難跌」的籌碼結構。黃燈市況觸發防禦加分後躍居第一，正是引擎「風向不好就挑防禦」的設計。'},
   {code:'2890',name:'永豐金',ind:'金融保險業',close:40.45,chip:38,tech:27,fund:24,score:89,overlap:'low',
+   spark:[30.5,30.2,30,30.1,29.8,29.7,29.1,28.95,29.55,29.65,29.5,30,30.45,31,33,33.15,32.7,31.9,34.25,33,33.25,34.15,35.2,35.3,36.35,39.8,39.8,39.8,39.55,39.95,39.15,39.5,39.9,40,39.5,39.7,41,41.1,41.9,40.45],
    ev:'投信<b>連 5 日</b>買超 8,403 張・外資 5 日 +43,499 張・融資減 46 張・營收 YoY <b>+82.7%</b>・PE 19.4・殖利率 3.2%・距 40 日高 −3.5%',
    note:'金融是本波「半導體之外的第二引擎」，投信＋外資雙買、融資同步減——籌碼由散戶流向大戶的標準型。與你的科技持股互補性最高。'},
   {code:'8016',name:'矽創',ind:'半導體業',close:363,chip:35,tech:30,fund:24,score:89,overlap:'high',
+   spark:[294.5,274,275,280.5,285.5,297.5,292,291,289.5,301,300,306,309,302,304,303.5,303.5,285,295.5,286.5,286.5,289.5,274,278.5,295.5,300.5,315,320.5,315,330.5,311,317,332,339,327.5,334,332,352,352,363],
    ev:'外資<b>連 5 日</b>買超・投信 4 日買超・融資減 94 張・營收 YoY <b>+39.8%</b>・PE 22.8・技術面滿分（站上月線 318／季線 283）',
    note:'驅動 IC 設計，唯一入榜的半導體。⚠ 5 日已漲 10.8%、正處 40 日高點——屬強勢突破型，宜等回測月線不追高；且與你持有的 00947／00935 題材重疊。'},
-  {code:'5876',name:'上海商銀',ind:'金融保險業',close:42.8,chip:36,tech:30,fund:19,score:85,overlap:'low',
-   ev:'投信<b>連 5 日</b>買超 2,275 張・融資減 78 張・PE <b>13.6</b>・殖利率 <b>4.2%</b>・技術面滿分・距 40 日高 −0.2%',
-   note:'低本益比＋高殖利率的防禦型金融，投信默默連買、股價貼著波段高整理——「易漲難跌」的籌碼結構，適合黃燈市況。'},
   {code:'2542',name:'興富發',ind:'建材營造',close:43.6,chip:36,tech:17,fund:30,score:83,overlap:'low',
+   spark:[43.15,43.75,44.6,43.7,43.7,43.65,43.2,42.4,42.4,43.1,42,41.95,42.6,42.45,43,43.1,43,41.9,43.2,45.45,45.35,44.95,45.45,45.05,45.45,44.75,42.7,42.7,43.1,43.3,42.9,43.1,43.05,42.35,43.1,43.65,45,44,43.5,43.6],
    ev:'投信<b>連 5 日</b>買超・外資 5 日 +9,700 張・融資減 133 張・營收 YoY +2114%・PE 13.4・殖利率 <b>9.2%</b>・價在月線 43.9 下方',
    note:'⚠ YoY +2114% 是建案交屋集中認列（一次性、不可線性外推）。亮點在 9.2% 殖利率＋法人連買；價仍在月線下，屬「左側佈局型」，風險偏好低者觀察就好。'},
   {code:'1216',name:'統一',ind:'食品工業',close:78.4,chip:40,tech:27,fund:16,score:83,overlap:'low',
+   spark:[74.8,75.7,74.7,74.8,73.4,73.1,71.5,71.2,70.8,70.2,70.8,71.8,73.7,74.2,73.3,73.6,73.8,72.9,74.1,74.4,75.6,76.5,76.3,75.6,76,74.5,74.3,75.1,75.1,75.6,74.6,75.7,74.5,74.5,74.9,76.3,77.8,78,78.6,78.4],
    ev:'籌碼面<b>滿分 40</b>：投信＋外資皆<b>連 5 日</b>買超（外資 +28,164 張）・融資減 138 張・PE 21.2・殖利率 3.8%・距 40 日高 −0.3%',
    note:'食品防禦龍頭，本次全市場籌碼分數最高者。黃燈（法人全市場賣超）環境下，資金明顯往防禦股移動——這檔就是證據。'}
  ]
@@ -561,22 +622,39 @@ window.PICKS={
   const el=document.createElement('div');el.className='pk';
   el.innerHTML=`<div class="pk-top"><span class="pk-name">${p.name}<span class="code">${p.code}</span></span><span class="pk-score">${p.score}<small>/100</small></span></div>
    <div class="pk-ind">${p.ind} · 收 <span class="num">${p.close}</span><span class="ovl ${p.overlap}">${p.overlap==='high'?'⚠ 與持股重疊':'與持股互補'}</span></div>
+   <canvas class="pkspark"></canvas>
    <div class="pk-bars">${bar('籌碼',p.chip,40,'var(--ma5)')}${bar('技術',p.tech,30,'var(--ma20)')}${bar('基本',p.fund,30,'var(--ma60)')}</div>
    <div class="pk-ev">${p.ev}</div>
    <div class="pk-note">${p.note}</div>`;
   wrap.appendChild(el);
  });
+ window.drawPickSparks=function(){
+  const cvs=document.querySelectorAll('canvas.pkspark');
+  cvs.forEach((cv,i)=>{const p=P.picks[i];if(p&&p.spark&&p.spark.length>1)priceChart(cv,p.spark,cssv('--accent'),{pad:{t:4,r:3,b:4,l:3},lw:1.4});});
+ };
+ drawPickSparks();
  const pb=document.getElementById('perfBox');
- if(P.perf&&P.perf.n>0){
-  pb.innerHTML=`📒 <b>推薦追蹤（${P.perf.n} 筆歷史）：</b>平均報酬 <b class="num ${P.perf.avgRet>=0?'up-txt':'down-txt'}">${fmtSign(P.perf.avgRet)}%</b>・勝率（贏大盤）<b class="num">${P.perf.winRate}%</b>・平均超額報酬 <b class="num ${P.perf.avgAlpha>=0?'up-txt':'down-txt'}">${fmtSign(P.perf.avgAlpha)}%</b>。勝率與超額報酬持續偏弱時，評分權重將自動檢討。`;
+ const pf=P.perf;
+ let html='';
+ if(pf&&(pf.closedN>0||pf.openN>0)){
+  const parts=[];
+  if(pf.closedN>0){parts.push(`已結案 <b class="num">${pf.closedN}</b> 筆（20 日制）：勝率（贏大盤）<b class="num">${pf.winRate==null?'—':pf.winRate+'%'}</b>・平均報酬 <b class="num ${pf.avgRetClosed>=0?'up-txt':'down-txt'}">${fmtSign(pf.avgRetClosed)}%</b>・平均超額 <b class="num ${pf.avgAlphaClosed>=0?'up-txt':'down-txt'}">${pf.avgAlphaClosed==null?'—':fmtSign(pf.avgAlphaClosed)+'%'}</b>`);}
+  if(pf.openN>0){parts.push(`持有中 <b class="num">${pf.openN}</b> 筆，平均 <b class="num ${pf.avgRetOpen>=0?'up-txt':'down-txt'}">${fmtSign(pf.avgRetOpen)}%</b>`);}
+  html=`📒 <b>推薦追蹤：</b>${parts.join('；')}。勝率與超額持續偏弱時，評分權重將檢討調整。`;
  }else{
-  pb.innerHTML=`📒 <b>推薦追蹤已啟動：</b>今日首次記錄 5 檔（進場價＝當日收盤，寫入 picks-log）。之後每個交易日自動回算每筆推薦的報酬與勝率 vs 大盤並顯示於此——<b>準不準，數據說話</b>。量化篩選僅供研究參考、非投資建議。`;
+  html=`📒 <b>推薦追蹤已啟動：</b>每筆推薦以當日收盤為進場價寫入 picks-log，<b>20 個交易日自動結案</b>鎖定報酬（同檔持有中不重複記錄），每天回算 vs 大盤的勝率與超額報酬並顯示於此——<b>準不準，數據說話</b>。量化篩選僅供研究參考、非投資建議。`;
  }
+ const rows=P.perfRows||[];
+ if(rows.length>0){
+  const tr=rows.map(r=>`<tr><td>${String(r.date).replace(/^(\d{4})(\d{2})(\d{2})$/,'$2/$3')}</td><td>${r.name} <span style="color:var(--ink-faint)">${r.code}</span></td><td class="num">${r.entry}</td><td class="num">${r.cur}</td><td class="num ${r.ret>=0?'up-txt':'down-txt'}">${fmtSign(r.ret)}%</td><td class="num ${r.alpha==null?'':(r.alpha>=0?'up-txt':'down-txt')}">${r.alpha==null?'—':fmtSign(r.alpha)+'%'}</td><td class="num">${r.days}</td><td>${r.status==='closed'?'已結案':'持有中'}</td></tr>`).join('');
+  html+=`<details><summary>每筆明細（${rows.length}）</summary><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>進場日</th><th style="text-align:left">股票</th><th>進場價</th><th>現價/出場</th><th>報酬</th><th>超額</th><th>天數</th><th>狀態</th></tr></thead><tbody>${tr}</tbody></table></div></details>`;
+ }
+ pb.innerHTML=html;
 })();
 
 /* ---------- render ---------- */
-function renderAll(){drawSparks();drawMarket();if(curCode)renderBigChart();}
-function boot(){renderAll();updatePL();}
+function renderAll(){drawSparks();drawMarket();if(window.drawPickSparks)drawPickSparks();if(curCode)renderBigChart();}
+function boot(){renderAll();updatePL();fillTop();}
 if(window.DASH)boot();else addEventListener('load',boot);
 window.addEventListener('resize',renderAll);
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',renderAll);

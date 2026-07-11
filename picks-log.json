@@ -2,38 +2,43 @@
     "picks":  [
                   {
                       "date":  "20260709",
-                      "code":  "2890",
-                      "name":  "æ°¸è±é",
                       "price":  40.45,
-                      "score":  89
+                      "name":  "æ°¸è±é",
+                      "score":  89,
+                      "code":  "2890",
+                      "status":  "open"
                   },
                   {
                       "date":  "20260709",
-                      "code":  "8016",
-                      "name":  "ç½åµ",
                       "price":  363,
-                      "score":  89
+                      "name":  "ç½åµ",
+                      "score":  89,
+                      "code":  "8016",
+                      "status":  "open"
                   },
                   {
                       "date":  "20260709",
-                      "code":  "5876",
-                      "name":  "ä¸æµ·åé",
                       "price":  42.8,
-                      "score":  85
+                      "name":  "ä¸æµ·åé",
+                      "score":  85,
+                      "code":  "5876",
+                      "status":  "open"
                   },
                   {
                       "date":  "20260709",
-                      "code":  "2542",
-                      "name":  "èå¯ç¼",
                       "price":  43.6,
-                      "score":  83
+                      "name":  "èå¯ç¼",
+                      "score":  83,
+                      "code":  "2542",
+                      "status":  "open"
                   },
                   {
                       "date":  "20260709",
-                      "code":  "1216",
-                      "name":  "çµ±ä¸",
                       "price":  78.4,
-                      "score":  83
+                      "name":  "çµ±ä¸",
+                      "score":  83,
+                      "code":  "1216",
+                      "status":  "open"
                   }
               ]
 }
