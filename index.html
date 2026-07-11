@@ -188,6 +188,18 @@
   .cin{padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-size:13.5px;font-family:var(--font);font-variant-numeric:tabular-nums;width:100%}
   .cin:focus{outline:2px solid var(--accent);outline-offset:0}
   .divchip{color:var(--accent);font-weight:700}
+  .costpanel[hidden]{display:none}
+  .eqhead{font-size:11.5px;color:var(--ink-faint);margin:16px 0 6px;font-weight:700;letter-spacing:.05em}
+  #eqChart{width:100%;height:130px;display:block}
+  .riskrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px;margin-top:10px}
+  .rk{font-size:11px;color:var(--ink-faint)}
+  .rk b{display:block;font-size:14px;color:var(--ink);margin-top:1px;font-variant-numeric:tabular-nums}
+  .signals{padding:14px 18px;display:grid;gap:8px}
+  .sg{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--ink)}
+  .sg .tag{flex:none;font-size:10.5px;font-weight:800;padding:1px 7px;border-radius:6px}
+  .sg .tag.bull{color:var(--up);background:var(--up-bg)}
+  .sg .tag.bear{color:var(--down);background:var(--down-bg)}
+  .sg .tag.info{color:var(--hold);background:var(--hold-bg)}
 
   .disc{margin-top:32px;padding:16px 18px;border-radius:12px;border:1px dashed var(--line);font-size:12.5px;color:var(--ink-faint);line-height:1.7}
   .disc b{color:var(--ink-soft)}
@@ -237,12 +249,18 @@
     </div>
   </div>
 
+  <div class="sec-title">⚡ 今日訊號</div>
+  <div class="card signals" id="signalsBox"></div>
+
   <div class="sec-title">投組總覽</div>
   <div class="card" style="padding:18px 22px">
     <div class="alloc-bar" id="allocBar"></div>
     <div class="legend" id="legend"></div>
     <button id="costBtn" class="machip" style="margin-top:12px">⚙ 一次設定全部成本價</button>
     <div class="costpanel" id="costPanel" hidden></div>
+    <div class="eqhead">近三個月績效：投組 vs 加權指數（以現行張數回推，起點＝100）</div>
+    <canvas id="eqChart"></canvas>
+    <div class="riskrow" id="riskRow"></div>
     <div class="warn">
       <span class="ic">⚠ 集中度提醒</span>
       <span>5 檔中 4 檔（0050、00935、00947、00981A）重壓台股半導體與科技權值，且本波<b>全數同步自 6/22 高點回檔</b>（00990A 更回落約 17%、且為唯一跌破季線者）——這正是「高相關性風險」的實證：題材一起漲、也一起跌。僅 <b>00990A</b>（約 58% 美股）提供海外分散。<b>7/16 台積電法說會是全投組的關鍵風險日。</b></span>
@@ -393,6 +411,81 @@ function buildCostPanel(){
  p.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>{const v=parseFloat(inp.value);setCost(inp.dataset.c,v>0?v:0);updatePL();}));
 }
 (function(){const b=document.getElementById('costBtn');if(b)b.addEventListener('click',()=>{const p=document.getElementById('costPanel');p.hidden=!p.hidden;if(!p.hidden)buildCostPanel();});})();
+
+/* ---------- equity curve vs TAIEX + risk metrics ---------- */
+function buildEquity(){
+ const cv=document.getElementById('eqChart'),rr=document.getElementById('riskRow');
+ if(!cv||!rr)return;
+ const maps={};H.forEach(h=>{const m={};DASH[h.code].series.forEach(s=>m[s.d]=s.c);maps[h.code]=m;});
+ const tmap={};DASH.TAIEX.forEach(d=>tmap[d.d]=d.c);
+ const dates=DASH.TAIEX.map(d=>d.d).filter(d=>H.every(h=>maps[h.code][d]!=null));
+ if(dates.length<10)return;
+ const port=dates.map(d=>H.reduce((s,h)=>s+maps[h.code][d]*SHARES[h.code],0));
+ const idx=dates.map(d=>tmap[d]);
+ const pn=port.map(v=>v/port[0]*100), inx=idx.map(v=>v/idx[0]*100);
+ priceChart(cv,pn,cssv('--accent'),{grid:true,pad:{t:8,r:8,b:8,l:8},lw:2,overlays:[{vals:inx,color:cssv('--ink-faint')}]});
+ const pRet=pn[pn.length-1]-100, iRet=inx[inx.length-1]-100;
+ const rets=[],mrets=[];
+ for(let i=1;i<port.length;i++){rets.push(port[i]/port[i-1]-1);mrets.push(idx[i]/idx[i-1]-1);}
+ const mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
+ const mR=mean(rets),mM=mean(mrets);
+ const vol=Math.sqrt(mean(rets.map(r=>(r-mR)**2)))*Math.sqrt(252)*100;
+ let peak=-1e18,mdd=0;pn.forEach(v=>{if(v>peak)peak=v;const dd=v/peak-1;if(dd<mdd)mdd=dd;});
+ const cov=mean(rets.map((r,i)=>(r-mR)*(mrets[i]-mM)));
+ const varM=mean(mrets.map(r=>(r-mM)**2));
+ const beta=varM>0?cov/varM:0;
+ rr.innerHTML=`
+  <div class="rk">期間報酬（投組）<b class="${plColor(pRet)}">${fmtSign(pRet,1)}%</b></div>
+  <div class="rk">期間報酬（大盤）<b class="${plColor(iRet)}">${fmtSign(iRet,1)}%</b></div>
+  <div class="rk">年化波動度<b>${vol.toFixed(1)}%</b></div>
+  <div class="rk">最大回撤<b class="down-txt">${(mdd*100).toFixed(1)}%</b></div>
+  <div class="rk">Beta（vs 大盤）<b>${beta.toFixed(2)}</b></div>`;
+}
+
+/* ---------- today's auto-detected signals ---------- */
+function buildSignals(){
+ const box=document.getElementById('signalsBox');if(!box)return;
+ const out=[];
+ const smaAt=(a,n,i)=>{if(i<n-1)return null;let s=0;for(let k=i-n+1;k<=i;k++)s+=a[k];return s/n;};
+ const cross=(name,cl,n,label)=>{const L=cl.length;const t=smaAt(cl,n,L-1),y=smaAt(cl,n,L-2);
+  if(t==null||y==null)return null;
+  const nowAbove=cl[L-1]>=t,prevAbove=cl[L-2]>=y;
+  if(nowAbove&&!prevAbove)return{k:'bull',t:`${name} 站回${label}（${t.toFixed(2)}）——短線轉強訊號`};
+  if(!nowAbove&&prevAbove)return{k:'bear',t:`${name} 跌破${label}（${t.toFixed(2)}）——短線轉弱訊號`};
+  return null;};
+ const tcl=DASH.TAIEX.map(d=>d.c);
+ [[20,'月線'],[60,'季線']].forEach(([n,l])=>{const s=cross('加權指數',tcl,n,l);if(s)out.push(s);});
+ H.forEach(h=>{
+  const d=DASH[h.code],cl=d.series.map(x=>x.c),nm=`${h.code} ${h.name}`;
+  [[20,'月線'],[60,'季線']].forEach(([n,l])=>{const s=cross(nm,cl,n,l);if(s)out.push(s);});
+  const ins=d.inst;
+  if(ins&&ins.length>=2){
+   const a=ins[ins.length-2].f,b=ins[ins.length-1].f;
+   if(a<0&&b>0)out.push({k:'bull',t:`${nm} 外資由賣轉買（${fmtSignI(b)} 張）`});
+   if(a>0&&b<0)out.push({k:'bear',t:`${nm} 外資由買轉賣（${fmtSignI(b)} 張）`});
+  }
+  const mg=d.margin;
+  if(mg&&mg.length){
+   const m=mg[mg.length-1];
+   if(m.finPrev>0){const r=(m.fin-m.finPrev)/m.finPrev*100;
+    if(r>=5)out.push({k:'bear',t:`${nm} 融資單日大增 ${r.toFixed(1)}%（散戶湧入，籌碼轉亂）`});
+    if(r<=-5)out.push({k:'bull',t:`${nm} 融資單日大減 ${Math.abs(r).toFixed(1)}%（散戶退場，籌碼沉澱）`});}
+  }
+  if(h.divNote){
+   const m2=h.divNote.match(/(\d+)\/(\d+)/);
+   if(m2){const base=new Date(META.generated.replace(/\//g,'-'));
+    const ex=new Date(base.getFullYear(),+m2[1]-1,+m2[2]);
+    const dd2=Math.round((ex-base)/86400000);
+    if(dd2===0)out.push({k:'info',t:`${nm} 今日除息——當日跌幅含配息因素，非真跌`});
+    else if(dd2>0&&dd2<=5)out.push({k:'info',t:`${nm} ${dd2} 天後除息（${m2[1]}/${m2[2]}）——除息日跳空屬機械性，勿誤判為利空`});}
+  }
+ });
+ let top=null;H.forEach(h=>{const c=h.chg*SHARES[h.code];if(!top||Math.abs(c)>Math.abs(top.c))top={h,c};});
+ if(top&&top.c!==0)out.push({k:'info',t:`最近交易日損益主要來自 ${top.h.code} ${top.h.name}（${fmtSignI(Math.round(top.c))} 元）`});
+ const icon={bull:'▲ 多',bear:'▼ 空',info:'ℹ 提醒'};
+ box.innerHTML=out.length?out.map(s=>`<div class="sg"><span class="tag ${s.k}">${icon[s.k]}</span><span>${s.t}</span></div>`).join(''):
+  '<div class="sg"><span class="tag info">✓</span><span>今日無特別訊號（無均線穿越、法人轉向或融資急變）</span></div>';
+}
 
 /* ---------- allocation ---------- */
 (function(){const bar=document.getElementById('allocBar'),leg=document.getElementById('legend');
@@ -640,7 +733,7 @@ window.PICKS={
   const parts=[];
   if(pf.closedN>0){parts.push(`已結案 <b class="num">${pf.closedN}</b> 筆（20 日制）：勝率（贏大盤）<b class="num">${pf.winRate==null?'—':pf.winRate+'%'}</b>・平均報酬 <b class="num ${pf.avgRetClosed>=0?'up-txt':'down-txt'}">${fmtSign(pf.avgRetClosed)}%</b>・平均超額 <b class="num ${pf.avgAlphaClosed>=0?'up-txt':'down-txt'}">${pf.avgAlphaClosed==null?'—':fmtSign(pf.avgAlphaClosed)+'%'}</b>`);}
   if(pf.openN>0){parts.push(`持有中 <b class="num">${pf.openN}</b> 筆，平均 <b class="num ${pf.avgRetOpen>=0?'up-txt':'down-txt'}">${fmtSign(pf.avgRetOpen)}%</b>`);}
-  html=`📒 <b>推薦追蹤：</b>${parts.join('；')}。勝率與超額持續偏弱時，評分權重將檢討調整。`;
+  html=`📒 <b>推薦追蹤：</b>${parts.join('；')}。報酬以價格計、未含股息；勝率與超額持續偏弱時，評分權重將檢討調整。`;
  }else{
   html=`📒 <b>推薦追蹤已啟動：</b>每筆推薦以當日收盤為進場價寫入 picks-log，<b>20 個交易日自動結案</b>鎖定報酬（同檔持有中不重複記錄），每天回算 vs 大盤的勝率與超額報酬並顯示於此——<b>準不準，數據說話</b>。量化篩選僅供研究參考、非投資建議。`;
  }
@@ -653,8 +746,8 @@ window.PICKS={
 })();
 
 /* ---------- render ---------- */
-function renderAll(){drawSparks();drawMarket();if(window.drawPickSparks)drawPickSparks();if(curCode)renderBigChart();}
-function boot(){renderAll();updatePL();fillTop();}
+function renderAll(){drawSparks();drawMarket();buildEquity();if(window.drawPickSparks)drawPickSparks();if(curCode)renderBigChart();}
+function boot(){renderAll();updatePL();fillTop();buildSignals();}
 if(window.DASH)boot();else addEventListener('load',boot);
 window.addEventListener('resize',renderAll);
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',renderAll);
