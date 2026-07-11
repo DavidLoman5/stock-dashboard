@@ -124,7 +124,14 @@
   .machip[aria-pressed="true"]{color:#fff;border-color:transparent}
   .machip.m5[aria-pressed="true"]{background:var(--ma5)}.machip.m20[aria-pressed="true"]{background:var(--ma20)}.machip.m60[aria-pressed="true"]{background:var(--ma60)}
   .machip[aria-pressed="true"] .sw{opacity:1;background:#fff}
-  .bigchart{width:100%;height:180px;display:block}
+  .machip .val{font-weight:600;opacity:.8;font-size:10.5px}
+  .machip.mode[aria-pressed="true"]{background:var(--accent);border-color:transparent;color:#fff}
+  .tipbar{min-height:17px;font-size:11.5px;color:var(--ink-soft);margin:0 0 3px;font-variant-numeric:tabular-nums}
+  .levels{font-size:11.5px;color:var(--ink-faint);margin-top:5px;display:flex;gap:6px 14px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+  .levels b{color:var(--ink-soft)}
+  .logicline{margin-top:14px;font-size:12px;color:var(--ink-faint);line-height:1.6}
+  .logicline b{color:var(--ink-soft)}
+  .bigchart{width:100%;height:180px;display:block;touch-action:none;cursor:crosshair}
   .volchart{width:100%;height:48px;display:block;margin-top:2px}
   .chart-meta{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-faint);margin-top:4px}
 
@@ -260,7 +267,7 @@ const H=[
   chip:'三大法人連日賣超，但金額大幅收斂（7/7 −5.3 萬張 → 7/9 −1.9 萬張），賣壓明顯遞減。融資今日 13,306 張、較前日微減 105 張，散戶小幅退場。法人與散戶同步縮手、籌碼真空，尚無明確買方回補訊號 → 中性觀望。',
   fund:'ETF 本身無 EPS／本益比，改看成分：台積電＋金融＋半導體權值綜合體。最大變數為 7/16 台積電法說會（外資目標價上修至 3,400～3,500 元）。台股 AI 基本面需求強，中長線題材偏多，短線待法說確認估值。',
   stance:'hold',stanceTxt:'持倉 · 核心',
-  rec:'長線核心部位，趨勢僅高檔回檔、未破季線，適合續抱；短線跌破月線、法說會前不必追加。此為資訊參考，非買賣指令。',
+  rec:'長線核心續抱。條件式參考：帶量站回月線 106.5 之前不加碼；跌破季線 99.3 且法人續賣才考慮防守；兩者之間屬正常震盪。7/16 法說會為方向催化劑。非買賣指令。',
   news:[
    {t:'台積電 7/16 法說會逼近，外資上修目標價至 3,400～3,500 元',s:'經濟日報',u:'https://money.udn.com/money/story/5607/9596199'},
    {t:'市場盯台積電法說，成全球半導體與台股風向球',s:'經濟日報',u:'https://money.udn.com/money/story/11162/9595914'},
@@ -273,7 +280,7 @@ const H=[
   chip:'三大法人賣超由 −6,201 張收斂至 −1,439 張，投信小幅站買方。融資今日 5,755 張、減 44 張。籌碼中性、賣壓趨緩，無明顯主力進出。',
   fund:'ETF 無 EPS；成分為台灣科技 50，與 0050／00947／00981A 高度重疊。題材同屬 AI／半導體多頭，惟對你的投組是「重複押注同一題材」而非分散。',
   stance:'hold',stanceTxt:'持倉 · 留意重疊',
-  rec:'趨勢與 0050 同步、本身無虞；加碼前先想「是否只是重複押注同一題材」。非買賣指令。',
+  rec:'續抱。條件式參考：與 0050 高度重疊，資金有限時兩者擇一加碼即可；跌破季線 56.4 再檢討持有理由；站回月線 61.0 前不追。非買賣指令。',
   news:[
    {t:'台股 ETF 九悍將報酬翻倍，00935 居前三',s:'鉅亨網',u:'https://news.cnyes.com/news/id/6471981'},
    {t:'00935、00947 年漲破 230% 奪冠亞',s:'聯合新聞網',u:'https://udn.com/news/story/123006/9543273'}]},
@@ -285,7 +292,7 @@ const H=[
   chip:'法人賣壓大幅收斂至 −349 張，外資連 2 日轉小買（+128、+140 張）。但融資今日 7,640 張、增 99 張——散戶追高強勢股，形成「散戶追、法人未大買」的略凌亂格局，宜留意。',
   fund:'ETF 無 EPS；成分題材最熱——記憶體 DRAM 漲價（南亞科／華邦電）＋IC 設計 IP／ASIC（聯發科／創意／世芯）。產業景氣為當前市場主線，基本面題材偏多，惟股價已高基期。',
   stance:'hold',stanceTxt:'持倉 · 提防追高',
-  rec:'強勢題材股，別被單日 +2.33% 誤導——它其實距高點回檔逾 13%、且是無量反彈。續抱可，此刻不宜追高，設好回檔控管。非買賣指令。',
+  rec:'續抱但嚴禁追高——單日 +2.33% 是回檔逾 13% 後的無量反彈。條件式參考：帶量站回月線 39.0 才視為轉強；跌破季線 35.9、或「融資續增＋法人轉賣」同時出現則減碼防守。非買賣指令。',
   news:[
    {t:'近一年台股 ETF 10 強，00947 績效翻 2 倍衝第 1',s:'Yahoo股市',u:'https://tw.stock.yahoo.com/news/%E8%BF%911%E5%B9%B4%E5%8F%B0%E8%82%A1etf-10%E5%BC%B7-00947%E7%B8%BE%E6%95%88%E7%BF%BB2%E5%80%8D%E8%A1%9D%E7%AC%AC1-113939920.html'},
    {t:'AI 狂潮點火，00947 近一年暴衝逾 200% 稱王',s:'Yahoo股市',u:'https://tw.stock.yahoo.com/news/ai%E7%8B%82%E6%BD%AE%E9%BB%9E%E7%81%AB-%E5%8F%B0%E8%82%A1etf%E5%89%8D%E5%9B%9B%E5%BC%B7%E7%B8%BE%E6%95%88%E5%85%A8%E7%BF%BB%E5%80%8D-00947%E8%BF%91-%E5%B9%B4%E6%9A%B4%E8%A1%9D215-%E7%A8%B1%E7%8E%8B-014720900.html'}]},
@@ -297,7 +304,7 @@ const H=[
   chip:'三大法人賣壓由 −38,033 張收斂至 −4,753 張，外資連 2 日翻買（+1,319、+5,260 張）。但融資今日 21,815 張、增 527 張——散戶逢低接刀，與外資方向暫時分歧，籌碼待整合。',
   fund:'主動選股、投資全球 AI 產業鏈（美股約 58%）。國際面：SOX 於 6/22 見高 14,655 後回落、與台股同步；台積電 ADR 對台股溢價 17.3%，反映外資對 AI 需求熱度，惟美股 AI 估值偏高、費半波動大。長線題材偏多。',
   stance:'hold',stanceTxt:'持倉 · 分散價值',
-  rec:'技術面最弱，但它是投組唯一海外分散部位，能對沖台積電／台股單一市場風險。外資已翻買、波動大屬正常，反而是最該保留的一塊。非買賣指令。',
+  rec:'核心保留——它是唯一海外分散部位，分散價值大於短線波動。條件式參考：重站季線 18.4 前不加碼；若跌破前低 17.81 且外資由買轉賣，再檢討部位；外資連續回補則波動可視為常態。非買賣指令。',
   news:[
    {t:'元大全球 AI 新經濟：投資 AI 晶片、資料中心、能源與高速傳輸',s:'口袋證券',u:'https://www.pocket.tw/etf/tw/00990A/'},
    {t:'費半飆近 6%、台積電 ADR 站回 450 美元',s:'Yahoo股市',u:'https://tw.stock.yahoo.com/news/fed%E6%94%BE%E9%B7%B9%E4%B9%9F%E6%B2%92%E7%94%A8-%E7%BE%8E%E8%82%A14%E5%A4%A7%E6%8C%87%E6%95%B8%E9%9A%94%E5%A4%9C%E5%A4%A7%E5%8F%8D%E6%92%B2-%E8%B2%BB%E5%8D%8A%E9%A3%86%E8%BF%916-%E5%8F%B0%E7%A9%8D%E9%9B%BBadr%E7%AB%99%E5%9B%9E450%E7%BE%8E%E5%85%83-143000533.html',intl:true},
@@ -310,7 +317,7 @@ const H=[
   chip:'★ 籌碼正向轉折：外資 7/7 單日狂賣 −119,996 張（約 12 萬張）後，7/9 直接翻買 +18,114 張，三大法人轉淨買 +19,574 張。融資今日 144,350 張、大減 2,362 張——「融資減、法人買」代表籌碼由散戶流向大戶、相對穩定，為教科書級多方訊號。',
   fund:'ETF 無 EPS；主動經理人靈活換股卡位題材，第一大持股台積電，規模衝千億級、季配息成長（0.63＞0.41 元）。題材與台積電法說高度連動。',
   stance:'hold',stanceTxt:'持倉 · 籌碼轉佳',
-  rec:'基本面無虞，籌碼由亂轉穩（外資翻買、融資退場）。可續抱並觀察外資是否連續回補，作為加減碼依據。非買賣指令。',
+  rec:'續抱，籌碼由亂轉穩（融資減＋法人買=教科書級多方訊號）。條件式參考：外資連 2 日以上回補可視為波段回補確認；守住季線 29.7 續抱，跌破且法人再轉賣才防守。非買賣指令。',
   news:[
    {t:'外資單日調節 00981A 逾 7 萬張，成交量放大',s:'Yahoo股市',u:'https://tw.stock.yahoo.com/news/%E3%80%90follow%E6%B3%95%E4%BA%BA%E3%80%91%E5%A4%96%E8%B3%87%E7%8B%82%E6%8E%83%E9%9D%A2%E6%9D%BF%E9%9B%99%E8%99%8E%E7%BE%A4%E5%89%B5%E3%80%81%E5%8F%8B%E9%81%94%E9%80%BE20%E8%90%AC%E5%BC%B5%EF%BC%81%E5%8F%8D%E6%89%8B%E5%A4%A7%E7%A0%8D00981a%E9%80%BE7%E8%90%AC%E5%BC%B5-070854243.html'},
    {t:'00981A 規模衝 1,800 億登頂，主動式 ETF 績效大比拚',s:'豐雲學堂',u:'https://www.sinotrade.com.tw/richclub/hotstock/00981A%E8%A6%8F%E6%A8%A1%E8%A1%9D1-800%E5%84%84%E7%99%BB%E9%A0%82-%E4%B8%BB%E5%8B%95%E5%BC%8FETF%E7%B8%BE%E6%95%88%E5%A4%A7%E6%AF%94%E6%8B%9A-%E7%82%BA%E4%BD%95%E7%B6%93%E7%90%86%E4%BA%BA%E5%A4%A7%E5%A4%9A%E7%9C%8B%E5%A5%BD%E9%80%993%E6%AA%94-%E5%A4%A7%E6%88%B6%E6%8A%95%E6%AF%8F%E6%97%A5%E6%9F%A5%E8%A9%A2%E6%9C%80%E6%96%B0%E6%88%90%E5%88%86%E8%82%A1%E6%95%99%E5%AD%B8-%E8%82%A1%E5%B8%82%E8%A9%B1%E9%A1%8C-69e994d68839d70af6f82875'},
@@ -362,8 +369,35 @@ function priceChart(cv,vals,color,opts={}){
   overlays.forEach(o=>{x.beginPath();let started=false;o.vals.forEach((v,i)=>{if(v==null){started=false;return;}if(!started){x.moveTo(X(i),Y(v));started=true;}else x.lineTo(X(i),Y(v));});x.strokeStyle=o.color;x.lineWidth=1.4;x.stroke();});
   if(opts.mark){const pk=vals.indexOf(Math.max(...vals));x.fillStyle=cssv('--ink-faint');x.beginPath();x.arc(X(pk),Y(vals[pk]),2.5,0,7);x.fill();}
   const li=vals.length-1;x.fillStyle=color;x.beginPath();x.arc(X(li),Y(vals[li]),3,0,7);x.fill();x.fillStyle=cssv('--surface');x.beginPath();x.arc(X(li),Y(vals[li]),1.3,0,7);x.fill();
+  if(opts.hover!=null){const hi2=opts.hover;x.strokeStyle=cssv('--ink-faint');x.setLineDash([3,3]);x.beginPath();x.moveTo(X(hi2),pad.t);x.lineTo(X(hi2),h-pad.b);x.stroke();x.setLineDash([]);}
+  return {padL:pad.l,padR:pad.r};
 }
-function volChart(cv,vols,color){const {x,w,h}=setup(cv);if(!vols.length)return;const mx=Math.max(...vols)||1;const bw=w/vols.length;vols.forEach((v,i)=>{const bh=(h-2)*(v/mx);x.fillStyle=color+'55';x.fillRect(i*bw+bw*0.12,h-bh,bw*0.76,bh);});}
+function candleChart(cv,ser,opts={}){
+  const {x,w,h}=setup(cv);if(!ser.length)return{};
+  const pad=opts.pad||{t:10,r:10,b:10,l:10};const overlays=opts.overlays||[];
+  let mn=Infinity,mx=-Infinity;
+  ser.forEach(s=>{if(s.l<mn)mn=s.l;if(s.h>mx)mx=s.h;});
+  overlays.forEach(o=>o.vals.forEach(v=>{if(v!=null){if(v<mn)mn=v;if(v>mx)mx=v;}}));
+  const sp=(mx-mn)||1;mn-=sp*.06;mx+=sp*.08;
+  const n=ser.length,iw=(w-pad.l-pad.r)/n;
+  const X=i=>pad.l+iw*(i+0.5);
+  const Y=v=>pad.t+(h-pad.t-pad.b)*(1-(v-mn)/(mx-mn));
+  if(opts.grid){x.strokeStyle=cssv('--grid');x.lineWidth=1;for(let g=0;g<=3;g++){const yy=pad.t+(h-pad.t-pad.b)*g/3;x.beginPath();x.moveTo(pad.l,yy);x.lineTo(w-pad.r,yy);x.stroke();}}
+  const cu=cssv('--up'),cd=cssv('--down'),cf=cssv('--ink-faint');
+  const bw=Math.max(2,iw*0.62);
+  ser.forEach((s,i)=>{
+    const col=s.c>s.o?cu:s.c<s.o?cd:cf;
+    x.strokeStyle=col;x.fillStyle=col;x.lineWidth=1;
+    x.beginPath();x.moveTo(X(i),Y(s.h));x.lineTo(X(i),Y(s.l));x.stroke();
+    const t=Math.min(Y(s.o),Y(s.c)),bh=Math.max(1,Math.abs(Y(s.o)-Y(s.c)));
+    x.fillRect(X(i)-bw/2,t,bw,bh);
+  });
+  overlays.forEach(o=>{x.beginPath();let st=false;o.vals.forEach((v,i)=>{if(v==null){st=false;return;}if(!st){x.moveTo(X(i),Y(v));st=true;}else x.lineTo(X(i),Y(v));});x.strokeStyle=o.color;x.lineWidth=1.4;x.lineJoin='round';x.stroke();});
+  if(opts.hover!=null){const hi2=opts.hover;x.strokeStyle=cssv('--ink-faint');x.setLineDash([3,3]);x.beginPath();x.moveTo(X(hi2),pad.t);x.lineTo(X(hi2),h-pad.b);x.stroke();x.setLineDash([]);}
+  return {padL:pad.l,padR:pad.r};
+}
+function volChart(cv,ser){const {x,w,h}=setup(cv);if(!ser.length)return;const mx=Math.max(...ser.map(s=>s.v))||1;const bw=w/ser.length;const cu=cssv('--up'),cd=cssv('--down');
+  ser.forEach((s,i)=>{const bh=(h-2)*(s.v/mx);x.fillStyle=(s.c>=s.o?cu:cd)+'66';x.fillRect(i*bw+bw*0.12,h-bh,bw*0.76,bh);});}
 function drawSparks(){document.querySelectorAll('canvas.spark').forEach(cv=>{const h=H[+cv.dataset.i];const vals=DASH[h.code].series.map(d=>d.c);priceChart(cv,vals,h.color,{pad:{t:5,r:4,b:5,l:4},lw:1.6});});}
 function drawMarket(){const cv=document.getElementById('mchart');if(cv)priceChart(cv,DASH.TAIEX.map(d=>d.c),cssv('--down'),{grid:true,pad:{t:8,r:8,b:8,l:8},lw:1.8});}
 
@@ -379,14 +413,31 @@ function updatePL(){
 }
 
 /* ---------- modal ---------- */
-const ov=document.getElementById('ov');let curMA={5:false,20:false,60:false},curCode=null;
-function renderBigChart(){const h=HByCode[curCode],ser=DASH[curCode].series,closes=ser.map(s=>s.c);
+const ov=document.getElementById('ov');let curMA={5:false,20:false,60:false},curCode=null,curMode='k',hoverIdx=null,lastGeom=null;
+function renderBigChart(){const ser=DASH[curCode].series,closes=ser.map(s=>s.c);
   const ov2=[];if(curMA[5])ov2.push({vals:sma(closes,5),color:cssv('--ma5')});if(curMA[20])ov2.push({vals:sma(closes,20),color:cssv('--ma20')});if(curMA[60])ov2.push({vals:sma(closes,60),color:cssv('--ma60')});
-  priceChart(document.getElementById('bc'),closes,h.color,{grid:true,mark:true,pad:{t:10,r:10,b:10,l:10},lw:2,overlays:ov2});
-  volChart(document.getElementById('vc'),ser.map(s=>s.v),h.color);}
+  const bc=document.getElementById('bc');
+  if(curMode==='k')lastGeom=candleChart(bc,ser,{grid:true,pad:{t:10,r:10,b:10,l:10},overlays:ov2,hover:hoverIdx});
+  else lastGeom=priceChart(bc,closes,cssv('--ink-soft'),{grid:true,mark:true,pad:{t:10,r:10,b:10,l:10},lw:1.8,overlays:ov2,hover:hoverIdx});
+  volChart(document.getElementById('vc'),ser);}
+function attachChartHover(){
+  const bc=document.getElementById('bc'),tip=document.getElementById('tip');
+  const move=e=>{if(!curCode)return;const r=bc.getBoundingClientRect();const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+    const ser=DASH[curCode].series,n=ser.length;const pl=(lastGeom&&lastGeom.padL)||10,pr=(lastGeom&&lastGeom.padR)||10;
+    let i=Math.round((cx-pl)/(r.width-pl-pr)*n-0.5);i=Math.max(0,Math.min(n-1,i));
+    if(i!==hoverIdx){hoverIdx=i;renderBigChart();}
+    const s=ser[i],cl=s.chg>0?'up-txt':s.chg<0?'down-txt':'';
+    tip.innerHTML=`<b>${s.d}</b>　開 ${s.o}　高 ${s.h}　低 ${s.l}　收 <b class="${cl}">${s.c}</b>（${fmtSign(s.chg)}）　量 ${fmt(s.v)} 張`;
+    if(e.cancelable)e.preventDefault();};
+  bc.addEventListener('pointermove',move);bc.addEventListener('pointerdown',move);
+  bc.addEventListener('pointerleave',()=>{hoverIdx=null;tip.innerHTML='按住或滑過圖表可查每日開高低收';renderBigChart();});}
 function openModal(i){
-  const h=H[i],d=DASH[h.code],ser=d.series,up=h.chg>=0;curCode=h.code;curMA={5:false,20:false,60:false};
+  const h=H[i],d=DASH[h.code],ser=d.series,up=h.chg>=0;curCode=h.code;curMA={5:false,20:false,60:false};curMode='k';hoverIdx=null;
   const first=ser[0].d,last=ser[ser.length-1].d;
+  const closes=ser.map(s=>s.c);
+  const maNum=n=>{const a=sma(closes,n);return a[a.length-1];};
+  const maV=n=>{const v=maNum(n);return v?v.toFixed(2):'—';};
+  const relMA=n=>{const v=maNum(n);return v?(h.price>=v?'價在上方 ▲':'價在下方 ▼'):'—';};
   const instRows=d.inst.map(r=>{const cell=v=>`<td class="${plColor(v)} num">${v===0?'0':fmtSignI(v)}</td>`;return `<tr><td>${r.d}</td>${cell(r.f)}${cell(r.t)}${cell(r.de)}<td class="${plColor(r.tot)} num" style="font-weight:700">${fmtSignI(r.tot)}</td></tr>`;}).join('');
   const marginRows=d.margin.map(r=>{const df=r.fin-r.finPrev,ds=r.shrt-r.shrtPrev;return `<tr><td>${r.d}</td><td class="num">${fmt(r.fin)}</td><td class="${plColor(df)} num">${fmtSignI(df)}</td><td class="num">${fmt(r.shrt)}</td><td class="${plColor(ds)} num">${fmtSignI(ds)}</td></tr>`;}).join('');
   const newsHtml=h.news.map(n=>`<li class="${n.intl?'intl':''}"><a href="${n.u}" target="_blank" rel="noopener"><span class="nt">${n.t}</span><span class="ns">${n.s}</span></a></li>`).join('');
@@ -403,11 +454,21 @@ function openModal(i){
       <span class="plout" id="mPL"><small>輸入成本以計算損益</small></span></div>
 
     <div class="an-block"><div class="an-head"><span class="an-head t">📈 技術面</span>${sig('tech','')}</div>
-      <div class="matoggle"><button class="machip m5" data-ma="5" aria-pressed="false"><span class="sw"></span>MA5</button>
-        <button class="machip m20" data-ma="20" aria-pressed="false"><span class="sw"></span>MA20 月線</button>
-        <button class="machip m60" data-ma="60" aria-pressed="false"><span class="sw"></span>MA60 季線</button></div>
+      <div class="matoggle">
+        <button class="machip mode" data-mode="k" aria-pressed="true">K線</button>
+        <button class="machip mode" data-mode="line" aria-pressed="false">折線</button>
+        <span style="flex:1"></span>
+        <button class="machip m5" data-ma="5" aria-pressed="false"><span class="sw"></span>MA5 <span class="val num">${maV(5)}</span></button>
+        <button class="machip m20" data-ma="20" aria-pressed="false"><span class="sw"></span>月線 <span class="val num">${maV(20)}</span></button>
+        <button class="machip m60" data-ma="60" aria-pressed="false"><span class="sw"></span>季線 <span class="val num">${maV(60)}</span></button></div>
+      <div class="tipbar" id="tip">按住或滑過圖表可查每日開高低收</div>
       <canvas class="bigchart" id="bc"></canvas><canvas class="volchart" id="vc"></canvas>
-      <div class="chart-meta"><span>${first}</span><span>近 ${ser.length} 日 · 灰點=波段高</span><span class="num">最新 ${last}</span></div>
+      <div class="chart-meta"><span>${first}</span><span>近 ${ser.length} 個交易日 · 紅漲綠跌</span><span class="num">最新 ${last}</span></div>
+      <div class="levels">
+        <span>月線 <b>${maV(20)}</b>（${relMA(20)}）</span>
+        <span>季線 <b>${maV(60)}</b>（${relMA(60)}）</span>
+        <span>波段高 <b>${Math.max(...closes).toFixed(2)}</b>（${fmtSign(h.dd,1)}%）</span>
+      </div>
       <div class="an-text" style="margin-top:8px">${h.tech}</div></div>
 
     <div class="an-block"><div class="an-head"><span class="an-head t">🏦 籌碼面</span>${sig('chip','')}</div>
@@ -420,14 +481,18 @@ function openModal(i){
     <div class="an-block"><div class="an-head"><span class="an-head t">🏭 基本面</span><span class="an-head n">（ETF 無 EPS，以題材/產業替代）</span>${sig('fund','')}</div>
       <div class="an-text">${h.fund}</div></div>
 
-    <div class="rec"><span class="pill ${h.stance}"><span class="dot"></span>${h.stanceTxt}</span><span class="rtxt"><b>綜合傾向：</b>${h.rec}</span></div>
+    <div class="logicline"><b>綜合邏輯：</b>籌碼「${h.sig.chip[1]}」＋技術「${h.sig.tech[1]}」＋基本「${h.sig.fund[1]}」→ ${h.stanceTxt}</div>
+    <div class="rec" style="margin-top:8px"><span class="pill ${h.stance}"><span class="dot"></span>${h.stanceTxt}</span><span class="rtxt"><b>綜合傾向：</b>${h.rec}</span></div>
 
     <div class="subhd" style="margin-top:18px">近 24 小時新聞 · 國內外 · 附來源</div>
     <ul class="news">${newsHtml}</ul>`;
   ov.classList.add('open');document.body.style.overflow='hidden';
   renderBigChart();
   // MA toggles
-  document.querySelectorAll('.machip').forEach(btn=>btn.addEventListener('click',()=>{const n=+btn.dataset.ma;curMA[n]=!curMA[n];btn.setAttribute('aria-pressed',curMA[n]);renderBigChart();}));
+  document.querySelectorAll('.machip[data-ma]').forEach(btn=>btn.addEventListener('click',()=>{const n=+btn.dataset.ma;curMA[n]=!curMA[n];btn.setAttribute('aria-pressed',curMA[n]);renderBigChart();}));
+  // K線 / 折線 mode
+  document.querySelectorAll('.machip.mode').forEach(btn=>btn.addEventListener('click',()=>{curMode=btn.dataset.mode;document.querySelectorAll('.machip.mode').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===curMode)));renderBigChart();}));
+  attachChartHover();
   // cost input
   const inEl=document.getElementById('costIn');const recalc=()=>{const v=parseFloat(inEl.value);const out=document.getElementById('mPL');
     if(v>0){setCost(h.code,v);const sh=SHARES[h.code];const pl=(h.price-v)*sh;const pct=(h.price-v)/v*100;out.innerHTML=`損益 <span class="${plColor(pl)}">${fmtSignI(Math.round(pl))}　${fmtSign(pct,1)}%</span>`;}
@@ -435,7 +500,7 @@ function openModal(i){
   inEl.addEventListener('input',recalc);recalc();
   document.getElementById('mClose').focus();
 }
-function closeModal(){ov.classList.remove('open');document.body.style.overflow='';curCode=null;}
+function closeModal(){ov.classList.remove('open');document.body.style.overflow='';curCode=null;hoverIdx=null;}
 document.getElementById('mClose').addEventListener('click',closeModal);
 ov.addEventListener('click',e=>{if(e.target===ov)closeModal();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ov.classList.contains('open'))closeModal();});
