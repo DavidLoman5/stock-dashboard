@@ -152,11 +152,33 @@
   .news .ns::before{content:"↗ ";color:var(--accent)}
   .news .intl .ns::after{content:" · 國際";color:var(--accent)}
 
-  .watch{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
-  .w-item{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:13px 15px}
-  .w-theme{font-size:13.5px;font-weight:700;color:var(--accent);margin-bottom:3px}
-  .w-stocks{font-size:13px;color:var(--ink);font-weight:600}
-  .w-why{font-size:12px;color:var(--ink-soft);margin-top:5px}
+  .regime{padding:14px 18px;display:flex;gap:12px 16px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  .lightdot{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:0 0 0 4px color-mix(in srgb,currentColor 18%,transparent)}
+  .regime .rl{font-weight:800;font-size:14.5px}
+  .regime .rm{font-size:12px;color:var(--ink-soft);display:flex;gap:8px 16px;flex-wrap:wrap}
+  .regime .rm b{color:var(--ink)}
+  .funnel-note{font-size:11.5px;color:var(--ink-faint);margin:0 0 12px}
+  .picks{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+  .pk{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:14px 16px}
+  .pk-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .pk-name{font-weight:800;font-size:15px}
+  .pk-name .code{color:var(--ink-faint);font-size:12px;font-weight:600;margin-left:4px}
+  .pk-score{font-size:20px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+  .pk-score small{font-size:11px;color:var(--ink-faint);font-weight:600}
+  .pk-ind{font-size:11px;color:var(--ink-soft);margin:1px 0 9px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+  .ovl{font-size:10px;font-weight:700;padding:1px 7px;border-radius:6px}
+  .ovl.low{color:var(--ink-soft);background:var(--surface-2)}
+  .ovl.high{color:var(--hold);background:var(--hold-bg)}
+  .pk-bars{display:grid;gap:4px;margin:0 0 8px}
+  .pk-bar{display:grid;grid-template-columns:58px 1fr 38px;gap:8px;align-items:center;font-size:10.5px;color:var(--ink-faint)}
+  .pk-bar .tr{height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden}
+  .pk-bar .fl{height:100%;border-radius:3px}
+  .pk-bar .num{text-align:right}
+  .pk-ev{font-size:12px;color:var(--ink-soft);line-height:1.7}
+  .pk-ev b{color:var(--ink)}
+  .pk-note{font-size:12px;color:var(--ink);margin-top:8px;padding:8px 10px;background:var(--surface-2);border-radius:8px;line-height:1.6}
+  .perfbox{padding:13px 18px;margin-top:14px;font-size:12.5px;color:var(--ink-soft);line-height:1.7}
+  .perfbox b{color:var(--ink)}
 
   .disc{margin-top:32px;padding:16px 18px;border-radius:12px;border:1px dashed var(--line);font-size:12.5px;color:var(--ink-faint);line-height:1.7}
   .disc b{color:var(--ink-soft)}
@@ -218,18 +240,11 @@
   <div class="sec-title">個股逐檔分析　<span class="hint">— 點卡片看三面分析（籌碼／技術／基本）、均線與損益</span></div>
   <div class="holdings" id="holdings"></div>
 
-  <div class="sec-title">市場風向與選股觀察（Bonus）</div>
-  <div class="card" style="padding:16px 20px;margin-bottom:14px">
-    <div style="font-size:13.5px;color:var(--ink-soft)">
-      <b style="color:var(--ink)">當前風向：</b>資金聚焦 AI 供應鏈與半導體，<b style="color:var(--ink)">記憶體（DRAM）漲價、先進封裝（CoWoS）擴產、IC 設計 IP</b> 為三大熱門題材；金融股受惠資金行情走強。短線最大變數為 <b style="color:var(--ink)">7/16 台積電法說會</b>。以下族群以你的三面框架擇要點評（個股才有 EPS／法人／融資券可完整套用），僅供研究觀察、非推介買進。
-    </div>
-  </div>
-  <div class="watch">
-    <div class="w-item"><div class="w-theme">記憶體 / DRAM 漲價</div><div class="w-stocks">南亞科、華邦電、旺宏</div><div class="w-why">基本面：現貨報價走揚、營收有望轉旺；與你持有的 00947 題材重疊。</div></div>
-    <div class="w-item"><div class="w-theme">先進封裝 CoWoS</div><div class="w-stocks">奇鋐、欣興、台光電</div><div class="w-why">技術＋基本：台積電擴產受惠鏈，留意法人是否連續買超。</div></div>
-    <div class="w-item"><div class="w-theme">IC 設計 / IP</div><div class="w-stocks">創意、世芯、信驊</div><div class="w-why">高價 IP／ASIC 需求延燒，注意本益比是否已反映高成長。</div></div>
-    <div class="w-item"><div class="w-theme">金融（資金行情）</div><div class="w-stocks">金融保險類股</div><div class="w-why">單週漲 7.76%，半導體之外第二引擎，可作分散選項。</div></div>
-  </div>
+  <div class="sec-title">市場紅綠燈與量化選股（Bonus）</div>
+  <div class="card regime" id="regimeBar"></div>
+  <div class="funnel-note" id="funnelNote"></div>
+  <div class="picks" id="picksWrap"></div>
+  <div class="card perfbox" id="perfBox"></div>
 
   <div class="disc">
     <b>免責聲明：</b>本報告由 AI 自動彙整公開新聞與證交所行情資料生成，屬<b>資訊整理與決策輔助</b>，<b>不構成投資建議、買賣要約或個股推介</b>。文中三面分析之「多方／空方／整理訊號」與操作傾向僅為情境說明，非下單指令；作者非持牌投資顧問。行情為 2026/07/09 收盤（週末休市）；法人買賣超與融資融券單位為「張」，來源證交所（T86／MI_MARGN）；ETF 本身無 EPS／本益比，基本面以成分題材與產業景氣替代。實際交易前請以券商即時報價為準，自行評估風險並為自身決策負責。投資有風險，過往績效不代表未來表現。
@@ -504,6 +519,61 @@ function closeModal(){ov.classList.remove('open');document.body.style.overflow='
 document.getElementById('mClose').addEventListener('click',closeModal);
 ov.addEventListener('click',e=>{if(e.target===ov)closeModal();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ov.classList.contains('open'))closeModal();});
+
+/* ---------- quant picks ---------- */
+window.PICKS={
+ date:'2026/07/09',
+ regime:{light:'yellow',idx:45354.61,ma20:45869,ma60:42878,instNet:-350,up:540,down:670},
+ funnel:'全市場 1,369 檔 → 籌碼初選 119 檔 → 風控＋技術複審 12 檔 → 三面評分 Top 5（資料：證交所 T86／融資券／月營收／本益比）',
+ perf:null,
+ picks:[
+  {code:'2890',name:'永豐金',ind:'金融保險業',close:40.45,chip:38,tech:27,fund:24,score:89,overlap:'low',
+   ev:'投信<b>連 5 日</b>買超 8,403 張・外資 5 日 +43,499 張・融資減 46 張・營收 YoY <b>+82.7%</b>・PE 19.4・殖利率 3.2%・距 40 日高 −3.5%',
+   note:'金融是本波「半導體之外的第二引擎」，投信＋外資雙買、融資同步減——籌碼由散戶流向大戶的標準型。與你的科技持股互補性最高。'},
+  {code:'8016',name:'矽創',ind:'半導體業',close:363,chip:35,tech:30,fund:24,score:89,overlap:'high',
+   ev:'外資<b>連 5 日</b>買超・投信 4 日買超・融資減 94 張・營收 YoY <b>+39.8%</b>・PE 22.8・技術面滿分（站上月線 318／季線 283）',
+   note:'驅動 IC 設計，唯一入榜的半導體。⚠ 5 日已漲 10.8%、正處 40 日高點——屬強勢突破型，宜等回測月線不追高；且與你持有的 00947／00935 題材重疊。'},
+  {code:'5876',name:'上海商銀',ind:'金融保險業',close:42.8,chip:36,tech:30,fund:19,score:85,overlap:'low',
+   ev:'投信<b>連 5 日</b>買超 2,275 張・融資減 78 張・PE <b>13.6</b>・殖利率 <b>4.2%</b>・技術面滿分・距 40 日高 −0.2%',
+   note:'低本益比＋高殖利率的防禦型金融，投信默默連買、股價貼著波段高整理——「易漲難跌」的籌碼結構，適合黃燈市況。'},
+  {code:'2542',name:'興富發',ind:'建材營造',close:43.6,chip:36,tech:17,fund:30,score:83,overlap:'low',
+   ev:'投信<b>連 5 日</b>買超・外資 5 日 +9,700 張・融資減 133 張・營收 YoY +2114%・PE 13.4・殖利率 <b>9.2%</b>・價在月線 43.9 下方',
+   note:'⚠ YoY +2114% 是建案交屋集中認列（一次性、不可線性外推）。亮點在 9.2% 殖利率＋法人連買；價仍在月線下，屬「左側佈局型」，風險偏好低者觀察就好。'},
+  {code:'1216',name:'統一',ind:'食品工業',close:78.4,chip:40,tech:27,fund:16,score:83,overlap:'low',
+   ev:'籌碼面<b>滿分 40</b>：投信＋外資皆<b>連 5 日</b>買超（外資 +28,164 張）・融資減 138 張・PE 21.2・殖利率 3.8%・距 40 日高 −0.3%',
+   note:'食品防禦龍頭，本次全市場籌碼分數最高者。黃燈（法人全市場賣超）環境下，資金明顯往防禦股移動——這檔就是證據。'}
+ ]
+};
+(function(){
+ const P=window.PICKS;if(!P)return;
+ const LT={green:['#22a06b','綠燈 · 風向偏多，可較積極'],yellow:['#d9a514','黃燈 · 中性觀望，控制部位、精選個股'],red:['#d0342c','紅燈 · 防守模式，暫停積極追價']};
+ const L=LT[P.regime.light]||LT.yellow;
+ const rg=document.getElementById('regimeBar');
+ rg.innerHTML=`<span class="lightdot" style="background:${L[0]};color:${L[0]}"></span><span class="rl">${L[1]}</span>
+  <span class="rm">
+   <span>指數 <b class="num">${fmt(P.regime.idx,2)}</b>（${P.regime.idx>=P.regime.ma20?'月線上':'月線下'}・${P.regime.idx>=P.regime.ma60?'季線上':'季線下'}）</span>
+   <span>全市場法人 <b class="num ${P.regime.instNet>=0?'up-txt':'down-txt'}">${fmtSignI(P.regime.instNet)} 億</b></span>
+   <span>漲/跌家數 <b class="num up-txt">${P.regime.up}</b> / <b class="num down-txt">${P.regime.down}</b></span>
+  </span>`;
+ document.getElementById('funnelNote').textContent=P.funnel+'　·　行情基準 '+P.date;
+ const wrap=document.getElementById('picksWrap');
+ const bar=(lbl,v,max,col)=>`<div class="pk-bar"><span>${lbl}</span><span class="tr"><span class="fl" style="width:${Math.round(v/max*100)}%;background:${col}"></span></span><span class="num">${v}/${max}</span></div>`;
+ P.picks.forEach(p=>{
+  const el=document.createElement('div');el.className='pk';
+  el.innerHTML=`<div class="pk-top"><span class="pk-name">${p.name}<span class="code">${p.code}</span></span><span class="pk-score">${p.score}<small>/100</small></span></div>
+   <div class="pk-ind">${p.ind} · 收 <span class="num">${p.close}</span><span class="ovl ${p.overlap}">${p.overlap==='high'?'⚠ 與持股重疊':'與持股互補'}</span></div>
+   <div class="pk-bars">${bar('籌碼',p.chip,40,'var(--ma5)')}${bar('技術',p.tech,30,'var(--ma20)')}${bar('基本',p.fund,30,'var(--ma60)')}</div>
+   <div class="pk-ev">${p.ev}</div>
+   <div class="pk-note">${p.note}</div>`;
+  wrap.appendChild(el);
+ });
+ const pb=document.getElementById('perfBox');
+ if(P.perf&&P.perf.n>0){
+  pb.innerHTML=`📒 <b>推薦追蹤（${P.perf.n} 筆歷史）：</b>平均報酬 <b class="num ${P.perf.avgRet>=0?'up-txt':'down-txt'}">${fmtSign(P.perf.avgRet)}%</b>・勝率（贏大盤）<b class="num">${P.perf.winRate}%</b>・平均超額報酬 <b class="num ${P.perf.avgAlpha>=0?'up-txt':'down-txt'}">${fmtSign(P.perf.avgAlpha)}%</b>。勝率與超額報酬持續偏弱時，評分權重將自動檢討。`;
+ }else{
+  pb.innerHTML=`📒 <b>推薦追蹤已啟動：</b>今日首次記錄 5 檔（進場價＝當日收盤，寫入 picks-log）。之後每個交易日自動回算每筆推薦的報酬與勝率 vs 大盤並顯示於此——<b>準不準，數據說話</b>。量化篩選僅供研究參考、非投資建議。`;
+ }
+})();
 
 /* ---------- render ---------- */
 function renderAll(){drawSparks();drawMarket();if(curCode)renderBigChart();}
