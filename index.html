@@ -1,0 +1,450 @@
+<title>每日台股持股簡報</title>
+<style>
+  :root{
+    --bg:#f5f6f9;--surface:#fff;--surface-2:#eef0f5;--line:#dfe2ea;
+    --ink:#1a1e27;--ink-soft:#545b6b;--ink-faint:#8b92a3;--accent:#b6842f;--accent-soft:#f2e7cf;
+    --up:#d0342c;--up-bg:#fbe9e7;--down:#12885e;--down-bg:#e2f3ec;--hold:#9a7a1e;--hold-bg:#f6edd6;--grid:#e6e9f0;
+    --ma5:#e0902f;--ma20:#3f7fd0;--ma60:#8a5fc0;
+    --shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);--radius:14px;
+    --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",-apple-system,"Segoe UI",system-ui,sans-serif;
+  }
+  @media(prefers-color-scheme:dark){:root{
+    --bg:#0e121b;--surface:#161c28;--surface-2:#1d2534;--line:#2a3346;--ink:#e7eaf1;--ink-soft:#a3abbd;--ink-faint:#6b7488;
+    --accent:#d9ad57;--accent-soft:#2a2413;--up:#ff5d51;--up-bg:#3a1c1a;--down:#34c48d;--down-bg:#123027;--hold:#e0b955;--hold-bg:#2e2712;--grid:#232c3d;
+    --ma5:#e8a94d;--ma20:#5b9be6;--ma60:#a884d8;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+  }}
+  :root[data-theme="light"]{--bg:#f5f6f9;--surface:#fff;--surface-2:#eef0f5;--line:#dfe2ea;--ink:#1a1e27;--ink-soft:#545b6b;--ink-faint:#8b92a3;--accent:#b6842f;--accent-soft:#f2e7cf;--up:#d0342c;--up-bg:#fbe9e7;--down:#12885e;--down-bg:#e2f3ec;--hold:#9a7a1e;--hold-bg:#f6edd6;--grid:#e6e9f0;--ma5:#e0902f;--ma20:#3f7fd0;--ma60:#8a5fc0;--shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);}
+  :root[data-theme="dark"]{--bg:#0e121b;--surface:#161c28;--surface-2:#1d2534;--line:#2a3346;--ink:#e7eaf1;--ink-soft:#a3abbd;--ink-faint:#6b7488;--accent:#d9ad57;--accent-soft:#2a2413;--up:#ff5d51;--up-bg:#3a1c1a;--down:#34c48d;--down-bg:#123027;--hold:#e0b955;--hold-bg:#2e2712;--grid:#232c3d;--ma5:#e8a94d;--ma20:#5b9be6;--ma60:#a884d8;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:26px 16px 72px}
+  .num{font-variant-numeric:tabular-nums}
+  .up-txt{color:var(--up)}.down-txt{color:var(--down)}
+
+  header{margin-bottom:20px}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:8px}
+  .eyebrow::before{content:"";width:22px;height:2px;background:var(--accent)}
+  h1{font-size:clamp(24px,5vw,34px);margin:0 0 6px;letter-spacing:-.01em;text-wrap:balance}
+  .subhead{color:var(--ink-soft);font-size:13.5px;display:flex;flex-wrap:wrap;gap:6px 16px}
+  .subhead b{color:var(--ink);font-weight:600}
+  .sec-title{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);font-weight:700;margin:32px 0 13px;display:flex;align-items:center;gap:10px}
+  .sec-title::after{content:"";flex:1;height:1px;background:var(--line)}
+  .sec-title .hint{text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink-faint);font-size:12px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+
+  .hero{padding:20px 22px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px 20px;align-items:end}
+  .hero .k{font-size:11.5px;color:var(--ink-faint);letter-spacing:.04em}
+  .hero .tot{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+  .hero .v2{font-size:19px;font-weight:800;line-height:1.15}
+  .hero .sub{font-size:12.5px;font-weight:700;margin-top:2px}
+  .hero .stance-wrap{grid-column:1/-1;border-top:1px solid var(--line);padding-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .hero .note{font-size:12px;color:var(--ink-faint)}
+  @media(max-width:560px){.hero{grid-template-columns:repeat(2,1fr)}}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
+  .pill.up{color:var(--up);background:var(--up-bg)}.pill.down{color:var(--down);background:var(--down-bg)}.pill.hold{color:var(--hold);background:var(--hold-bg)}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+
+  .market{padding:18px 22px;display:grid;grid-template-columns:1.1fr 1fr;gap:6px 26px;align-items:center}
+  .market .idx-name{font-size:13px;color:var(--ink-soft)}
+  .market .idx-val{font-size:clamp(28px,6vw,38px);font-weight:800;line-height:1;letter-spacing:-.02em}
+  .market .idx-chg{font-size:14.5px;font-weight:700;margin-top:5px}
+  .market .mchart{width:100%;height:96px;display:block}
+  .market .mmeta{grid-column:1/-1;margin-top:10px;padding-top:12px;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .market .mmeta .mi{font-size:12px;color:var(--ink-faint)}
+  .market .mmeta .mi b{display:block;font-size:14px;color:var(--ink);font-weight:700;margin-top:2px}
+  .wind{grid-column:1/-1;margin-top:12px;font-size:13.5px;color:var(--ink-soft)}
+  .wind b{color:var(--ink)}
+  @media(max-width:560px){.market{grid-template-columns:1fr}.market .mmeta{grid-template-columns:repeat(2,1fr)}}
+
+  .alloc-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:2px 0 14px}
+  .alloc-bar>span{display:block;height:100%}
+  .legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 18px}
+  .legend .li{display:flex;align-items:center;gap:8px;font-size:13px}
+  .legend .sw{width:11px;height:11px;border-radius:3px;flex:none}
+  .legend .li .pc{margin-left:auto;color:var(--ink-soft);font-weight:600}
+  .warn{margin-top:16px;padding:12px 14px;border-radius:10px;background:var(--hold-bg);border:1px solid color-mix(in srgb,var(--hold) 30%,transparent);font-size:13.5px;color:var(--ink);display:flex;gap:10px;align-items:flex-start}
+  .warn .ic{color:var(--hold);font-weight:800;flex:none}
+
+  .holdings{display:grid;gap:14px;grid-template-columns:repeat(2,1fr)}
+  @media(max-width:640px){.holdings{grid-template-columns:1fr}}
+  .h-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s}
+  .h-card:hover{transform:translateY(-2px);box-shadow:0 4px 10px rgba(20,24,34,.08),0 14px 34px rgba(20,24,34,.10);border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+  .h-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .h-accent{height:3px;width:100%}
+  .h-body{padding:15px 17px 16px}
+  .h-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .h-name{font-size:16px;font-weight:700;letter-spacing:-.01em}
+  .h-name .code{font-size:12px;color:var(--ink-faint);font-weight:600;margin-left:5px}
+  .h-tag{font-size:11.5px;color:var(--ink-soft);margin-top:2px}
+  .h-price{text-align:right;flex:none}
+  .h-price .p{font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1}
+  .h-price .c{font-size:12.5px;font-weight:700;margin-top:3px}
+  .spark{width:100%;height:44px;display:block;margin:12px 0 8px}
+  .sigrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
+  .sig{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;display:inline-flex;align-items:center;gap:4px}
+  .sig::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+  .sig.bull{color:var(--up);background:var(--up-bg)}.sig.bear{color:var(--down);background:var(--down-bg)}.sig.neu{color:var(--hold);background:var(--hold-bg)}
+  .h-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px}
+  .h-foot .dd{color:var(--ink-soft)}.h-foot .dd b{color:var(--ink)}
+  .h-foot .pl{font-weight:700}
+  .h-more{color:var(--accent);font-weight:700}
+
+  .ov{position:fixed;inset:0;background:rgba(10,13,20,.55);backdrop-filter:blur(3px);display:none;align-items:flex-start;justify-content:center;padding:24px 14px;z-index:50;overflow-y:auto}
+  .ov.open{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.4);max-width:660px;width:100%;margin:auto;overflow:hidden;position:relative}
+  .m-accent{height:4px}
+  .m-body{padding:20px 22px 26px}
+  .m-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .m-title{font-size:20px;font-weight:800;letter-spacing:-.01em}
+  .m-title .code{font-size:13px;color:var(--ink-faint);font-weight:600;margin-left:6px}
+  .m-tag{font-size:12px;color:var(--ink-soft);margin-top:3px}
+  .m-price .p{font-size:24px;font-weight:800;text-align:right;line-height:1}
+  .m-price .c{font-size:13px;font-weight:700;text-align:right;margin-top:3px}
+  .m-close{position:absolute;top:16px;right:18px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-soft);width:32px;height:32px;border-radius:8px;font-size:17px;cursor:pointer;line-height:1;z-index:2}
+  .m-close:hover{color:var(--ink)}
+  .costbar{margin-top:16px;padding:12px 14px;background:var(--surface-2);border-radius:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .costbar label{font-size:12.5px;color:var(--ink-soft);font-weight:600}
+  .costbar input{width:96px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-size:14px;font-family:var(--font);font-variant-numeric:tabular-nums}
+  .costbar input:focus{outline:2px solid var(--accent);outline-offset:0}
+  .costbar .plout{font-size:13.5px;font-weight:700;margin-left:auto}
+  .costbar .plout small{color:var(--ink-faint);font-weight:500}
+
+  .analysis{margin-top:6px}
+  .an-block{margin-top:16px;padding:14px 15px;border:1px solid var(--line);border-radius:12px}
+  .an-head{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+  .an-head .t{font-size:14px;font-weight:800}
+  .an-head .n{font-size:11px;color:var(--ink-faint);font-weight:600}
+  .an-text{font-size:13.5px;color:var(--ink);line-height:1.7}
+
+  .matoggle{display:flex;gap:7px;margin:2px 0 8px;flex-wrap:wrap}
+  .machip{font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-faint);cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+  .machip .sw{width:9px;height:2.5px;border-radius:2px;background:currentColor;opacity:.35}
+  .machip[aria-pressed="true"]{color:#fff;border-color:transparent}
+  .machip.m5[aria-pressed="true"]{background:var(--ma5)}.machip.m20[aria-pressed="true"]{background:var(--ma20)}.machip.m60[aria-pressed="true"]{background:var(--ma60)}
+  .machip[aria-pressed="true"] .sw{opacity:1;background:#fff}
+  .bigchart{width:100%;height:180px;display:block}
+  .volchart{width:100%;height:48px;display:block;margin-top:2px}
+  .chart-meta{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-faint);margin-top:4px}
+
+  .tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:2px}
+  .tbl th,.tbl td{padding:6px 5px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  .tbl th{color:var(--ink-faint);font-weight:600;font-size:11px}
+  .tbl th:first-child,.tbl td:first-child{text-align:left}
+  .subhd{font-size:11px;font-weight:700;color:var(--ink-faint);letter-spacing:.06em;text-transform:uppercase;margin:12px 0 5px}
+
+  .rec{margin-top:16px;padding:13px 14px;border-radius:10px;background:var(--surface-2);display:flex;gap:12px;align-items:flex-start}
+  .rec .rtxt{font-size:13px;color:var(--ink-soft)}.rec .rtxt b{color:var(--ink)}
+  .news{margin:0;padding:0;list-style:none;display:grid;gap:9px}
+  .news li{font-size:13.5px}
+  .news a{color:var(--ink);text-decoration:none;display:block}
+  .news a:hover .nt{color:var(--accent)}
+  .news .nt{font-weight:600}
+  .news .ns{font-size:11.5px;color:var(--ink-faint);margin-top:1px}
+  .news .ns::before{content:"↗ ";color:var(--accent)}
+  .news .intl .ns::after{content:" · 國際";color:var(--accent)}
+
+  .watch{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+  .w-item{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:13px 15px}
+  .w-theme{font-size:13.5px;font-weight:700;color:var(--accent);margin-bottom:3px}
+  .w-stocks{font-size:13px;color:var(--ink);font-weight:600}
+  .w-why{font-size:12px;color:var(--ink-soft);margin-top:5px}
+
+  .disc{margin-top:32px;padding:16px 18px;border-radius:12px;border:1px dashed var(--line);font-size:12.5px;color:var(--ink-faint);line-height:1.7}
+  .disc b{color:var(--ink-soft)}
+  footer{margin-top:18px;text-align:center;font-size:12px;color:var(--ink-faint)}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">每日持股簡報 · 範本</div>
+    <h1>台股持股 AI 晨報</h1>
+    <div class="subhead">
+      <span>報告日期：<b>2026/07/11（六）</b></span>
+      <span>行情基準：<b>2026/07/09 收盤（證交所）</b></span>
+      <span>新聞範圍：<b>近 24 小時</b></span>
+    </div>
+  </header>
+
+  <div class="card hero">
+    <div><div class="k">持股市值</div><div class="tot num">267,920</div></div>
+    <div><div class="k">今日估計損益</div><div class="v2 up-txt num">+1,210</div><div class="sub up-txt num">+0.46%</div></div>
+    <div><div class="k">未實現損益（依成本）</div><div class="v2 num" id="pfPL">—</div><div class="sub num" id="pfPLpct" style="color:var(--ink-faint)">點個股輸入成本價</div></div>
+    <div class="stance-wrap">
+      <span class="pill hold"><span class="dot"></span>整體傾向：核心續抱 · 法說前不追高</span>
+      <span class="note">單位 NT$；成本價存在本機瀏覽器，每日更新不會清除</span>
+    </div>
+  </div>
+
+  <div class="sec-title">大盤行情</div>
+  <div class="card market">
+    <div>
+      <div class="idx-name">加權指數 TAIEX</div>
+      <div class="idx-val num down-txt">45,354.61</div>
+      <div class="idx-chg num down-txt">▼ 379.80　−0.83%</div>
+    </div>
+    <canvas class="mchart" id="mchart"></canvas>
+    <div class="mmeta">
+      <div class="mi">成交金額<b class="num">9,968 億</b></div>
+      <div class="mi">距 6/22 波段高<b class="down-txt num">−5.0%</b></div>
+      <div class="mi">半導體(週)<b class="up-txt num">+7.55%</b></div>
+      <div class="mi">市場風向<b class="down-txt">高檔震盪</b></div>
+    </div>
+    <div class="wind">
+      <b>AI／半導體仍是唯一主戰場，但短線在回檔整理。</b>指數自 6/22 波段高 47,741 拉回約 5%，7/7 單日重挫逾千點後低量整理（7/9 量縮至 9,968 億），三大法人連日調節、賣壓收斂但尚未轉買。
+      <b>國際同步：</b>費城半導體指數(SOX)亦於 6/22 見高 14,655 後回落，台積電 ADR 對台股溢價 17.3%（外資對 AI 需求仍偏多）。全市場屏息等待 <b>7/16 台積電法說會</b>（外資目標價上修至 3,400～3,500 元）。研判：<b>中期多頭未破，短線高檔震盪，追高宜謹慎、留意量能。</b>
+    </div>
+  </div>
+
+  <div class="sec-title">投組總覽</div>
+  <div class="card" style="padding:18px 22px">
+    <div class="alloc-bar" id="allocBar"></div>
+    <div class="legend" id="legend"></div>
+    <div class="warn">
+      <span class="ic">⚠ 集中度提醒</span>
+      <span>5 檔中 4 檔（0050、00935、00947、00981A）重壓台股半導體與科技權值，且本波<b>全數同步自 6/22 高點回檔</b>（00990A 更回落約 17%、且為唯一跌破季線者）——這正是「高相關性風險」的實證：題材一起漲、也一起跌。僅 <b>00990A</b>（約 58% 美股）提供海外分散。<b>7/16 台積電法說會是全投組的關鍵風險日。</b></span>
+    </div>
+  </div>
+
+  <div class="sec-title">個股逐檔分析　<span class="hint">— 點卡片看三面分析（籌碼／技術／基本）、均線與損益</span></div>
+  <div class="holdings" id="holdings"></div>
+
+  <div class="sec-title">市場風向與選股觀察（Bonus）</div>
+  <div class="card" style="padding:16px 20px;margin-bottom:14px">
+    <div style="font-size:13.5px;color:var(--ink-soft)">
+      <b style="color:var(--ink)">當前風向：</b>資金聚焦 AI 供應鏈與半導體，<b style="color:var(--ink)">記憶體（DRAM）漲價、先進封裝（CoWoS）擴產、IC 設計 IP</b> 為三大熱門題材；金融股受惠資金行情走強。短線最大變數為 <b style="color:var(--ink)">7/16 台積電法說會</b>。以下族群以你的三面框架擇要點評（個股才有 EPS／法人／融資券可完整套用），僅供研究觀察、非推介買進。
+    </div>
+  </div>
+  <div class="watch">
+    <div class="w-item"><div class="w-theme">記憶體 / DRAM 漲價</div><div class="w-stocks">南亞科、華邦電、旺宏</div><div class="w-why">基本面：現貨報價走揚、營收有望轉旺；與你持有的 00947 題材重疊。</div></div>
+    <div class="w-item"><div class="w-theme">先進封裝 CoWoS</div><div class="w-stocks">奇鋐、欣興、台光電</div><div class="w-why">技術＋基本：台積電擴產受惠鏈，留意法人是否連續買超。</div></div>
+    <div class="w-item"><div class="w-theme">IC 設計 / IP</div><div class="w-stocks">創意、世芯、信驊</div><div class="w-why">高價 IP／ASIC 需求延燒，注意本益比是否已反映高成長。</div></div>
+    <div class="w-item"><div class="w-theme">金融（資金行情）</div><div class="w-stocks">金融保險類股</div><div class="w-why">單週漲 7.76%，半導體之外第二引擎，可作分散選項。</div></div>
+  </div>
+
+  <div class="disc">
+    <b>免責聲明：</b>本報告由 AI 自動彙整公開新聞與證交所行情資料生成，屬<b>資訊整理與決策輔助</b>，<b>不構成投資建議、買賣要約或個股推介</b>。文中三面分析之「多方／空方／整理訊號」與操作傾向僅為情境說明，非下單指令；作者非持牌投資顧問。行情為 2026/07/09 收盤（週末休市）；法人買賣超與融資融券單位為「張」，來源證交所（T86／MI_MARGN）；ETF 本身無 EPS／本益比，基本面以成分題材與產業景氣替代。實際交易前請以券商即時報價為準，自行評估風險並為自身決策負責。投資有風險，過往績效不代表未來表現。
+  </div>
+  <footer>每日台股持股簡報 · 範本　|　每個交易日（週一至五）08:30 自動更新</footer>
+</div>
+
+<div class="ov" id="ov" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="modal">
+    <div class="m-accent" id="mAccent"></div>
+    <button class="m-close" id="mClose" aria-label="關閉">✕</button>
+    <div class="m-body" id="mContent"></div>
+  </div>
+</div>
+
+<script>
+window.DASH={"TAIEX":[{"d":"4/1","c":33174.82,"chg":1451.83,"amt":6526},{"d":"4/2","c":32572.43,"chg":-602.39,"amt":7026},{"d":"4/7","c":33229.82,"chg":657.39,"amt":5847},{"d":"4/8","c":34761.38,"chg":1531.56,"amt":8941},{"d":"4/9","c":34861.16,"chg":99.78,"amt":8723},{"d":"4/10","c":35417.83,"chg":556.67,"amt":8718},{"d":"4/13","c":35457.29,"chg":39.46,"amt":8057},{"d":"4/14","c":36296.12,"chg":838.83,"amt":10173},{"d":"4/15","c":36722.14,"chg":426.02,"amt":10259},{"d":"4/16","c":37132.02,"chg":409.88,"amt":9273},{"d":"4/17","c":36804.34,"chg":-327.68,"amt":9855},{"d":"4/20","c":36958.8,"chg":154.46,"amt":9610},{"d":"4/21","c":37605.11,"chg":646.31,"amt":10217},{"d":"4/22","c":37878.47,"chg":273.36,"amt":9799},{"d":"4/23","c":37714.15,"chg":-164.32,"amt":14601},{"d":"4/24","c":38932.4,"chg":1218.25,"amt":10812},{"d":"4/27","c":39616.63,"chg":684.23,"amt":12480},{"d":"4/28","c":39521.73,"chg":-94.9,"amt":10575},{"d":"4/29","c":39303.5,"chg":-218.23,"amt":9153},{"d":"4/30","c":38926.63,"chg":-376.87,"amt":10749},{"d":"5/4","c":40705.14,"chg":1778.51,"amt":10513},{"d":"5/5","c":40769.29,"chg":64.15,"amt":10493},{"d":"5/6","c":41138.85,"chg":369.56,"amt":15240},{"d":"5/7","c":41933.78,"chg":794.93,"amt":12469},{"d":"5/8","c":41603.94,"chg":-329.84,"amt":13054},{"d":"5/11","c":41790.06,"chg":186.12,"amt":11705},{"d":"5/12","c":41898.32,"chg":108.26,"amt":14462},{"d":"5/13","c":41374.5,"chg":-523.82,"amt":12658},{"d":"5/14","c":41751.75,"chg":377.25,"amt":12754},{"d":"5/15","c":41172.36,"chg":-579.39,"amt":13749},{"d":"5/18","c":40891.82,"chg":-280.54,"amt":10420},{"d":"5/19","c":40175.56,"chg":-716.26,"amt":11512},{"d":"5/20","c":40020.82,"chg":-154.74,"amt":10276},{"d":"5/21","c":41368.21,"chg":1347.39,"amt":10476},{"d":"5/22","c":42267.97,"chg":899.76,"amt":12369},{"d":"5/25","c":43644.4,"chg":1376.43,"amt":13527},{"d":"5/26","c":43525.37,"chg":-119.03,"amt":15497},{"d":"5/27","c":44256.8,"chg":731.43,"amt":16301},{"d":"5/28","c":43636.44,"chg":-620.36,"amt":16707},{"d":"5/29","c":44732.94,"chg":1096.5,"amt":19170},{"d":"6/1","c":45337.91,"chg":604.97,"amt":16111},{"d":"6/2","c":45557.31,"chg":219.4,"amt":16964},{"d":"6/3","c":46459.16,"chg":901.85,"amt":15175},{"d":"6/4","c":45677.46,"chg":-781.7,"amt":13256},{"d":"6/5","c":45070.94,"chg":-606.52,"amt":13198},{"d":"6/8","c":43502.78,"chg":-1568.16,"amt":12166},{"d":"6/9","c":44704.44,"chg":1201.66,"amt":12241},{"d":"6/10","c":43225.54,"chg":-1478.9,"amt":14241},{"d":"6/11","c":43149.46,"chg":-76.08,"amt":13385},{"d":"6/12","c":44169.04,"chg":1019.58,"amt":11692},{"d":"6/15","c":45396.99,"chg":1227.95,"amt":11157},{"d":"6/16","c":45809.19,"chg":412.2,"amt":12622},{"d":"6/17","c":45877.39,"chg":68.2,"amt":11546},{"d":"6/18","c":46465.2,"chg":587.81,"amt":16062},{"d":"6/22","c":47741.51,"chg":1276.31,"amt":15158},{"d":"6/23","c":47100.65,"chg":-640.86,"amt":16724},{"d":"6/24","c":46043.6,"chg":-1057.05,"amt":15390},{"d":"6/25","c":46255.26,"chg":211.66,"amt":13681},{"d":"6/26","c":44571.76,"chg":-1683.5,"amt":16728},{"d":"6/29","c":44999.9,"chg":428.14,"amt":10454},{"d":"6/30","c":46125.91,"chg":1126.01,"amt":12661},{"d":"7/1","c":47018.99,"chg":893.08,"amt":13678},{"d":"7/2","c":46744.16,"chg":-274.83,"amt":10836},{"d":"7/3","c":46780.62,"chg":36.46,"amt":10780},{"d":"7/6","c":46556.39,"chg":-224.23,"amt":10644},{"d":"7/7","c":45479.11,"chg":-1077.28,"amt":12281},{"d":"7/8","c":45734.41,"chg":255.3,"amt":10046},{"d":"7/9","c":45354.61,"chg":-379.8,"amt":9968}],"0050":{"series":[{"d":"4/1","o":75,"h":75.6,"l":74.6,"c":75.45,"chg":3.1,"v":130699},{"d":"4/2","o":75.9,"h":76.05,"l":73.8,"c":73.95,"chg":-1.5,"v":113976},{"d":"4/7","o":75.15,"h":75.45,"l":74.65,"c":75.3,"chg":1.35,"v":80450},{"d":"4/8","o":78.1,"h":79.25,"l":78.1,"c":79.2,"chg":3.9,"v":235676},{"d":"4/9","o":79.3,"h":79.4,"l":78.8,"c":79.15,"chg":-0.05,"v":95095},{"d":"4/10","o":80,"h":80.8,"l":79.95,"c":80.75,"chg":1.6,"v":120839},{"d":"4/13","o":80.6,"h":81,"l":80.4,"c":80.6,"chg":-0.15,"v":91690},{"d":"4/14","o":81.75,"h":83.2,"l":81.75,"c":83.1,"chg":2.5,"v":129129},{"d":"4/15","o":84.1,"h":85.1,"l":83.8,"c":84.15,"chg":1.05,"v":127729},{"d":"4/16","o":84.75,"h":85.1,"l":84.15,"c":85,"chg":0.85,"v":80696},{"d":"4/17","o":84.2,"h":84.5,"l":84,"c":84.15,"chg":-0.85,"v":101258},{"d":"4/20","o":84.55,"h":85.1,"l":84.45,"c":84.55,"chg":0.4,"v":100552},{"d":"4/21","o":85.5,"h":86.1,"l":85,"c":86,"chg":1.45,"v":75558},{"d":"4/22","o":85.75,"h":86.6,"l":85.55,"c":86.35,"chg":0.35,"v":67544},{"d":"4/23","o":87.65,"h":88.8,"l":85.15,"c":86.35,"chg":0,"v":156716},{"d":"4/24","o":87.6,"h":89.95,"l":87.55,"c":89.95,"chg":3.6,"v":129886},{"d":"4/27","o":92.7,"h":94.25,"l":92.7,"c":93,"chg":3.05,"v":192038},{"d":"4/28","o":92.55,"h":93.65,"l":91.9,"c":92,"chg":-1,"v":126301},{"d":"4/29","o":90.7,"h":91.5,"l":90,"c":90.75,"chg":-1.25,"v":103796},{"d":"4/30","o":91.25,"h":91.9,"l":90.3,"c":90.5,"chg":-0.25,"v":89210},{"d":"5/4","o":92.5,"h":94.65,"l":92.4,"c":94.6,"chg":4.1,"v":125271},{"d":"5/5","o":94.4,"h":94.75,"l":94,"c":94.6,"chg":0,"v":82852},{"d":"5/6","o":96.05,"h":96.9,"l":94.7,"c":95.75,"chg":1.15,"v":111759},{"d":"5/7","o":97.95,"h":98.4,"l":97.4,"c":97.7,"chg":1.95,"v":117152},{"d":"5/8","o":97.35,"h":97.7,"l":95.85,"c":97,"chg":-0.7,"v":131188},{"d":"5/11","o":96.65,"h":97.15,"l":96.5,"c":96.9,"chg":-0.1,"v":96606},{"d":"5/12","o":96.85,"h":97.35,"l":95.5,"c":96.85,"chg":-0.05,"v":102303},{"d":"5/13","o":94.85,"h":95.8,"l":94.7,"c":95.5,"chg":-1.35,"v":130654},{"d":"5/14","o":96.9,"h":97.2,"l":95.75,"c":96.05,"chg":0.55,"v":57229},{"d":"5/15","o":97.65,"h":98.25,"l":95.2,"c":95.4,"chg":-0.65,"v":98133},{"d":"5/18","o":94,"h":95.2,"l":93.3,"c":94.9,"chg":-0.5,"v":118571},{"d":"5/19","o":94.35,"h":94.7,"l":93.1,"c":93.1,"chg":-1.8,"v":135940},{"d":"5/20","o":93,"h":93.5,"l":92.45,"c":92.5,"chg":-0.6,"v":121650},{"d":"5/21","o":94.8,"h":96.05,"l":94.7,"c":95.85,"chg":3.35,"v":62216},{"d":"5/22","o":96.3,"h":97.3,"l":96,"c":97.3,"chg":1.45,"v":64288},{"d":"5/25","o":99.55,"h":101,"l":99.55,"c":100.8,"chg":3.5,"v":129483},{"d":"5/26","o":101.6,"h":101.8,"l":100.1,"c":100.1,"chg":-0.7,"v":93560},{"d":"5/27","o":102.4,"h":103.9,"l":102,"c":102.55,"chg":2.45,"v":94960},{"d":"5/28","o":104,"h":104.25,"l":100.1,"c":100.5,"chg":-2.05,"v":152916},{"d":"5/29","o":103.2,"h":105.4,"l":102.7,"c":105.4,"chg":4.9,"v":102356},{"d":"6/1","o":105.25,"h":106.7,"l":104.5,"c":105.5,"chg":0.1,"v":135817},{"d":"6/2","o":106.3,"h":106.3,"l":104.2,"c":105.7,"chg":0.2,"v":117161},{"d":"6/3","o":107.3,"h":107.85,"l":107.1,"c":107.6,"chg":1.9,"v":79592},{"d":"6/4","o":106.75,"h":107,"l":106.05,"c":106.1,"chg":-1.5,"v":236782},{"d":"6/5","o":105,"h":105.35,"l":102.8,"c":104.15,"chg":-1.95,"v":337031},{"d":"6/8","o":98.05,"h":101.3,"l":98.05,"c":100.95,"chg":-3.2,"v":524952},{"d":"6/9","o":102.1,"h":103.6,"l":101.35,"c":103.5,"chg":2.55,"v":246039},{"d":"6/10","o":102.6,"h":102.95,"l":100.2,"c":100.25,"chg":-3.25,"v":192917},{"d":"6/11","o":100,"h":100.55,"l":97.6,"c":99.85,"chg":-0.4,"v":299040},{"d":"6/12","o":103.25,"h":103.75,"l":101.55,"c":101.95,"chg":2.1,"v":76564},{"d":"6/15","o":105.1,"h":105.5,"l":104.3,"c":105.25,"chg":3.3,"v":100403},{"d":"6/16","o":106.05,"h":106.05,"l":104.85,"c":105.9,"chg":0.65,"v":70825},{"d":"6/17","o":105,"h":106,"l":104.5,"c":106,"chg":0.1,"v":100332},{"d":"6/18","o":107,"h":107.45,"l":106.65,"c":107.3,"chg":1.3,"v":78557},{"d":"6/22","o":109.45,"h":111.2,"l":109.45,"c":111.15,"chg":3.85,"v":116042},{"d":"6/23","o":112,"h":112.3,"l":110.05,"c":110.1,"chg":-1.05,"v":130787},{"d":"6/24","o":108,"h":108.1,"l":106.15,"c":107.15,"chg":-2.95,"v":235940},{"d":"6/25","o":108,"h":108.05,"l":106.35,"c":107.2,"chg":0.05,"v":96346},{"d":"6/26","o":105.4,"h":105.85,"l":102.8,"c":103.1,"chg":-4.1,"v":291815},{"d":"6/29","o":103.35,"h":105.35,"l":103.3,"c":104.45,"chg":1.35,"v":106661},{"d":"6/30","o":106.85,"h":108.25,"l":106.75,"c":107.8,"chg":3.35,"v":107704},{"d":"7/1","o":109.8,"h":109.95,"l":108.6,"c":109.35,"chg":1.55,"v":76131},{"d":"7/2","o":107.2,"h":108.95,"l":106.9,"c":108.8,"chg":-0.55,"v":73421},{"d":"7/3","o":106.15,"h":108.8,"l":106.1,"c":108.35,"chg":-0.45,"v":82436},{"d":"7/6","o":109.05,"h":109.6,"l":107.7,"c":108.25,"chg":-0.1,"v":75784},{"d":"7/7","o":108.55,"h":109.05,"l":105.85,"c":106.2,"chg":-2.05,"v":124629},{"d":"7/8","o":106.4,"h":106.6,"l":105.05,"c":106.05,"chg":-0.15,"v":96508},{"d":"7/9","o":106.35,"h":107,"l":105.45,"c":105.8,"chg":-0.25,"v":56651}],"inst":[{"d":"7/3","f":-19986,"t":2800,"de":-18033,"tot":-35219},{"d":"7/6","f":-12552,"t":0,"de":-9703,"tot":-22255},{"d":"7/7","f":-40069,"t":970,"de":-13562,"tot":-52661},{"d":"7/8","f":-28291,"t":7420,"de":-19776,"tot":-40646},{"d":"7/9","f":-9035,"t":2875,"de":-12709,"tot":-18869}],"margin":[{"d":"7/7","fin":13075,"finPrev":13038,"shrt":1019,"shrtPrev":1077},{"d":"7/8","fin":13411,"finPrev":13075,"shrt":968,"shrtPrev":1019},{"d":"7/9","fin":13306,"finPrev":13411,"shrt":942,"shrtPrev":968}]},"00935":{"series":[{"d":"4/1","o":37.04,"h":37.46,"l":36.99,"c":37.46,"chg":1.8,"v":10225},{"d":"4/2","o":37.86,"h":38.09,"l":36.54,"c":36.54,"chg":-0.92,"v":7828},{"d":"4/7","o":37.35,"h":37.7,"l":37.25,"c":37.45,"chg":0.91,"v":8582},{"d":"4/8","o":39.38,"h":40.03,"l":39.34,"c":40,"chg":2.55,"v":16281},{"d":"4/9","o":40.18,"h":40.35,"l":40,"c":40.1,"chg":0.1,"v":10392},{"d":"4/10","o":40.82,"h":41.18,"l":40.75,"c":41.13,"chg":1.03,"v":7613},{"d":"4/13","o":41.13,"h":41.68,"l":41.09,"c":41.43,"chg":0.3,"v":5735},{"d":"4/14","o":42.4,"h":42.45,"l":41.97,"c":42.35,"chg":0.92,"v":5576},{"d":"4/15","o":43.04,"h":43.95,"l":43.04,"c":43.47,"chg":1.12,"v":6991},{"d":"4/16","o":44,"h":44.64,"l":43.84,"c":44.51,"chg":1.04,"v":6661},{"d":"4/17","o":44.51,"h":45.07,"l":44.51,"c":44.71,"chg":0.2,"v":7288},{"d":"4/20","o":45.09,"h":45.95,"l":45.09,"c":45.59,"chg":0.88,"v":10664},{"d":"4/21","o":46.26,"h":47.03,"l":46.02,"c":47.02,"chg":1.43,"v":12214},{"d":"4/22","o":47.05,"h":47.83,"l":47.05,"c":47.59,"chg":0.57,"v":13187},{"d":"4/23","o":48.77,"h":49,"l":45.85,"c":46.9,"chg":-0.69,"v":25806},{"d":"4/24","o":47.95,"h":48.9,"l":47.71,"c":48.83,"chg":1.93,"v":14321},{"d":"4/27","o":50.3,"h":50.3,"l":48.95,"c":49.45,"chg":0.62,"v":18019},{"d":"4/28","o":49.45,"h":50.7,"l":49.43,"c":49.91,"chg":0.46,"v":8894},{"d":"4/29","o":49.26,"h":49.78,"l":48.76,"c":49.47,"chg":-0.44,"v":8866},{"d":"4/30","o":50.3,"h":50.6,"l":49.84,"c":50,"chg":0.53,"v":10422},{"d":"5/4","o":51.55,"h":53.2,"l":51.2,"c":53.2,"chg":3.2,"v":21622},{"d":"5/5","o":53.2,"h":53.5,"l":52.65,"c":53.05,"chg":-0.15,"v":11642},{"d":"5/6","o":54.45,"h":54.75,"l":52.6,"c":53.7,"chg":0.65,"v":20095},{"d":"5/7","o":54.45,"h":55.05,"l":54.1,"c":54.85,"chg":1.15,"v":13642},{"d":"5/8","o":54.3,"h":55.05,"l":53.25,"c":54.2,"chg":-0.65,"v":17480},{"d":"5/11","o":54.35,"h":55.9,"l":54.2,"c":55.65,"chg":1.45,"v":11288},{"d":"5/12","o":56,"h":56.25,"l":55.1,"c":55.6,"chg":-0.05,"v":11318},{"d":"5/13","o":54.45,"h":54.8,"l":53.65,"c":54.3,"chg":-1.3,"v":17532},{"d":"5/14","o":55.4,"h":55.7,"l":54.55,"c":54.7,"chg":0.4,"v":8608},{"d":"5/15","o":55.55,"h":55.6,"l":52.95,"c":53.2,"chg":-1.5,"v":13500},{"d":"5/18","o":52.15,"h":53.5,"l":51.5,"c":53.25,"chg":0.05,"v":13680},{"d":"5/19","o":52.9,"h":53.25,"l":51.15,"c":51.3,"chg":-1.95,"v":17343},{"d":"5/20","o":51.5,"h":52,"l":50.9,"c":51.15,"chg":-0.15,"v":8226},{"d":"5/21","o":53.1,"h":54.35,"l":53,"c":54.2,"chg":3.05,"v":14834},{"d":"5/22","o":55.2,"h":56.35,"l":55.2,"c":56.35,"chg":2.15,"v":13711},{"d":"5/25","o":58.35,"h":59.8,"l":58.35,"c":59.8,"chg":3.45,"v":44310},{"d":"5/26","o":60.55,"h":60.6,"l":59.15,"c":60,"chg":0.2,"v":24350},{"d":"5/27","o":62.1,"h":63.3,"l":61.5,"c":62.1,"chg":2.1,"v":30816},{"d":"5/28","o":62.3,"h":62.8,"l":59.45,"c":59.95,"chg":-2.15,"v":35029},{"d":"5/29","o":61.4,"h":61.55,"l":60.85,"c":61.25,"chg":1.3,"v":16570},{"d":"6/1","o":61.9,"h":62.95,"l":61.9,"c":62.4,"chg":1.15,"v":22709},{"d":"6/2","o":63,"h":63.15,"l":60.55,"c":62,"chg":-0.4,"v":23958},{"d":"6/3","o":62.95,"h":63.4,"l":62.35,"c":62.65,"chg":0.65,"v":13835},{"d":"6/4","o":62.2,"h":62.5,"l":61.4,"c":61.45,"chg":-1.2,"v":16050},{"d":"6/5","o":60.3,"h":60.8,"l":58.3,"c":59.9,"chg":-1.55,"v":28213},{"d":"6/8","o":55.75,"h":57.8,"l":55.6,"c":57.5,"chg":-2.4,"v":34656},{"d":"6/9","o":58.3,"h":60.3,"l":57.8,"c":60.2,"chg":2.7,"v":18218},{"d":"6/10","o":59.4,"h":60.1,"l":57.1,"c":57.1,"chg":-3.1,"v":27415},{"d":"6/11","o":56.65,"h":57.7,"l":54.85,"c":56.9,"chg":-0.2,"v":22854},{"d":"6/12","o":59.45,"h":59.7,"l":58.4,"c":58.85,"chg":1.95,"v":15004},{"d":"6/15","o":60.65,"h":61.2,"l":60.5,"c":60.85,"chg":2,"v":15353},{"d":"6/16","o":61.45,"h":61.7,"l":61,"c":61.35,"chg":0.5,"v":11876},{"d":"6/17","o":60.5,"h":61.35,"l":60.35,"c":61.35,"chg":0,"v":13934},{"d":"6/18","o":61.9,"h":62.4,"l":61.75,"c":62.25,"chg":0.9,"v":11754},{"d":"6/22","o":63.75,"h":64.4,"l":63.7,"c":64.2,"chg":1.95,"v":11542},{"d":"6/23","o":65,"h":65.2,"l":63.2,"c":63.2,"chg":-1,"v":21166},{"d":"6/24","o":61.75,"h":62.15,"l":60.8,"c":61.9,"chg":-1.3,"v":26375},{"d":"6/25","o":62.7,"h":62.7,"l":61.15,"c":62,"chg":0.1,"v":10848},{"d":"6/26","o":60.9,"h":61.15,"l":58.45,"c":58.8,"chg":-3.2,"v":32093},{"d":"6/29","o":58.55,"h":59.8,"l":58.35,"c":58.95,"chg":0.15,"v":12645},{"d":"6/30","o":60.55,"h":62.45,"l":60.55,"c":62.45,"chg":3.5,"v":24900},{"d":"7/1","o":63.55,"h":63.7,"l":62.35,"c":62.95,"chg":0.5,"v":19483},{"d":"7/2","o":61.1,"h":62.8,"l":61.05,"c":62.75,"chg":-0.2,"v":15338},{"d":"7/3","o":60.75,"h":62.6,"l":60.55,"c":62.3,"chg":-0.45,"v":12358},{"d":"7/6","o":62.95,"h":63.15,"l":61.05,"c":61.5,"chg":-0.8,"v":10449},{"d":"7/7","o":61.55,"h":61.8,"l":58.7,"c":58.85,"chg":-2.65,"v":24145},{"d":"7/8","o":59,"h":59.15,"l":57.7,"c":58.7,"chg":-0.15,"v":11579},{"d":"7/9","o":58.9,"h":59.9,"l":58.65,"c":58.95,"chg":0.25,"v":9663}],"inst":[{"d":"7/3","f":1317,"t":0,"de":-3938,"tot":-2621},{"d":"7/6","f":1150,"t":162,"de":-2571,"tot":-1258},{"d":"7/7","f":-4817,"t":309,"de":-1693,"tot":-6201},{"d":"7/8","f":-1090,"t":352,"de":-3843,"tot":-4581},{"d":"7/9","f":-1566,"t":175,"de":-48,"tot":-1439}],"margin":[{"d":"7/7","fin":5714,"finPrev":5413,"shrt":114,"shrtPrev":102},{"d":"7/8","fin":5799,"finPrev":5714,"shrt":113,"shrtPrev":114},{"d":"7/9","fin":5755,"finPrev":5799,"shrt":115,"shrtPrev":113}]},"00947":{"series":[{"d":"4/1","o":23.05,"h":23.2,"l":22.92,"c":23.11,"chg":1.14,"v":3958},{"d":"4/2","o":23.6,"h":23.7,"l":22.52,"c":22.73,"chg":-0.38,"v":4043},{"d":"4/7","o":23.26,"h":23.41,"l":22.95,"c":23.05,"chg":0.32,"v":2483},{"d":"4/8","o":23.7,"h":24.76,"l":23.7,"c":24.73,"chg":1.68,"v":9247},{"d":"4/9","o":24.75,"h":24.9,"l":24.14,"c":24.22,"chg":-0.51,"v":5626},{"d":"4/10","o":24.76,"h":25.17,"l":24.55,"c":24.75,"chg":0.53,"v":5040},{"d":"4/13","o":24.7,"h":25.21,"l":24.66,"c":25.12,"chg":0.37,"v":5978},{"d":"4/14","o":25.76,"h":26.36,"l":25.74,"c":26.02,"chg":0.9,"v":5116},{"d":"4/15","o":26.64,"h":26.66,"l":25.93,"c":25.94,"chg":-0.08,"v":3654},{"d":"4/16","o":26.07,"h":26.7,"l":26.07,"c":26.7,"chg":0.76,"v":6427},{"d":"4/17","o":26.85,"h":26.9,"l":26.64,"c":26.71,"chg":0,"v":3915},{"d":"4/20","o":26.77,"h":27.36,"l":26.77,"c":27.31,"chg":0.6,"v":4913},{"d":"4/21","o":27.94,"h":29.06,"l":27.94,"c":29.05,"chg":1.74,"v":8274},{"d":"4/22","o":29.36,"h":29.8,"l":29.28,"c":29.79,"chg":0.74,"v":6722},{"d":"4/23","o":30.8,"h":30.98,"l":28.24,"c":28.91,"chg":-0.88,"v":15048},{"d":"4/24","o":29.23,"h":30.15,"l":29.1,"c":29.82,"chg":0.91,"v":9162},{"d":"4/27","o":30.28,"h":30.5,"l":29.66,"c":30.13,"chg":0.31,"v":6746},{"d":"4/28","o":30.44,"h":31.35,"l":30.44,"c":31.22,"chg":1.09,"v":5817},{"d":"4/29","o":30.89,"h":31.4,"l":30.73,"c":31.29,"chg":0.07,"v":3385},{"d":"4/30","o":31.63,"h":32,"l":31,"c":31.09,"chg":-0.2,"v":5224},{"d":"5/4","o":32.26,"h":32.85,"l":32,"c":32.85,"chg":1.76,"v":5886},{"d":"5/5","o":33.02,"h":34.1,"l":32.95,"c":34.1,"chg":1.25,"v":5846},{"d":"5/6","o":35.37,"h":35.68,"l":34.24,"c":35.11,"chg":1.01,"v":20600},{"d":"5/7","o":35.54,"h":35.96,"l":35.12,"c":35.73,"chg":0.62,"v":9030},{"d":"5/8","o":35.57,"h":36.31,"l":34.69,"c":35.79,"chg":0.06,"v":9372},{"d":"5/11","o":36.29,"h":37.97,"l":36.25,"c":37.97,"chg":2.18,"v":21556},{"d":"5/12","o":38.66,"h":38.66,"l":37.17,"c":37.49,"chg":-0.48,"v":18113},{"d":"5/13","o":36.79,"h":36.9,"l":35.95,"c":36.35,"chg":-1.14,"v":13506},{"d":"5/14","o":37.2,"h":37.7,"l":36.77,"c":36.99,"chg":0.64,"v":10752},{"d":"5/15","o":37.21,"h":37.22,"l":35.41,"c":35.69,"chg":-1.3,"v":10939},{"d":"5/18","o":34.6,"h":35.38,"l":34.1,"c":35.25,"chg":-0.44,"v":9045},{"d":"5/19","o":34.8,"h":35,"l":32.93,"c":32.98,"chg":-2.27,"v":13150},{"d":"5/20","o":33.33,"h":33.75,"l":32.75,"c":33.16,"chg":0.18,"v":10732},{"d":"5/21","o":34.33,"h":35.25,"l":34.29,"c":34.95,"chg":1.79,"v":14408},{"d":"5/22","o":35.51,"h":36.45,"l":35.5,"c":36.39,"chg":1.44,"v":9605},{"d":"5/25","o":37.09,"h":37.89,"l":36.9,"c":37.61,"chg":1.22,"v":10552},{"d":"5/26","o":38.19,"h":38.25,"l":37.5,"c":37.79,"chg":0.18,"v":8433},{"d":"5/27","o":39.23,"h":40.23,"l":38.43,"c":38.74,"chg":0.95,"v":14727},{"d":"5/28","o":38.83,"h":39.38,"l":37.02,"c":37.3,"chg":-1.44,"v":9106},{"d":"5/29","o":38.15,"h":39,"l":37.99,"c":38.81,"chg":1.51,"v":8489},{"d":"6/1","o":39.43,"h":40.36,"l":39.43,"c":40.1,"chg":1.29,"v":12015},{"d":"6/2","o":40.94,"h":41.2,"l":39.6,"c":40.71,"chg":0.61,"v":11177},{"d":"6/3","o":41.29,"h":41.29,"l":40.07,"c":40.2,"chg":-0.51,"v":11685},{"d":"6/4","o":40.05,"h":40.32,"l":39.41,"c":39.41,"chg":-0.79,"v":5786},{"d":"6/5","o":38.45,"h":38.56,"l":36.85,"c":37.77,"chg":-1.64,"v":12625},{"d":"6/8","o":34.26,"h":35.87,"l":34.25,"c":35.83,"chg":-1.94,"v":8478},{"d":"6/9","o":37.33,"h":37.45,"l":36,"c":37.37,"chg":1.54,"v":8232},{"d":"6/10","o":36.65,"h":37.42,"l":35.07,"c":35.07,"chg":-2.3,"v":10222},{"d":"6/11","o":35.08,"h":35.9,"l":33.88,"c":35.36,"chg":0.29,"v":7818},{"d":"6/12","o":36.87,"h":37.3,"l":36.6,"c":37.06,"chg":1.7,"v":7709},{"d":"6/15","o":38.29,"h":38.78,"l":38.15,"c":38.66,"chg":1.6,"v":8382},{"d":"6/16","o":39.52,"h":39.71,"l":38.88,"c":39.52,"chg":0.86,"v":8309},{"d":"6/17","o":38.99,"h":39.7,"l":38.85,"c":39.7,"chg":0.18,"v":7000},{"d":"6/18","o":40.25,"h":41.3,"l":40.2,"c":41.3,"chg":1.6,"v":8142},{"d":"6/22","o":42.53,"h":43.49,"l":42.53,"c":43.02,"chg":1.72,"v":15128},{"d":"6/23","o":43.54,"h":43.9,"l":41.2,"c":41.24,"chg":-1.78,"v":24559},{"d":"6/24","o":40.5,"h":40.93,"l":39.76,"c":40.7,"chg":-0.54,"v":14342},{"d":"6/25","o":42.19,"h":42.2,"l":40.56,"c":40.93,"chg":0.23,"v":10329},{"d":"6/26","o":40.32,"h":40.73,"l":38.01,"c":38.07,"chg":-2.86,"v":18918},{"d":"6/29","o":38.13,"h":39.08,"l":38,"c":38.34,"chg":0.27,"v":8436},{"d":"6/30","o":39.8,"h":40,"l":38.75,"c":39.67,"chg":1.33,"v":16498},{"d":"7/1","o":40.28,"h":40.28,"l":38.68,"c":39.1,"chg":-0.57,"v":17420},{"d":"7/2","o":37.77,"h":39.29,"l":37.71,"c":39.23,"chg":0.13,"v":9438},{"d":"7/3","o":38.51,"h":39.1,"l":38.34,"c":38.8,"chg":-0.43,"v":6453},{"d":"7/6","o":39.67,"h":39.76,"l":38.25,"c":38.38,"chg":-0.42,"v":6973},{"d":"7/7","o":38.49,"h":38.87,"l":36.61,"c":36.88,"chg":-1.5,"v":9755},{"d":"7/8","o":37.22,"h":37.31,"l":36.02,"c":36.45,"chg":-0.43,"v":6572},{"d":"7/9","o":36.89,"h":37.83,"l":36.59,"c":37.3,"chg":0.85,"v":5157}],"inst":[{"d":"7/3","f":-192,"t":0,"de":-1675,"tot":-1867},{"d":"7/6","f":937,"t":0,"de":-1821,"tot":-884},{"d":"7/7","f":-284,"t":0,"de":-2207,"tot":-2491},{"d":"7/8","f":128,"t":0,"de":-1351,"tot":-1223},{"d":"7/9","f":140,"t":0,"de":-489,"tot":-349}],"margin":[{"d":"7/7","fin":7767,"finPrev":7853,"shrt":5,"shrtPrev":5},{"d":"7/8","fin":7541,"finPrev":7767,"shrt":4,"shrtPrev":5},{"d":"7/9","fin":7640,"finPrev":7541,"shrt":1,"shrtPrev":4}]},"00990A":{"series":[{"d":"4/1","o":11.68,"h":11.84,"l":11.66,"c":11.81,"chg":0.51,"v":22837},{"d":"4/2","o":12.18,"h":12.24,"l":11.8,"c":11.86,"chg":0.05,"v":33896},{"d":"4/7","o":12.24,"h":12.35,"l":12.22,"c":12.33,"chg":0.47,"v":38749},{"d":"4/8","o":12.83,"h":13.3,"l":12.83,"c":13.29,"chg":0.96,"v":69376},{"d":"4/9","o":13.33,"h":13.52,"l":13.33,"c":13.51,"chg":0.22,"v":47813},{"d":"4/10","o":13.76,"h":14.02,"l":13.76,"c":14.01,"chg":0.5,"v":56799},{"d":"4/13","o":14,"h":14,"l":13.9,"c":13.92,"chg":-0.09,"v":31780},{"d":"4/14","o":14.26,"h":14.56,"l":14.26,"c":14.5,"chg":0.58,"v":52119},{"d":"4/15","o":14.65,"h":14.74,"l":14.55,"c":14.55,"chg":0.05,"v":41689},{"d":"4/16","o":14.55,"h":14.58,"l":14.45,"c":14.57,"chg":0.02,"v":25956},{"d":"4/17","o":14.77,"h":14.83,"l":14.67,"c":14.76,"chg":0.19,"v":30269},{"d":"4/20","o":14.81,"h":14.98,"l":14.8,"c":14.83,"chg":0.07,"v":25930},{"d":"4/21","o":14.94,"h":15.16,"l":14.94,"c":15.14,"chg":0.31,"v":21125},{"d":"4/22","o":15.15,"h":15.4,"l":15.15,"c":15.39,"chg":0.25,"v":20926},{"d":"4/23","o":15.52,"h":15.67,"l":14.88,"c":15.28,"chg":-0.11,"v":61027},{"d":"4/24","o":15.34,"h":15.52,"l":15.34,"c":15.5,"chg":0.22,"v":26087},{"d":"4/27","o":15.79,"h":15.85,"l":15.73,"c":15.75,"chg":0.25,"v":23275},{"d":"4/28","o":15.8,"h":15.8,"l":15.69,"c":15.74,"chg":-0.01,"v":15402},{"d":"4/29","o":15.35,"h":15.55,"l":15.35,"c":15.53,"chg":-0.21,"v":16746},{"d":"4/30","o":15.82,"h":15.98,"l":15.82,"c":15.88,"chg":0.35,"v":20975},{"d":"5/4","o":16.3,"h":16.77,"l":16.3,"c":16.77,"chg":0.89,"v":26985},{"d":"5/5","o":16.8,"h":16.92,"l":16.74,"c":16.79,"chg":0.02,"v":28428},{"d":"5/6","o":17.32,"h":17.56,"l":17.13,"c":17.45,"chg":0.66,"v":43523},{"d":"5/7","o":17.74,"h":17.74,"l":17.47,"c":17.6,"chg":0.15,"v":34897},{"d":"5/8","o":17.23,"h":17.29,"l":16.85,"c":17.08,"chg":-0.52,"v":45626},{"d":"5/11","o":17.4,"h":17.7,"l":17.37,"c":17.68,"chg":0.6,"v":30303},{"d":"5/12","o":18.23,"h":18.28,"l":17.88,"c":18.14,"chg":0.46,"v":32990},{"d":"5/13","o":17.9,"h":18.08,"l":17.6,"c":18.06,"chg":-0.08,"v":29920},{"d":"5/14","o":18.31,"h":18.56,"l":18.26,"c":18.28,"chg":0.22,"v":28999},{"d":"5/15","o":18.39,"h":18.4,"l":17.59,"c":17.67,"chg":-0.61,"v":47466},{"d":"5/18","o":17.2,"h":17.49,"l":17.1,"c":17.4,"chg":-0.27,"v":35423},{"d":"5/19","o":17,"h":17.02,"l":16.16,"c":16.16,"chg":-1.24,"v":87720},{"d":"5/20","o":16.54,"h":16.67,"l":16.48,"c":16.57,"chg":0.41,"v":30644},{"d":"5/21","o":17.14,"h":17.67,"l":17.14,"c":17.67,"chg":1.1,"v":33583},{"d":"5/22","o":18.1,"h":18.53,"l":18.1,"c":18.53,"chg":0.86,"v":38655},{"d":"5/25","o":18.89,"h":19.58,"l":18.89,"c":19.5,"chg":0.97,"v":58915},{"d":"5/26","o":19.5,"h":19.51,"l":19.11,"c":19.38,"chg":-0.12,"v":44894},{"d":"5/27","o":20.04,"h":20.05,"l":19.76,"c":19.88,"chg":0.5,"v":48499},{"d":"5/28","o":19.81,"h":19.81,"l":19.07,"c":19.23,"chg":-0.65,"v":64622},{"d":"5/29","o":19.67,"h":20.15,"l":19.66,"c":20.15,"chg":0.92,"v":46812},{"d":"6/1","o":20.29,"h":20.43,"l":20.13,"c":20.2,"chg":0.05,"v":47416},{"d":"6/2","o":20.26,"h":20.26,"l":19.76,"c":20.17,"chg":-0.03,"v":65284},{"d":"6/3","o":20.71,"h":21.13,"l":20.7,"c":21.11,"chg":0.94,"v":63579},{"d":"6/4","o":20.78,"h":20.8,"l":20.53,"c":20.7,"chg":-0.41,"v":63046},{"d":"6/5","o":20.14,"h":20.35,"l":19.8,"c":20.25,"chg":-0.45,"v":64236},{"d":"6/8","o":18.35,"h":19.1,"l":18.35,"c":18.9,"chg":-1.35,"v":110068},{"d":"6/9","o":19.22,"h":19.5,"l":19.03,"c":19.5,"chg":0.6,"v":38612},{"d":"6/10","o":19.06,"h":19.13,"l":18.54,"c":18.54,"chg":-0.96,"v":67540},{"d":"6/11","o":18.15,"h":18.5,"l":17.92,"c":18.32,"chg":-0.22,"v":55768},{"d":"6/12","o":19.33,"h":19.58,"l":19.13,"c":19.25,"chg":0.93,"v":43540},{"d":"6/15","o":20,"h":20.47,"l":20,"c":20.47,"chg":1.22,"v":59141},{"d":"6/16","o":20.8,"h":20.96,"l":20.65,"c":20.89,"chg":0.42,"v":52977},{"d":"6/17","o":20.41,"h":20.72,"l":20.35,"c":20.72,"chg":-0.17,"v":44188},{"d":"6/18","o":20.91,"h":21.01,"l":20.83,"c":20.97,"chg":0.25,"v":43197},{"d":"6/22","o":21.57,"h":21.77,"l":21.52,"c":21.73,"chg":0.76,"v":44981},{"d":"6/23","o":21.75,"h":21.85,"l":21.06,"c":21.08,"chg":-0.65,"v":57264},{"d":"6/24","o":20.49,"h":20.6,"l":20.14,"c":20.51,"chg":-0.57,"v":72249},{"d":"6/25","o":21.03,"h":21.2,"l":20.68,"c":21.18,"chg":0.67,"v":48020},{"d":"6/26","o":20.97,"h":20.97,"l":20.17,"c":20.23,"chg":-0.95,"v":62614},{"d":"6/29","o":20.23,"h":20.25,"l":19.85,"c":19.9,"chg":-0.33,"v":46315},{"d":"6/30","o":20.4,"h":20.82,"l":20.31,"c":20.78,"chg":0.88,"v":34341},{"d":"7/1","o":21.37,"h":21.46,"l":21,"c":21.23,"chg":0.45,"v":47559},{"d":"7/2","o":20.41,"h":20.63,"l":20.06,"c":20.38,"chg":-0.85,"v":51851},{"d":"7/3","o":19.48,"h":19.76,"l":18.81,"c":19.76,"chg":-0.62,"v":64759},{"d":"7/6","o":19.81,"h":19.81,"l":19.16,"c":19.32,"chg":-0.44,"v":42217},{"d":"7/7","o":19.03,"h":19.03,"l":18.25,"c":18.29,"chg":-1.03,"v":82293},{"d":"7/8","o":18.19,"h":18.25,"l":17.81,"c":17.88,"chg":-0.41,"v":49401},{"d":"7/9","o":17.97,"h":18.23,"l":17.87,"c":17.96,"chg":0.08,"v":26744}],"inst":[{"d":"7/3","f":-24971,"t":0,"de":-14890,"tot":-39861},{"d":"7/6","f":-9339,"t":0,"de":-7599,"tot":-16938},{"d":"7/7","f":-25066,"t":0,"de":-12966,"tot":-38033},{"d":"7/8","f":1319,"t":0,"de":-13908,"tot":-12590},{"d":"7/9","f":5260,"t":0,"de":-10013,"tot":-4753}],"margin":[{"d":"7/7","fin":20060,"finPrev":20561,"shrt":154,"shrtPrev":238},{"d":"7/8","fin":21288,"finPrev":20060,"shrt":474,"shrtPrev":154},{"d":"7/9","fin":21815,"finPrev":21288,"shrt":416,"shrtPrev":474}]},"00981A":{"series":[{"d":"4/1","o":20.4,"h":20.67,"l":20.26,"c":20.66,"chg":1.18,"v":252174},{"d":"4/2","o":20.95,"h":21.09,"l":20.16,"c":20.22,"chg":-0.44,"v":254627},{"d":"4/7","o":20.66,"h":20.96,"l":20.56,"c":20.74,"chg":0.52,"v":145930},{"d":"4/8","o":21.83,"h":22.23,"l":21.79,"c":22.2,"chg":1.46,"v":277321},{"d":"4/9","o":22.4,"h":22.79,"l":22.26,"c":22.58,"chg":0.38,"v":222255},{"d":"4/10","o":23.15,"h":23.18,"l":22.76,"c":23.13,"chg":0.55,"v":305724},{"d":"4/13","o":23.12,"h":23.23,"l":22.96,"c":23.03,"chg":-0.1,"v":261259},{"d":"4/14","o":23.73,"h":23.89,"l":23.45,"c":23.62,"chg":0.59,"v":249508},{"d":"4/15","o":24.07,"h":24.51,"l":24.01,"c":24.3,"chg":0.68,"v":307106},{"d":"4/16","o":24.72,"h":25.07,"l":24.5,"c":25.07,"chg":0.77,"v":335318},{"d":"4/17","o":25.08,"h":25.54,"l":24.98,"c":25.1,"chg":0.03,"v":507438},{"d":"4/20","o":25.51,"h":26.58,"l":25.26,"c":25.98,"chg":0.88,"v":666693},{"d":"4/21","o":26.51,"h":26.76,"l":26.01,"c":26.4,"chg":0.42,"v":494468},{"d":"4/22","o":26.75,"h":27.15,"l":26.5,"c":26.95,"chg":0.55,"v":504073},{"d":"4/23","o":27.86,"h":28.06,"l":26.02,"c":26.62,"chg":-0.33,"v":1205531},{"d":"4/24","o":27.19,"h":27.85,"l":27.1,"c":27.8,"chg":1.18,"v":673449},{"d":"4/27","o":28.77,"h":28.77,"l":27.58,"c":27.9,"chg":0.1,"v":1125109},{"d":"4/28","o":27.9,"h":28.2,"l":27.64,"c":27.81,"chg":-0.09,"v":395410},{"d":"4/29","o":27.44,"h":27.91,"l":27.25,"c":27.74,"chg":-0.07,"v":328866},{"d":"4/30","o":28.03,"h":28.43,"l":27.9,"c":28.28,"chg":0.54,"v":403591},{"d":"5/4","o":29.19,"h":29.64,"l":28.86,"c":29.63,"chg":1.35,"v":458451},{"d":"5/5","o":29.74,"h":29.84,"l":29.29,"c":29.46,"chg":-0.17,"v":589822},{"d":"5/6","o":29.99,"h":30,"l":28.58,"c":29.3,"chg":-0.16,"v":766280},{"d":"5/7","o":29.67,"h":29.67,"l":29.35,"c":29.58,"chg":0.28,"v":324515},{"d":"5/8","o":29.42,"h":29.47,"l":28.43,"c":28.91,"chg":-0.67,"v":535264},{"d":"5/11","o":28.9,"h":29.73,"l":28.89,"c":29.69,"chg":0.78,"v":356650},{"d":"5/12","o":30.1,"h":30.43,"l":29.83,"c":29.97,"chg":0.28,"v":378420},{"d":"5/13","o":29.27,"h":29.55,"l":29.01,"c":29.28,"chg":-0.69,"v":430719},{"d":"5/14","o":29.83,"h":30.03,"l":29.35,"c":29.44,"chg":0.16,"v":263153},{"d":"5/15","o":29.85,"h":29.85,"l":28.33,"c":28.42,"chg":-1.02,"v":462470},{"d":"5/18","o":27.6,"h":28.24,"l":27.4,"c":28.24,"chg":-0.18,"v":305648},{"d":"5/19","o":28.1,"h":28.38,"l":27.46,"c":27.49,"chg":-0.75,"v":269343},{"d":"5/20","o":27.49,"h":27.72,"l":27.1,"c":27.23,"chg":-0.26,"v":252539},{"d":"5/21","o":28.39,"h":28.86,"l":28.3,"c":28.86,"chg":1.63,"v":244837},{"d":"5/22","o":29.49,"h":29.99,"l":29.47,"c":29.95,"chg":1.09,"v":347186},{"d":"5/25","o":30.94,"h":31.75,"l":30.93,"c":31.61,"chg":1.66,"v":324132},{"d":"5/26","o":31.89,"h":31.89,"l":31.1,"c":31.49,"chg":-0.12,"v":288882},{"d":"5/27","o":32.23,"h":32.73,"l":31.67,"c":31.96,"chg":0.47,"v":300008},{"d":"5/28","o":32.14,"h":32.23,"l":30.5,"c":30.72,"chg":-1.24,"v":493712},{"d":"5/29","o":31.66,"h":31.72,"l":31.27,"c":31.54,"chg":0.82,"v":205601},{"d":"6/1","o":31.69,"h":32.07,"l":31.61,"c":31.7,"chg":0.16,"v":254691},{"d":"6/2","o":31.77,"h":31.81,"l":30.7,"c":31.33,"chg":-0.37,"v":315230},{"d":"6/3","o":31.68,"h":32.1,"l":31.65,"c":31.81,"chg":0.48,"v":221231},{"d":"6/4","o":31.48,"h":31.62,"l":31.06,"c":31.36,"chg":-0.45,"v":192386},{"d":"6/5","o":30.76,"h":31.25,"l":29.75,"c":30.81,"chg":-0.55,"v":342382},{"d":"6/8","o":28.12,"h":29.9,"l":28.11,"c":29.89,"chg":-0.92,"v":410034},{"d":"6/9","o":30.42,"h":31.23,"l":30.02,"c":31.23,"chg":1.34,"v":233150},{"d":"6/10","o":30.94,"h":31.4,"l":29.87,"c":29.89,"chg":-1.34,"v":358228},{"d":"6/11","o":29.81,"h":30.3,"l":28.61,"c":29.71,"chg":-0.18,"v":436203},{"d":"6/12","o":30.95,"h":31.4,"l":30.31,"c":30.6,"chg":0.89,"v":279476},{"d":"6/15","o":31.65,"h":31.81,"l":31.32,"c":31.47,"chg":0.87,"v":288026},{"d":"6/16","o":31.28,"h":31.28,"l":30.78,"c":30.82,"chg":0,"v":186398},{"d":"6/17","o":30.66,"h":30.93,"l":30.46,"c":30.88,"chg":0.06,"v":140864},{"d":"6/18","o":31.19,"h":31.5,"l":31.13,"c":31.5,"chg":0.62,"v":244224},{"d":"6/22","o":32.17,"h":32.4,"l":32,"c":32.23,"chg":0.73,"v":267932},{"d":"6/23","o":32.43,"h":32.5,"l":31.5,"c":31.6,"chg":-0.63,"v":243244},{"d":"6/24","o":31.05,"h":31.6,"l":30.7,"c":31.48,"chg":-0.12,"v":267480},{"d":"6/25","o":31.79,"h":31.83,"l":31.23,"c":31.5,"chg":0.02,"v":189584},{"d":"6/26","o":31.17,"h":31.34,"l":29.89,"c":29.91,"chg":-1.59,"v":360201},{"d":"6/29","o":29.92,"h":30.41,"l":29.61,"c":29.94,"chg":0.03,"v":165707},{"d":"6/30","o":30.55,"h":31.3,"l":30.51,"c":31.28,"chg":1.34,"v":231548},{"d":"7/1","o":32.07,"h":32.23,"l":31.55,"c":32,"chg":0.72,"v":310261},{"d":"7/2","o":31.37,"h":32.13,"l":31.12,"c":32.05,"chg":0.05,"v":158262},{"d":"7/3","o":31.49,"h":32.33,"l":31.2,"c":32.26,"chg":0.21,"v":175889},{"d":"7/6","o":32.45,"h":32.45,"l":31.08,"c":31.2,"chg":-1.06,"v":245323},{"d":"7/7","o":31.2,"h":31.3,"l":29.75,"c":29.84,"chg":-1.36,"v":336843},{"d":"7/8","o":29.96,"h":30.1,"l":29.25,"c":29.75,"chg":-0.09,"v":195753},{"d":"7/9","o":29.91,"h":30.54,"l":29.78,"c":29.95,"chg":0.2,"v":128841}],"inst":[{"d":"7/3","f":26359,"t":0,"de":14657,"tot":41016},{"d":"7/6","f":-70375,"t":0,"de":-49779,"tot":-120153},{"d":"7/7","f":-119996,"t":-1000,"de":-45777,"tot":-166773},{"d":"7/8","f":-39412,"t":0,"de":-13226,"tot":-52638},{"d":"7/9","f":18114,"t":0,"de":1459,"tot":19574}],"margin":[{"d":"7/7","fin":144835,"finPrev":144171,"shrt":4525,"shrtPrev":3176},{"d":"7/8","fin":146712,"finPrev":144835,"shrt":3211,"shrtPrev":4525},{"d":"7/9","fin":144350,"finPrev":146712,"shrt":3201,"shrtPrev":3211}]}};
+</script>
+<script>
+const fmt=(n,d=0)=>n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtSign=(n,d=2)=>(n>0?'+':n<0?'−':'')+Math.abs(n).toFixed(d);
+const fmtSignI=n=>(n>0?'+':n<0?'−':'')+fmt(Math.abs(n));
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const LS='tw_cost_v1';
+const getCosts=()=>{try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return {}}};
+const setCost=(c,v)=>{const o=getCosts();if(v>0)o[c]=v;else delete o[c];localStorage.setItem(LS,JSON.stringify(o));};
+
+const SHARES={'0050':1000,'00935':1000,'00947':1000,'00990A':2000,'00981A':1000};
+
+const H=[
+ {code:'0050',name:'元大台灣50',type:'被動',theme:'台灣50大權值股',lots:1,color:'#b6842f',weight:39.5,
+  price:105.80,chg:-0.25,pct:-0.24,dd:-4.8,
+  sig:{tech:['neu','整理'],chip:['neu','觀望'],fund:['bull','偏多']},
+  tech:'收 105.80 跌破月線（MA20≈106.5），但守住上揚的季線（MA60≈99.3）、且站穩其上。7/7 爆量長黑（12.5 萬張）宣洩後，7/9 量縮至 5.7 萬張、價守穩，屬「量縮價穩」的健康回檔，而非帶量破線的崩跌。均線短空、中多，觀察能否重新站回月線。',
+  chip:'三大法人連日賣超，但金額大幅收斂（7/7 −5.3 萬張 → 7/9 −1.9 萬張），賣壓明顯遞減。融資今日 13,306 張、較前日微減 105 張，散戶小幅退場。法人與散戶同步縮手、籌碼真空，尚無明確買方回補訊號 → 中性觀望。',
+  fund:'ETF 本身無 EPS／本益比，改看成分：台積電＋金融＋半導體權值綜合體。最大變數為 7/16 台積電法說會（外資目標價上修至 3,400～3,500 元）。台股 AI 基本面需求強，中長線題材偏多，短線待法說確認估值。',
+  stance:'hold',stanceTxt:'持倉 · 核心',
+  rec:'長線核心部位，趨勢僅高檔回檔、未破季線，適合續抱；短線跌破月線、法說會前不必追加。此為資訊參考，非買賣指令。',
+  news:[
+   {t:'台積電 7/16 法說會逼近，外資上修目標價至 3,400～3,500 元',s:'經濟日報',u:'https://money.udn.com/money/story/5607/9596199'},
+   {t:'市場盯台積電法說，成全球半導體與台股風向球',s:'經濟日報',u:'https://money.udn.com/money/story/11162/9595914'},
+   {t:'0050 今年以來含息報酬約 65%，居市值型 ETF 前段',s:'今周刊',u:'https://www.businesstoday.com.tw/article/category/183013/post/202607010007/'}]},
+
+ {code:'00935',name:'野村臺灣新科技50',type:'被動',theme:'台灣科技50',lots:1,color:'#c79a4f',weight:22.0,
+  price:58.95,chg:0.25,pct:0.43,dd:-8.2,
+  sig:{tech:['neu','整理'],chip:['neu','中性'],fund:['neu','偏多']},
+  tech:'收 58.95 跌破月線（MA20≈60.9）、守住季線（MA60≈56.4）。走勢與 0050 幾乎同步，7/7 破前低後於 58～59 一帶初步止穩。均線短空中多，待量能回補。',
+  chip:'三大法人賣超由 −6,201 張收斂至 −1,439 張，投信小幅站買方。融資今日 5,755 張、減 44 張。籌碼中性、賣壓趨緩，無明顯主力進出。',
+  fund:'ETF 無 EPS；成分為台灣科技 50，與 0050／00947／00981A 高度重疊。題材同屬 AI／半導體多頭，惟對你的投組是「重複押注同一題材」而非分散。',
+  stance:'hold',stanceTxt:'持倉 · 留意重疊',
+  rec:'趨勢與 0050 同步、本身無虞；加碼前先想「是否只是重複押注同一題材」。非買賣指令。',
+  news:[
+   {t:'台股 ETF 九悍將報酬翻倍，00935 居前三',s:'鉅亨網',u:'https://news.cnyes.com/news/id/6471981'},
+   {t:'00935、00947 年漲破 230% 奪冠亞',s:'聯合新聞網',u:'https://udn.com/news/story/123006/9543273'}]},
+
+ {code:'00947',name:'台新臺灣IC設計',type:'被動',theme:'IC 設計＋記憶體',lots:1,color:'#5b8fb0',weight:13.9,
+  price:37.30,chg:0.85,pct:2.33,dd:-13.3,
+  sig:{tech:['neu','整理'],chip:['neu','偏多'],fund:['bull','多方']},
+  tech:'收 37.30 跌破月線（MA20≈39.0）、守季線（MA60≈35.9）。7/9 雖反彈 +2.33%，但量縮至僅 5,157 張 → 「無量反彈」，力道待確認。波動度為投組之最（6/8 低 35.83 → 6/22 高 43.02，區間逾 20%），追高風險高。',
+  chip:'法人賣壓大幅收斂至 −349 張，外資連 2 日轉小買（+128、+140 張）。但融資今日 7,640 張、增 99 張——散戶追高強勢股，形成「散戶追、法人未大買」的略凌亂格局，宜留意。',
+  fund:'ETF 無 EPS；成分題材最熱——記憶體 DRAM 漲價（南亞科／華邦電）＋IC 設計 IP／ASIC（聯發科／創意／世芯）。產業景氣為當前市場主線，基本面題材偏多，惟股價已高基期。',
+  stance:'hold',stanceTxt:'持倉 · 提防追高',
+  rec:'強勢題材股，別被單日 +2.33% 誤導——它其實距高點回檔逾 13%、且是無量反彈。續抱可，此刻不宜追高，設好回檔控管。非買賣指令。',
+  news:[
+   {t:'近一年台股 ETF 10 強，00947 績效翻 2 倍衝第 1',s:'Yahoo股市',u:'https://tw.stock.yahoo.com/news/%E8%BF%911%E5%B9%B4%E5%8F%B0%E8%82%A1etf-10%E5%BC%B7-00947%E7%B8%BE%E6%95%88%E7%BF%BB2%E5%80%8D%E8%A1%9D%E7%AC%AC1-113939920.html'},
+   {t:'AI 狂潮點火，00947 近一年暴衝逾 200% 稱王',s:'Yahoo股市',u:'https://tw.stock.yahoo.com/news/ai%E7%8B%82%E6%BD%AE%E9%BB%9E%E7%81%AB-%E5%8F%B0%E8%82%A1etf%E5%89%8D%E5%9B%9B%E5%BC%B7%E7%B8%BE%E6%95%88%E5%85%A8%E7%BF%BB%E5%80%8D-00947%E8%BF%91-%E5%B9%B4%E6%9A%B4%E8%A1%9D215-%E7%A8%B1%E7%8E%8B-014720900.html'}]},
+
+ {code:'00990A',name:'主動元大AI新經濟',type:'主動',theme:'全球 AI · 約58%美股 · 不配息',lots:2,color:'#7a6cae',weight:13.4,
+  price:17.96,chg:0.08,pct:0.45,dd:-17.3,
+  sig:{tech:['bear','空方'],chip:['neu','分歧'],fund:['bull','多方']},
+  tech:'收 17.96 同時跌破月線（MA20≈20.0）與季線（MA60≈18.4），為投組唯一「跌破季線」者、均線轉空排列；本波回檔最深（−17.3%），跟隨費半 SOX 修正。技術面最弱，需見量止穩、重返季線才轉機。',
+  chip:'三大法人賣壓由 −38,033 張收斂至 −4,753 張，外資連 2 日翻買（+1,319、+5,260 張）。但融資今日 21,815 張、增 527 張——散戶逢低接刀，與外資方向暫時分歧，籌碼待整合。',
+  fund:'主動選股、投資全球 AI 產業鏈（美股約 58%）。國際面：SOX 於 6/22 見高 14,655 後回落、與台股同步；台積電 ADR 對台股溢價 17.3%，反映外資對 AI 需求熱度，惟美股 AI 估值偏高、費半波動大。長線題材偏多。',
+  stance:'hold',stanceTxt:'持倉 · 分散價值',
+  rec:'技術面最弱，但它是投組唯一海外分散部位，能對沖台積電／台股單一市場風險。外資已翻買、波動大屬正常，反而是最該保留的一塊。非買賣指令。',
+  news:[
+   {t:'元大全球 AI 新經濟：投資 AI 晶片、資料中心、能源與高速傳輸',s:'口袋證券',u:'https://www.pocket.tw/etf/tw/00990A/'},
+   {t:'費半飆近 6%、台積電 ADR 站回 450 美元',s:'Yahoo股市',u:'https://tw.stock.yahoo.com/news/fed%E6%94%BE%E9%B7%B9%E4%B9%9F%E6%B2%92%E7%94%A8-%E7%BE%8E%E8%82%A14%E5%A4%A7%E6%8C%87%E6%95%B8%E9%9A%94%E5%A4%9C%E5%A4%A7%E5%8F%8D%E6%92%B2-%E8%B2%BB%E5%8D%8A%E9%A3%86%E8%BF%916-%E5%8F%B0%E7%A9%8D%E9%9B%BBadr%E7%AB%99%E5%9B%9E450%E7%BE%8E%E5%85%83-143000533.html',intl:true},
+   {t:'台積電 ADR 隨費半大漲，較台北交易溢價 17.3%',s:'經濟日報',u:'https://money.udn.com/money/story/5599/9568627',intl:true}]},
+
+ {code:'00981A',name:'主動統一台股增長',type:'主動',theme:'台股大型成長股',lots:1,color:'#c76d5b',weight:11.2,
+  price:29.95,chg:0.20,pct:0.67,dd:-7.2,
+  sig:{tech:['neu','整理'],chip:['bull','多方'],fund:['bull','多方']},
+  tech:'收 29.95 跌破月線（MA20≈31.0），勉強守住季線（MA60≈29.7）。7/7 爆量長黑（33.7 萬張）宣洩賣壓後，於 29～30 止穩。守季線是短線關鍵支撐。',
+  chip:'★ 籌碼正向轉折：外資 7/7 單日狂賣 −119,996 張（約 12 萬張）後，7/9 直接翻買 +18,114 張，三大法人轉淨買 +19,574 張。融資今日 144,350 張、大減 2,362 張——「融資減、法人買」代表籌碼由散戶流向大戶、相對穩定，為教科書級多方訊號。',
+  fund:'ETF 無 EPS；主動經理人靈活換股卡位題材，第一大持股台積電，規模衝千億級、季配息成長（0.63＞0.41 元）。題材與台積電法說高度連動。',
+  stance:'hold',stanceTxt:'持倉 · 籌碼轉佳',
+  rec:'基本面無虞，籌碼由亂轉穩（外資翻買、融資退場）。可續抱並觀察外資是否連續回補，作為加減碼依據。非買賣指令。',
+  news:[
+   {t:'外資單日調節 00981A 逾 7 萬張，成交量放大',s:'Yahoo股市',u:'https://tw.stock.yahoo.com/news/%E3%80%90follow%E6%B3%95%E4%BA%BA%E3%80%91%E5%A4%96%E8%B3%87%E7%8B%82%E6%8E%83%E9%9D%A2%E6%9D%BF%E9%9B%99%E8%99%8E%E7%BE%A4%E5%89%B5%E3%80%81%E5%8F%8B%E9%81%94%E9%80%BE20%E8%90%AC%E5%BC%B5%EF%BC%81%E5%8F%8D%E6%89%8B%E5%A4%A7%E7%A0%8D00981a%E9%80%BE7%E8%90%AC%E5%BC%B5-070854243.html'},
+   {t:'00981A 規模衝 1,800 億登頂，主動式 ETF 績效大比拚',s:'豐雲學堂',u:'https://www.sinotrade.com.tw/richclub/hotstock/00981A%E8%A6%8F%E6%A8%A1%E8%A1%9D1-800%E5%84%84%E7%99%BB%E9%A0%82-%E4%B8%BB%E5%8B%95%E5%BC%8FETF%E7%B8%BE%E6%95%88%E5%A4%A7%E6%AF%94%E6%8B%9A-%E7%82%BA%E4%BD%95%E7%B6%93%E7%90%86%E4%BA%BA%E5%A4%A7%E5%A4%9A%E7%9C%8B%E5%A5%BD%E9%80%993%E6%AA%94-%E5%A4%A7%E6%88%B6%E6%8A%95%E6%AF%8F%E6%97%A5%E6%9F%A5%E8%A9%A2%E6%9C%80%E6%96%B0%E6%88%90%E5%88%86%E8%82%A1%E6%95%99%E5%AD%B8-%E8%82%A1%E5%B8%82%E8%A9%B1%E9%A1%8C-69e994d68839d70af6f82875'},
+   {t:'第二季配息 0.63 元，較首季 0.41 元成長',s:'股感 StockFeel',u:'https://www.stockfeel.com.tw/00981a-%E7%B5%B1%E4%B8%80%E5%8F%B0%E8%82%A1%E5%A2%9E%E9%95%B7%E4%B8%BB%E5%8B%95%E5%BC%8F-etf/'}]}
+];
+const HByCode={};H.forEach(h=>HByCode[h.code]=h);
+
+/* ---------- allocation ---------- */
+(function(){const bar=document.getElementById('allocBar'),leg=document.getElementById('legend');
+ H.forEach(h=>{const s=document.createElement('span');s.style.width=h.weight+'%';s.style.background=h.color;s.title=h.code;bar.appendChild(s);
+  const li=document.createElement('div');li.className='li';li.innerHTML=`<span class="sw" style="background:${h.color}"></span><span class="nm">${h.code} ${h.name}</span><span class="pc num">${h.weight}%</span>`;leg.appendChild(li);});})();
+
+/* ---------- cards ---------- */
+function plColor(v){return v>0?'up-txt':v<0?'down-txt':'';}
+(function(){const wrap=document.getElementById('holdings');
+ H.forEach((h,i)=>{const up=h.chg>=0;const el=document.createElement('div');
+  el.className='h-card';el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',h.name+' 詳細分析');
+  el.innerHTML=`<div class="h-accent" style="background:${h.color}"></div><div class="h-body">
+    <div class="h-head"><div><div class="h-name">${h.name} <span class="code">${h.code}</span></div>
+    <div class="h-tag">${h.type} · ${h.theme} · ${h.lots} 張</div></div>
+    <div class="h-price"><div class="p num ${up?'up-txt':'down-txt'}">${h.price.toFixed(2)}</div>
+    <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(h.chg).toFixed(2)}　${fmtSign(h.pct)}%</div></div></div>
+    <canvas class="spark" data-i="${i}"></canvas>
+    <div class="sigrow">
+      <span class="sig ${h.sig.chip[0]}">籌 ${h.sig.chip[1]}</span>
+      <span class="sig ${h.sig.tech[0]}">技 ${h.sig.tech[1]}</span>
+      <span class="sig ${h.sig.fund[0]}">基 ${h.sig.fund[1]}</span>
+    </div>
+    <div class="h-foot"><span class="dd">距高 <b class="down-txt num">${fmtSign(h.dd,1)}%</b> · <span class="pl num" data-plcard="${h.code}" style="color:var(--ink-faint)">未設成本</span></span>
+    <span class="h-more">三面分析 ›</span></div></div>`;
+  el.addEventListener('click',()=>openModal(i));
+  el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openModal(i);}});
+  wrap.appendChild(el);});})();
+
+/* ---------- charts ---------- */
+function setup(cv){const r=devicePixelRatio||1,w=cv.clientWidth,hh=cv.clientHeight;cv.width=w*r;cv.height=hh*r;const x=cv.getContext('2d');x.setTransform(r,0,0,r,0,0);x.clearRect(0,0,w,hh);return{x,w,h:hh};}
+function sma(arr,n){const o=arr.map((_,i)=>{if(i<n-1)return null;let s=0;for(let k=i-n+1;k<=i;k++)s+=arr[k];return s/n;});return o;}
+function priceChart(cv,vals,color,opts={}){
+  const {x,w,h}=setup(cv);if(!vals.length)return;const pad=opts.pad||{t:8,r:6,b:8,l:6};
+  const overlays=opts.overlays||[];
+  let all=vals.slice();overlays.forEach(o=>o.vals.forEach(v=>{if(v!=null)all.push(v)}));
+  let mn=Math.min(...all),mx=Math.max(...all);const sp=(mx-mn)||1;mn-=sp*.08;mx+=sp*.12;
+  const X=i=>pad.l+(w-pad.l-pad.r)*(i/(vals.length-1));
+  const Y=v=>pad.t+(h-pad.t-pad.b)*(1-(v-mn)/(mx-mn));
+  if(opts.grid){x.strokeStyle=cssv('--grid');x.lineWidth=1;for(let g=0;g<=3;g++){const yy=pad.t+(h-pad.t-pad.b)*g/3;x.beginPath();x.moveTo(pad.l,yy);x.lineTo(w-pad.r,yy);x.stroke();}}
+  const grad=x.createLinearGradient(0,pad.t,0,h);grad.addColorStop(0,color+'44');grad.addColorStop(1,color+'00');
+  x.beginPath();x.moveTo(X(0),Y(vals[0]));vals.forEach((v,i)=>x.lineTo(X(i),Y(v)));x.lineTo(X(vals.length-1),h-pad.b);x.lineTo(X(0),h-pad.b);x.closePath();x.fillStyle=grad;x.fill();
+  x.beginPath();x.moveTo(X(0),Y(vals[0]));vals.forEach((v,i)=>x.lineTo(X(i),Y(v)));x.strokeStyle=color;x.lineWidth=opts.lw||1.8;x.lineJoin='round';x.stroke();
+  overlays.forEach(o=>{x.beginPath();let started=false;o.vals.forEach((v,i)=>{if(v==null){started=false;return;}if(!started){x.moveTo(X(i),Y(v));started=true;}else x.lineTo(X(i),Y(v));});x.strokeStyle=o.color;x.lineWidth=1.4;x.stroke();});
+  if(opts.mark){const pk=vals.indexOf(Math.max(...vals));x.fillStyle=cssv('--ink-faint');x.beginPath();x.arc(X(pk),Y(vals[pk]),2.5,0,7);x.fill();}
+  const li=vals.length-1;x.fillStyle=color;x.beginPath();x.arc(X(li),Y(vals[li]),3,0,7);x.fill();x.fillStyle=cssv('--surface');x.beginPath();x.arc(X(li),Y(vals[li]),1.3,0,7);x.fill();
+}
+function volChart(cv,vols,color){const {x,w,h}=setup(cv);if(!vols.length)return;const mx=Math.max(...vols)||1;const bw=w/vols.length;vols.forEach((v,i)=>{const bh=(h-2)*(v/mx);x.fillStyle=color+'55';x.fillRect(i*bw+bw*0.12,h-bh,bw*0.76,bh);});}
+function drawSparks(){document.querySelectorAll('canvas.spark').forEach(cv=>{const h=H[+cv.dataset.i];const vals=DASH[h.code].series.map(d=>d.c);priceChart(cv,vals,h.color,{pad:{t:5,r:4,b:5,l:4},lw:1.6});});}
+function drawMarket(){const cv=document.getElementById('mchart');if(cv)priceChart(cv,DASH.TAIEX.map(d=>d.c),cssv('--down'),{grid:true,pad:{t:8,r:8,b:8,l:8},lw:1.8});}
+
+/* ---------- P&L ---------- */
+function updatePL(){
+  const costs=getCosts();let totCost=0,totVal=0,haveAny=false;
+  H.forEach(h=>{const sh=SHARES[h.code];const c=costs[h.code];const el=document.querySelector(`[data-plcard="${h.code}"]`);
+   if(c>0){haveAny=true;totVal+=h.price*sh;totCost+=c*sh;const pl=(h.price-c)*sh;const pct=(h.price-c)/c*100;if(el){el.textContent=`損益 ${fmtSignI(Math.round(pl))} (${fmtSign(pct,1)}%)`;el.className='pl num '+plColor(pl);}}
+   else if(el){el.textContent='未設成本';el.className='pl num';el.style.color='var(--ink-faint)';}});
+  const out=document.getElementById('pfPL'),outp=document.getElementById('pfPLpct');
+  if(haveAny){const pl=totVal-totCost;const pct=totCost>0?pl/totCost*100:0;out.textContent=fmtSignI(Math.round(pl));out.className='v2 num '+plColor(pl);outp.textContent=fmtSign(pct,2)+'%（部分依已輸入成本）';outp.className='sub num '+plColor(pl);}
+  else{out.textContent='—';out.className='v2 num';outp.textContent='點個股輸入成本價';outp.style.color='var(--ink-faint)';}
+}
+
+/* ---------- modal ---------- */
+const ov=document.getElementById('ov');let curMA={5:false,20:false,60:false},curCode=null;
+function renderBigChart(){const h=HByCode[curCode],ser=DASH[curCode].series,closes=ser.map(s=>s.c);
+  const ov2=[];if(curMA[5])ov2.push({vals:sma(closes,5),color:cssv('--ma5')});if(curMA[20])ov2.push({vals:sma(closes,20),color:cssv('--ma20')});if(curMA[60])ov2.push({vals:sma(closes,60),color:cssv('--ma60')});
+  priceChart(document.getElementById('bc'),closes,h.color,{grid:true,mark:true,pad:{t:10,r:10,b:10,l:10},lw:2,overlays:ov2});
+  volChart(document.getElementById('vc'),ser.map(s=>s.v),h.color);}
+function openModal(i){
+  const h=H[i],d=DASH[h.code],ser=d.series,up=h.chg>=0;curCode=h.code;curMA={5:false,20:false,60:false};
+  const first=ser[0].d,last=ser[ser.length-1].d;
+  const instRows=d.inst.map(r=>{const cell=v=>`<td class="${plColor(v)} num">${v===0?'0':fmtSignI(v)}</td>`;return `<tr><td>${r.d}</td>${cell(r.f)}${cell(r.t)}${cell(r.de)}<td class="${plColor(r.tot)} num" style="font-weight:700">${fmtSignI(r.tot)}</td></tr>`;}).join('');
+  const marginRows=d.margin.map(r=>{const df=r.fin-r.finPrev,ds=r.shrt-r.shrtPrev;return `<tr><td>${r.d}</td><td class="num">${fmt(r.fin)}</td><td class="${plColor(df)} num">${fmtSignI(df)}</td><td class="num">${fmt(r.shrt)}</td><td class="${plColor(ds)} num">${fmtSignI(ds)}</td></tr>`;}).join('');
+  const newsHtml=h.news.map(n=>`<li class="${n.intl?'intl':''}"><a href="${n.u}" target="_blank" rel="noopener"><span class="nt">${n.t}</span><span class="ns">${n.s}</span></a></li>`).join('');
+  const sig=(k,label)=>`<span class="sig ${h.sig[k][0]}">${label} ${h.sig[k][1]}訊號</span>`;
+  const costs=getCosts();const cv=costs[h.code]||'';
+  document.getElementById('mAccent').style.background=h.color;
+  document.getElementById('mContent').innerHTML=`
+    <div class="m-head"><div><div class="m-title" id="mTitle">${h.name} <span class="code">${h.code}</span></div>
+    <div class="m-tag">${h.type} · ${h.theme} · 持有 ${h.lots} 張 · 權重 ${h.weight}%</div></div>
+    <div class="m-price"><div class="p num ${up?'up-txt':'down-txt'}">${h.price.toFixed(2)}</div>
+    <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(h.chg).toFixed(2)}　${fmtSign(h.pct)}% · 距高 ${fmtSign(h.dd,1)}%</div></div></div>
+
+    <div class="costbar"><label for="costIn">平均成本價</label><input id="costIn" type="number" step="0.01" inputmode="decimal" placeholder="例 30.5" value="${cv}">
+      <span class="plout" id="mPL"><small>輸入成本以計算損益</small></span></div>
+
+    <div class="an-block"><div class="an-head"><span class="an-head t">📈 技術面</span>${sig('tech','')}</div>
+      <div class="matoggle"><button class="machip m5" data-ma="5" aria-pressed="false"><span class="sw"></span>MA5</button>
+        <button class="machip m20" data-ma="20" aria-pressed="false"><span class="sw"></span>MA20 月線</button>
+        <button class="machip m60" data-ma="60" aria-pressed="false"><span class="sw"></span>MA60 季線</button></div>
+      <canvas class="bigchart" id="bc"></canvas><canvas class="volchart" id="vc"></canvas>
+      <div class="chart-meta"><span>${first}</span><span>近 ${ser.length} 日 · 灰點=波段高</span><span class="num">最新 ${last}</span></div>
+      <div class="an-text" style="margin-top:8px">${h.tech}</div></div>
+
+    <div class="an-block"><div class="an-head"><span class="an-head t">🏦 籌碼面</span>${sig('chip','')}</div>
+      <div class="subhd">三大法人買賣超（張）· 近 ${d.inst.length} 日</div>
+      <table class="tbl"><thead><tr><th>日期</th><th>外資</th><th>投信</th><th>自營</th><th>合計</th></tr></thead><tbody>${instRows}</tbody></table>
+      <div class="subhd">融資 / 融券餘額（張）· 近 ${d.margin.length} 日</div>
+      <table class="tbl"><thead><tr><th>日期</th><th>融資餘額</th><th>資增減</th><th>融券餘額</th><th>券增減</th></tr></thead><tbody>${marginRows}</tbody></table>
+      <div class="an-text" style="margin-top:9px">${h.chip}</div></div>
+
+    <div class="an-block"><div class="an-head"><span class="an-head t">🏭 基本面</span><span class="an-head n">（ETF 無 EPS，以題材/產業替代）</span>${sig('fund','')}</div>
+      <div class="an-text">${h.fund}</div></div>
+
+    <div class="rec"><span class="pill ${h.stance}"><span class="dot"></span>${h.stanceTxt}</span><span class="rtxt"><b>綜合傾向：</b>${h.rec}</span></div>
+
+    <div class="subhd" style="margin-top:18px">近 24 小時新聞 · 國內外 · 附來源</div>
+    <ul class="news">${newsHtml}</ul>`;
+  ov.classList.add('open');document.body.style.overflow='hidden';
+  renderBigChart();
+  // MA toggles
+  document.querySelectorAll('.machip').forEach(btn=>btn.addEventListener('click',()=>{const n=+btn.dataset.ma;curMA[n]=!curMA[n];btn.setAttribute('aria-pressed',curMA[n]);renderBigChart();}));
+  // cost input
+  const inEl=document.getElementById('costIn');const recalc=()=>{const v=parseFloat(inEl.value);const out=document.getElementById('mPL');
+    if(v>0){setCost(h.code,v);const sh=SHARES[h.code];const pl=(h.price-v)*sh;const pct=(h.price-v)/v*100;out.innerHTML=`損益 <span class="${plColor(pl)}">${fmtSignI(Math.round(pl))}　${fmtSign(pct,1)}%</span>`;}
+    else{setCost(h.code,0);out.innerHTML='<small>輸入成本以計算損益</small>';}updatePL();};
+  inEl.addEventListener('input',recalc);recalc();
+  document.getElementById('mClose').focus();
+}
+function closeModal(){ov.classList.remove('open');document.body.style.overflow='';curCode=null;}
+document.getElementById('mClose').addEventListener('click',closeModal);
+ov.addEventListener('click',e=>{if(e.target===ov)closeModal();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ov.classList.contains('open'))closeModal();});
+
+/* ---------- render ---------- */
+function renderAll(){drawSparks();drawMarket();if(curCode)renderBigChart();}
+function boot(){renderAll();updatePL();}
+if(window.DASH)boot();else addEventListener('load',boot);
+window.addEventListener('resize',renderAll);
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',renderAll);
+new MutationObserver(renderAll).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+</script>
