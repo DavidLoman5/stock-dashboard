@@ -1,0 +1,35 @@
+# CLAUDE.md — 台股投資報告 Dashboard
+
+這是一個**每交易日被自動化排程重寫**的台股投資儀表板。動手前先讀 `README.md`（完整架構與協作指南）。
+
+## 這是什麼
+- 單檔 `index.html`（HTML+CSS+原生JS+Canvas，自足、無外部相依）= 整個儀表板
+- `screen.ps1` = 量化選股引擎（PowerShell），每天抓證交所全市場資料→篩選評分→把結果拼回 index.html
+- `holdings.json` = 持股唯一事實來源（1張=1000股；成本價不放這，存瀏覽器 localStorage）
+- 線上：https://davidloman5.github.io/stock-dashboard/ ｜ 排程每交易日 08:30 自動 `git push` 更新
+
+## 改之前必知：哪些會被每日排程覆寫（別手改）
+- `window.DASH={...}`、`const H=[...]` 的數字欄位、`<script id="pkdata">`、`<script id="pkline">`、`<script id="pknotes">`
+- Hero 市值/損益、大盤數字、權重、今日訊號、績效曲線 → 全由頁面 JS 自動算，勿寫死
+
+## 可以安全改（改了會保留並生效）
+- CSS 樣式、版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯、渲染器、`screen.ps1` 的選股演算法、`holdings.json`
+
+## 硬性慣例（違反會壞）
+- `screen.ps1` 存 **UTF-8 with BOM**（PS5.1 讀中文字面值需要）
+- 抓證交所 API 用 `Invoke-WebRequest`+手動 UTF-8 解碼（`Invoke-RestMethod` 會亂碼）；用現成的 `GetJson()`
+- `index.html` 開頭要有 `<meta charset="utf-8">`
+- 圖表用 Canvas 手繪，**無外部函式庫/CDN**（CSP 會擋）
+- **台股紅漲綠跌**（--up 紅、--down 綠），別套歐美習慣
+- 證交所日期是民國年（西元-1911）
+
+## 測試與部署
+- 本機測試：`python -m http.server 8000` 開 `http://localhost:8000`
+- 引擎測試：`powershell -ExecutionPolicy Bypass -File screen.ps1`
+- 部署：commit 後**由使用者** push 到 `main`（只有他有推送權限）→ 隔天排程沿用程式邏輯改動
+
+## 定位
+資訊整理與決策輔助，非投資建議、非個股推介。傾向/訊號/評分皆情境參考、非下單指令。保留頁尾免責。
+
+## 排程指令不在此 repo
+每天 Claude「做什麼」的指令在使用者本機 `~/.claude/scheduled-tasks/daily-tw-stock-briefing/SKILL.md`，不在 GitHub。改程式邏輯會自動被排程沿用；要改排程行為本身需在本機操作。
