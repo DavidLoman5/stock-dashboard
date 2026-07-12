@@ -1,9 +1,20 @@
-# screen.ps1 - TWSE quant screening engine v2 (ASCII source only)
+﻿# screen.ps1 - TWSE quant screening engine v2 (ASCII source only)
 # v2: regime-aware scoring, 20-day auto-close tracking, dedupe, spark output
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 function Num($s){ if($null -eq $s){return $null}; $t=("$s" -replace '[^0-9\.\-]',''); if($t -eq '' -or $t -eq '-'){return $null}; [double]$t }
-function GetJson($url){ for($i=0;$i -lt 3;$i++){ try{ return Invoke-RestMethod -Uri $url -TimeoutSec 45 }catch{ Start-Sleep -Milliseconds 1500 } } return $null }
+function GetJson($url){
+  for($i=0;$i -lt 3;$i++){
+    try{
+      $resp=Invoke-WebRequest -Uri $url -TimeoutSec 45 -UseBasicParsing
+      $txt=[System.Text.Encoding]::UTF8.GetString($resp.RawContentStream.ToArray())
+      return ($txt | ConvertFrom-Json)
+    }catch{ Start-Sleep -Milliseconds 1500 }
+  }
+  return $null
+}
+function IsElec($ind){ foreach($k in @('半導體','電子','電腦','光電','通信','資訊')){ if("$ind" -like "*$k*"){ return $true } } return $false }
+function StripK($obj){ $o=[ordered]@{}; foreach($pr in $obj.PSObject.Properties){ if($pr.Name -ne 'kline'){ $o[$pr.Name]=$pr.Value } }; [pscustomobject]$o }
 
 Write-Host "[1/8] STOCK_DAY_ALL..."
 $all = GetJson "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
@@ -101,7 +112,7 @@ foreach($c in $chip.Keys){
   $cands += [pscustomobject]@{ code=$c; chip=$chipScore; tPos=$tPos; fPos=$fPos; tSum=$tSum; fSum=$fSum }
 }
 Write-Host "  candidates = $($cands.Count)"
-$short = $cands | Sort-Object -Property @{e='chip';Descending=$true}, @{e='tSum';Descending=$true} | Select-Object -First 12
+$short = $cands | Sort-Object -Property @{e='chip';Descending=$true}, @{e='tSum';Descending=$true} | Select-Object -First 16
 
 $picks=@()
 $curMM=$d0.ToString('yyyyMM01'); $prvMM=$d0.AddMonths(-1).ToString('yyyyMM01'); $prv2MM=$d0.AddMonths(-2).ToString('yyyyMM01'); $prv3MM=$d0.AddMonths(-3).ToString('yyyyMM01')
@@ -162,12 +173,84 @@ foreach($s in $short){
   }
 }
 $picks = $picks | Sort-Object -Property @{e='score';Descending=$true}
-$elec=@('24','25','26','27','28','29','30','31')
-$top5=@($picks | Select-Object -First 5)
-if($top5.Count -eq 5 -and ($top5 | Where-Object { $elec -notcontains $_.ind }).Count -eq 0){
-  $alt=$picks | Where-Object { $elec -notcontains $_.ind } | Select-Object -First 1
+$allPicks=@($picks | Select-Object -First 16)
+$top5=@($allPicks | Select-Object -First 5)
+if($top5.Count -eq 5 -and (@($top5 | Where-Object { -not (IsElec $_.ind) })).Count -eq 0){
+  $alt=$allPicks | Where-Object { -not (IsElec $_.ind) } | Select-Object -First 1
   if($alt -and ($top5[4].score - $alt.score) -le 15){ $top5 = @($top5[0..3]) + @($alt) }
 }
+foreach($p in $allPicks){ $isTop=@($top5 | Where-Object { $_.code -eq $p.code }).Count -gt 0; $p | Add-Member -NotePropertyName top -NotePropertyValue $isTop -Force }
+
+# ----- ETF momentum screening (chips + tech only; ETF has no EPS/PE) -----
+Write-Host "[7b] ETF screening..."
+$hold=@{}
+try{ $hj=Get-Content (Join-Path $root 'holdings.json') -Raw -Encoding UTF8 | ConvertFrom-Json; foreach($h in $hj.holdings){ $hold["$($h.code)"]=$true } }catch{}
+$ecand=@()
+foreach($c in $chip.Keys){
+  if($c -notmatch '^00[0-9A-Z]+$'){ continue }
+  if($c -match '[LRBU]$'){ continue }           # exclude leveraged/inverse/bond/futures ETFs
+  $t=$chip[$c].t; $f=$chip[$c].f
+  if($t.Count -lt 4){ continue }
+  $tPos=($t | Where-Object {$_ -gt 0}).Count
+  $fPos=($f | Where-Object {$_ -gt 0}).Count
+  $tSum=($t | Measure-Object -Sum).Sum; $fSum=($f | Measure-Object -Sum).Sum
+  if($px.ContainsKey($c) -and $px[$c].val -lt 5e7){ continue }
+  $ok=$false
+  if($tPos -ge 3 -and $tSum -gt 200000){ $ok=$true }
+  if($fPos -ge 4 -and $fSum -gt 1000000){ $ok=$true }
+  if(-not $ok){ continue }
+  $chipScore=[math]::Min(25,$tPos*5)+[math]::Min(10,$fPos*2)
+  $fd=$fin[$c]; if($fd -and $fd.today -ne $null -and $fd.prev -ne $null -and $fd.today -lt $fd.prev){ $chipScore+=5 }
+  $ecand += [pscustomobject]@{ code=$c; chip=$chipScore; tPos=$tPos; fPos=$fPos; tSum=$tSum; fSum=$fSum }
+}
+Write-Host "  etf candidates = $($ecand.Count)"
+$eshort=$ecand | Sort-Object -Property @{e='chip';Descending=$true}, @{e='fSum';Descending=$true} | Select-Object -First 6
+$etfPicks=@()
+foreach($s in $eshort){
+  $c=$s.code; $serF=@()
+  foreach($mm in @($prv3MM,$prv2MM,$prvMM,$curMM)){
+    $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$c&response=json"
+    if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
+      $dp="$($d[0])".Split('/')
+      $serF += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double](Num $d[6]); chg=(Num $d[7]); v=[math]::Round((Num $d[1])/1000,0) }
+    } }
+    Start-Sleep -Milliseconds 700
+  }
+  if($serF.Count -lt 25){ continue }
+  $ser=@($serF | ForEach-Object { $_.c })
+  $cl=$ser[$ser.Count-1]
+  $ma20=SMAlast $ser 20; $ma60=SMAlast $ser 60
+  $ma20p = if($ser.Count -ge 25){ SMAlast ($ser[0..($ser.Count-6)]) 20 } else { $null }
+  $ret5 = if($ser.Count -ge 6){ $cl/$ser[$ser.Count-6]-1 } else { 0 }
+  $n40=[math]::Min(40,$ser.Count); $hi40=($ser[($ser.Count-$n40)..($ser.Count-1)] | Measure-Object -Maximum).Maximum
+  $dist=$cl/$hi40-1
+  if($ret5 -gt 0.20){ Write-Host "  drop ETF $c overheated"; continue }
+  if($ma60 -ne $null -and $cl -lt $ma60){ Write-Host "  drop ETF $c below MA60"; continue }
+  $tech=0
+  if($ma20 -ne $null -and $cl -gt $ma20){ $tech+=10 }
+  if($ma60 -ne $null -and $cl -gt $ma60){ $tech+=8 }
+  if($ma20p -ne $null -and $ma20 -gt $ma20p){ $tech+=5 }
+  if($dist -ge -0.05){ $tech+=4 }
+  $lastChg=$serF[$serF.Count-1].chg
+  if($lastChg -gt 0){ $tech+=3 }
+  if($tech -gt 30){ $tech=30 }
+  $fd=$fin[$c]; $finDelta = if($fd -and $fd.today -ne $null -and $fd.prev -ne $null){ [int]($fd.today-$fd.prev) } else { $null }
+  $nm = if($px.ContainsKey($c)){ $px[$c].name } else { $c }
+  $spark=@(); $nS=[math]::Min(40,$ser.Count)
+  foreach($v in $ser[($ser.Count-$nS)..($ser.Count-1)]){ $spark += [math]::Round($v,2) }
+  $nK=[math]::Min(60,$serF.Count); $kline=@($serF[($serF.Count-$nK)..($serF.Count-1)])
+  $etfPicks += [pscustomobject]@{
+    code=$c; name=$nm; ind='ETF'; close=$cl; chgPct=[math]::Round($lastChg/($cl-$lastChg)*100,2)
+    score=($s.chip+$tech); chip=$s.chip; tech=$tech
+    tPos=$s.tPos; fPos=$s.fPos; tSum=[math]::Round($s.tSum/1000,0); fSum=[math]::Round($s.fSum/1000,0)
+    finDelta=$finDelta; ret5=[math]::Round($ret5*100,1); dist=[math]::Round($dist*100,1)
+    ma20=[math]::Round($ma20,2); ma60=$(if($ma60 -ne $null){[math]::Round($ma60,2)}else{$null})
+    owned=$hold.ContainsKey($c)
+    spark=$spark; kline=$kline
+  }
+}
+$etfTop=@($etfPicks | Sort-Object -Property @{e='score';Descending=$true} | Select-Object -First 5)
+Write-Host "  etf picks = $($etfTop.Count)"
 
 Write-Host "[8/8] picks-log (20-day auto-close, dedupe) + output..."
 $logPath=Join-Path $root 'picks-log.json'
@@ -241,32 +324,43 @@ if(-not $dateLogged){
 } else { Write-Host "  date $lastDate already logged - snapshot preserved, no append" }
 @{ picks=$norm } | ConvertTo-Json -Depth 5 | Out-File $logPath -Encoding UTF8
 
+$regimeObj=@{ light=$light; idx=[math]::Round($idxLast,2); ma20=[math]::Round($idxMA20,2); ma60=[math]::Round($idxMA60,2); instNet=$instNet; up=$upN; down=$dnN }
+$metaObj=@{ candidates=$cands.Count; shortlist=@($short).Count; etfCand=$ecand.Count; newLogged=$newLogged; t86ok=$t86ok; revRows=$rev.Count }
 $out=@{
   date=$lastDate
-  regime=@{ light=$light; idx=[math]::Round($idxLast,2); ma20=[math]::Round($idxMA20,2); ma60=[math]::Round($idxMA60,2); instNet=$instNet; up=$upN; down=$dnN }
-  picks=$top5
+  regime=$regimeObj
+  picks=$allPicks
+  etf=$etfTop
   perf=$perfSummary
   perfRows=$perfRows
-  meta=@{ candidates=$cands.Count; shortlist=@($short).Count; newLogged=$newLogged }
+  meta=$metaObj
 }
-$out | ConvertTo-Json -Depth 6 | Out-File (Join-Path $root 'screen-result.json') -Encoding UTF8
+$out | ConvertTo-Json -Depth 7 | Out-File (Join-Path $root 'screen-result.json') -Encoding UTF8
 
-# splice PICKS_KLINE (full OHLCV for pick modals) directly into index.html
+# splice PICKS_KLINE + PICKS_DATA directly into index.html
 $idxPath=Join-Path $root 'index.html'
 if(Test-Path $idxPath){
   $enc=New-Object System.Text.UTF8Encoding($false)
   $html=[IO.File]::ReadAllText($idxPath,$enc)
-  $startTag='<script id="pkline">'
-  $i1=$html.IndexOf($startTag)
-  if($i1 -ge 0){
+  function Splice([string]$html,[string]$marker,[string]$payload){
+    $st='<script id="'+$marker+'">'
+    $i1=$html.IndexOf($st)
+    if($i1 -lt 0){ Write-Host "  marker $marker not found - skip"; return $html }
     $i2=$html.IndexOf('</script>',$i1)
-    $kd=[ordered]@{}
-    foreach($p in $top5){ $kd[$p.code]=@{ chgPct=$p.chgPct; dist=$p.dist; kline=$p.kline } }
-    $js='window.PICKS_KLINE='+($kd|ConvertTo-Json -Depth 6 -Compress)+';'
-    $html=$html.Substring(0,$i1+$startTag.Length)+$js+$html.Substring($i2)
-    [IO.File]::WriteAllText($idxPath,$html,$enc)
-    Write-Host "  spliced PICKS_KLINE into index.html ($($js.Length) bytes)"
-  } else { Write-Host "  pkline marker not found - skip splice" }
+    return $html.Substring(0,$i1+$st.Length)+$payload+$html.Substring($i2)
+  }
+  $kd=[ordered]@{}
+  foreach($p in @($allPicks)+@($etfTop)){ $kd[$p.code]=@{ chgPct=$p.chgPct; dist=$p.dist; kline=$p.kline } }
+  $html=Splice $html 'pkline' ('window.PICKS_KLINE='+($kd|ConvertTo-Json -Depth 6 -Compress)+';')
+  $pd=[ordered]@{
+    date=$lastDate; regime=$regimeObj; meta=$metaObj; perf=$perfSummary; perfRows=$perfRows
+    picks=@($allPicks | ForEach-Object { StripK $_ })
+    etf=@($etfTop | ForEach-Object { StripK $_ })
+  }
+  $html=Splice $html 'pkdata' ('window.PICKS_DATA='+($pd|ConvertTo-Json -Depth 6 -Compress)+';')
+  [IO.File]::WriteAllText($idxPath,$html,$enc)
+  Write-Host "  spliced PICKS_KLINE + PICKS_DATA into index.html"
 }
-Write-Host "DONE. light=$light idx=$idxLast picks=$($top5.Count) newLogged=$newLogged openPos=$($openR.Count) closed=$($closedR.Count)"
-foreach($p in $top5){ Write-Host ("  {0} {1} score={2} (chip{3}/tech{4}/fund{5}) spark={6}pts" -f $p.code,$p.name,$p.score,$p.chip,$p.tech,$p.fund,$p.spark.Count) }
+Write-Host "DONE. light=$light idx=$idxLast stocks=$($allPicks.Count) etf=$($etfTop.Count) newLogged=$newLogged openPos=$($openR.Count) closed=$($closedR.Count)"
+foreach($p in $top5){ Write-Host ("  TOP {0} {1} score={2} (chip{3}/tech{4}/fund{5})" -f $p.code,$p.name,$p.score,$p.chip,$p.tech,$p.fund) }
+foreach($p in $etfTop){ Write-Host ("  ETF {0} {1} score={2}/70 owned={3}" -f $p.code,$p.name,$p.score,$p.owned) }
