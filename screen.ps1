@@ -407,8 +407,11 @@ if(Test-Path $idxPath){
   $kd=[ordered]@{}
   foreach($p in @($allPicks)+@($etfTop)){ $kd[$p.code]=@{ chgPct=$p.chgPct; dist=$p.dist; kline=$p.kline } }
   $html=Splice $html 'pkline' ('window.PICKS_KLINE='+($kd|ConvertTo-Json -Depth 6 -Compress)+';')
+  # cap page detail rows: all open + last 40 closed (full history stays in picks-log.json),
+  # otherwise index.html grows without bound as closed picks accumulate
+  $perfRowsPage=@($perfRows | Where-Object {$_.status -eq 'open'})+@(@($perfRows | Where-Object {$_.status -eq 'closed'}) | Select-Object -Last 40)
   $pd=[ordered]@{
-    date=$lastDate; regime=$regimeObj; meta=$metaObj; perf=$perfSummary; perfRows=$perfRows
+    date=$lastDate; regime=$regimeObj; meta=$metaObj; perf=$perfSummary; perfRows=$perfRowsPage
     picks=@($allPicks | ForEach-Object { StripK $_ })
     etf=@($etfTop | ForEach-Object { StripK $_ })
   }

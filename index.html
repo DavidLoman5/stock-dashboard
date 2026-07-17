@@ -331,6 +331,9 @@ const fmt=(n,d=0)=>n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFrac
 const fmtSign=(n,d=2)=>(n>0?'+':n<0?'−':'')+Math.abs(n).toFixed(d);
 const fmtSignI=n=>(n>0?'+':n<0?'−':'')+fmt(Math.abs(n));
 const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+/* AI-authored text (notes/news) goes through innerHTML — escape it; news href must be http(s) only */
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safeUrl=u=>/^https?:\/\//i.test(String(u||''))?esc(u):'#';
 const LS='tw_cost_v1';
 const getCosts=()=>{try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return {}}};
 const setCost=(c,v)=>{const o=getCosts();if(v>0)o[c]=v;else delete o[c];localStorage.setItem(LS,JSON.stringify(o));};
@@ -476,6 +479,8 @@ function buildEquity(){
    rc.innerHTML='<b>風險貢獻排序</b>（若要降波動，先動貢獻大者效果最大）：'+contrib.map(c=>`${c.code} <b class="num">${(Math.abs(c.v)/tot*100).toFixed(0)}%</b>`).join('・');}
  }
 }
+/* riskContrib 偶發首次載入空白（載入時序）——window load 後重跑一次，冪等安全 */
+window.addEventListener('load',()=>{try{buildEquity();}catch(e){}});
 
 /* ---------- today's auto-detected signals ---------- */
 function buildSignals(){
@@ -637,7 +642,7 @@ function openModal(i){
   const relMA=n=>{const v=maNum(n);return v?(h.price>=v?'價在上方 ▲':'價在下方 ▼'):'—';};
   const instRows=d.inst.map(r=>{const cell=v=>`<td class="${plColor(v)} num">${v===0?'0':fmtSignI(v)}</td>`;return `<tr><td>${r.d}</td>${cell(r.f)}${cell(r.t)}${cell(r.de)}<td class="${plColor(r.tot)} num" style="font-weight:700">${fmtSignI(r.tot)}</td></tr>`;}).join('');
   const marginRows=d.margin.map(r=>{const df=r.fin-r.finPrev,ds=r.shrt-r.shrtPrev;return `<tr><td>${r.d}</td><td class="num">${fmt(r.fin)}</td><td class="${plColor(df)} num">${fmtSignI(df)}</td><td class="num">${fmt(r.shrt)}</td><td class="${plColor(ds)} num">${fmtSignI(ds)}</td></tr>`;}).join('');
-  const newsHtml=h.news.map(n=>`<li class="${n.intl?'intl':''}"><a href="${n.u}" target="_blank" rel="noopener"><span class="nt">${n.t}</span><span class="ns">${n.s}</span></a></li>`).join('');
+  const newsHtml=h.news.map(n=>`<li class="${n.intl?'intl':''}"><a href="${safeUrl(n.u)}" target="_blank" rel="noopener"><span class="nt">${esc(n.t)}</span><span class="ns">${esc(n.s)}</span></a></li>`).join('');
   const sig=(k,label)=>`<span class="sig ${h.sig[k][0]}">${label} ${h.sig[k][1]}訊號</span>`;
   const costs=getCosts();const cv=costs[h.code]||'';
   document.getElementById('mAccent').style.background=h.color;
@@ -666,22 +671,22 @@ function openModal(i){
         <span>季線 <b>${maV(60)}</b>（${relMA(60)}）</span>
         <span>波段高 <b>${Math.max(...closes).toFixed(2)}</b>（${fmtSign(h.dd,1)}%）</span>
       </div>
-      <div class="an-text" style="margin-top:8px">${h.tech}</div></div>
+      <div class="an-text" style="margin-top:8px">${esc(h.tech)}</div></div>
 
     <div class="an-block"><div class="an-head"><span class="an-head t">🏦 籌碼面</span>${sig('chip','')}</div>
       <div class="subhd">三大法人買賣超（張）· 近 ${d.inst.length} 日</div>
       <table class="tbl"><thead><tr><th>日期</th><th>外資</th><th>投信</th><th>自營</th><th>合計</th></tr></thead><tbody>${instRows}</tbody></table>
       <div class="subhd">融資 / 融券餘額（張）· 近 ${d.margin.length} 日</div>
       <table class="tbl"><thead><tr><th>日期</th><th>融資餘額</th><th>資增減</th><th>融券餘額</th><th>券增減</th></tr></thead><tbody>${marginRows}</tbody></table>
-      <div class="an-text" style="margin-top:9px">${h.chip}</div></div>
+      <div class="an-text" style="margin-top:9px">${esc(h.chip)}</div></div>
 
     <div class="an-block"><div class="an-head"><span class="an-head t">🏭 基本面</span><span class="an-head n">（ETF 無 EPS，以題材/產業替代）</span>${sig('fund','')}</div>
-      <div class="an-text">${h.fund}</div></div>
+      <div class="an-text">${esc(h.fund)}</div></div>
 
     ${(()=>{const A=h.auto;if(!A)return `<div class="logicline"><b>綜合邏輯：</b>籌碼「${h.sig.chip[1]}」＋技術「${h.sig.tech[1]}」＋基本「${h.sig.fund[1]}」→ ${h.stanceTxt}</div>`;
       const parts=[A.parts.tech[1],A.parts.chip[1],A.parts.extra[1],A.parts.vp[1]].filter(Boolean).join('＋');
       return `<div class="logicline"><b>🤖 規則引擎判定：</b>${parts} → <b>${A.lv[1]}</b>${A.trig.length?`<br><b>價位檢核：</b>${A.trig.join('；')}`:''}</div>`;})()}
-    <div class="rec" style="margin-top:8px"><span class="pill ${h.auto?h.auto.lv[0]:h.stance}"><span class="dot"></span>${h.auto?h.auto.lv[1]:h.stanceTxt}</span><span class="rtxt"><b>AI 觀點：</b>${h.rec}</span></div>
+    <div class="rec" style="margin-top:8px"><span class="pill ${h.auto?h.auto.lv[0]:h.stance}"><span class="dot"></span>${h.auto?h.auto.lv[1]:h.stanceTxt}</span><span class="rtxt"><b>AI 觀點：</b>${esc(h.rec)}</span></div>
 
     <div class="subhd" style="margin-top:18px">近 24 小時新聞 · 國內外 · 附來源</div>
     <ul class="news">${newsHtml}</ul>`;
@@ -738,7 +743,7 @@ function openPickModal(p,backInd){
   </div>
   <div class="mlabel">入選證據</div>
   <div class="an-text" style="font-size:13px">${p.ev||evOf(p)}</div>
-  ${p.note?`<div class="mlabel">題材筆記</div><div class="pk-note" style="margin-top:0">${p.note}</div>`:''}
+  ${p.note?`<div class="mlabel">題材筆記</div><div class="pk-note" style="margin-top:0">${esc(p.note)}</div>`:''}
   <div style="margin-top:14px;font-size:11.5px;color:var(--ink-faint)">量化篩選僅供研究參考、非投資建議、非推介買進。</div>`;
  ov.classList.add('open');document.body.style.overflow='hidden';
  renderBigChart();
@@ -808,7 +813,7 @@ let CATS={};
    <canvas class="pkspark"></canvas>
    <div class="pk-bars">${bar('籌碼',p.chip,40,'var(--ma5)')}${bar('技術',p.tech,30,'var(--ma20)')}</div>
    <div class="pk-ev">${evOf(p)}</div>
-   ${p.note?`<div class="pk-note">${p.note}</div>`:''}
+   ${p.note?`<div class="pk-note">${esc(p.note)}</div>`:''}
    <div style="text-align:right;margin-top:7px"><span class="h-more">完整 K 線 ›</span></div>`;
   el.addEventListener('click',()=>openPickModal(p));
   el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPickModal(p);}});

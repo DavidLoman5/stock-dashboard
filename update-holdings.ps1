@@ -36,6 +36,8 @@ foreach($mm in $months){
   Start-Sleep -Milliseconds 700
 }
 $DASH['TAIEX']=$tx
+# FATAL guard: without index history we would splice a broken DASH and blank the whole page
+if($tx.Count -lt 10){ Write-Host "FATAL: FMTQIK returned $($tx.Count) rows - aborting, index.html untouched"; exit 1 }
 $lastDate = $tradeDates[$tradeDates.Count-1]
 Write-Host "  latest trade date = $lastDate ($($tx.Count) TAIEX rows)"
 
@@ -52,6 +54,9 @@ foreach($c in $codes){
   $DASH[$c]=[ordered]@{ series=$serF; inst=@(); margin=@() }
   Write-Host "  $c series=$($serF.Count)"
 }
+# FATAL guard: page hydrate() crashes on an empty series (whole dashboard goes blank)
+$empty=@($codes | Where-Object { @($DASH[$_].series).Count -lt 25 })
+if($empty.Count -gt 0){ Write-Host "FATAL: series too short for $($empty -join ',') - aborting, index.html untouched"; exit 1 }
 
 Write-Host "[3/6] T86 (5 days) + MI_MARGN (3 days)..."
 $last5 = $tradeDates | Select-Object -Last 5

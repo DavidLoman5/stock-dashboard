@@ -16,15 +16,22 @@ function Splice([string]$html,[string]$marker,[string]$payload){
   return $html.Substring(0,$i1+$st.Length)+$payload+$html.Substring($i2)
 }
 
+# guard: never splice yesterday's notes (e.g. today's Write step failed but old file remains)
+function IsFresh($path){ ((Get-Date) - (Get-Item $path).LastWriteTime).TotalHours -le 15 }
+
 $hnPath = Join-Path $root 'holdings-notes.json'
-if(Test-Path $hnPath){
+if((Test-Path $hnPath) -and -not (IsFresh $hnPath)){
+  Write-Host "holdings-notes.json older than 15h - stale, skipping splice"
+} elseif(Test-Path $hnPath){
   $hn = Get-Content $hnPath -Raw -Encoding UTF8 | ConvertFrom-Json
   $html = Splice $html 'holdingsnotes' ('window.HOLDINGS_NOTES='+($hn | ConvertTo-Json -Depth 5 -Compress)+';')
   Write-Host "spliced holdings-notes.json -> window.HOLDINGS_NOTES"
 } else { Write-Host "no holdings-notes.json found - skipping (holdings text stays as-is)" }
 
 $pnPath = Join-Path $root 'picks-notes.json'
-if(Test-Path $pnPath){
+if((Test-Path $pnPath) -and -not (IsFresh $pnPath)){
+  Write-Host "picks-notes.json older than 15h - stale, skipping splice"
+} elseif(Test-Path $pnPath){
   $pn = Get-Content $pnPath -Raw -Encoding UTF8 | ConvertFrom-Json
   $html = Splice $html 'pknotes' ('window.PICKS_NOTES='+($pn | ConvertTo-Json -Depth 4 -Compress)+';')
   Write-Host "spliced picks-notes.json -> window.PICKS_NOTES"
