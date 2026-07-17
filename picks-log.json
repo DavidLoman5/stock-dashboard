@@ -59,35 +59,35 @@
                       "status":  "open"
                   },
                   {
-                      "name":  "東和鋼鐵",
-                      "code":  "2006",
+                      "date":  "20260716",
                       "price":  70.2,
+                      "name":  "東和鋼鐵",
                       "score":  91,
-                      "date":  "20260716",
+                      "code":  "2006",
                       "status":  "open"
                   },
                   {
-                      "name":  "慧洋-KY",
-                      "code":  "2637",
+                      "date":  "20260716",
                       "price":  79.4,
+                      "name":  "慧洋-KY",
                       "score":  90,
-                      "date":  "20260716",
+                      "code":  "2637",
                       "status":  "open"
                   },
                   {
-                      "name":  "玉山金",
-                      "code":  "2884",
+                      "date":  "20260716",
                       "price":  35.1,
+                      "name":  "玉山金",
                       "score":  84,
-                      "date":  "20260716",
+                      "code":  "2884",
                       "status":  "open"
                   },
                   {
-                      "name":  "第一金",
-                      "code":  "2892",
-                      "price":  34.1,
-                      "score":  80,
                       "date":  "20260716",
+                      "price":  34.1,
+                      "name":  "第一金",
+                      "score":  80,
+                      "code":  "2892",
                       "status":  "open"
                   }
               ]

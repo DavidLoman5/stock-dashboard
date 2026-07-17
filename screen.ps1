@@ -377,6 +377,21 @@ $out=@{
 }
 $out | ConvertTo-Json -Depth 7 | Out-File (Join-Path $root 'screen-result.json') -Encoding UTF8
 
+# slim summary for the AI to read (no kline/spark) - screen-result.json is for the page/debug only,
+# it can be 500KB+; this file is what AI should Read for writing PICKS_NOTES (a few KB, not hundreds).
+function SlimPick($p){ [pscustomobject]@{ code=$p.code; name=$p.name; ind=$p.ind; close=$p.close; chgPct=$p.chgPct; score=$p.score; chip=$p.chip; tech=$p.tech; fund=$p.fund; top=$p.top; tPos=$p.tPos; fPos=$p.fPos; tSum=$p.tSum; fSum=$p.fSum; finDelta=$p.finDelta; yoy=$p.yoy; pe=$p.pe; dy=$p.dy; ret5=$p.ret5; dist=$p.dist } }
+function SlimEtf($p){ [pscustomobject]@{ code=$p.code; name=$p.name; close=$p.close; chgPct=$p.chgPct; score=$p.score; chip=$p.chip; tech=$p.tech; owned=$p.owned; tPos=$p.tPos; fPos=$p.fPos; tSum=$p.tSum; fSum=$p.fSum; finDelta=$p.finDelta; ret5=$p.ret5; dist=$p.dist } }
+$summaryOut=@{
+  date=$lastDate
+  regime=$regimeObj
+  picks=@($allPicks | ForEach-Object { SlimPick $_ })
+  etf=@($etfTop | ForEach-Object { SlimEtf $_ })
+  perf=$perfSummary
+  meta=$metaObj
+}
+$summaryOut | ConvertTo-Json -Depth 5 | Out-File (Join-Path $root 'screen-summary.json') -Encoding UTF8
+Write-Host "  wrote screen-summary.json (slim, for AI to read instead of screen-result.json)"
+
 # splice PICKS_KLINE + PICKS_DATA directly into index.html
 $idxPath=Join-Path $root 'index.html'
 if(Test-Path $idxPath){
