@@ -1,20 +1,32 @@
 ﻿{
     "picks":  [
                   {
+                      "exit":  39.85,
                       "date":  "20260709",
                       "price":  40.45,
+                      "alphaFinal":  4.44,
+                      "days":  4,
+                      "reason":  "跌破月線",
                       "name":  "æ°¸è±é",
+                      "retFinal":  -1.48,
                       "score":  89,
                       "code":  "2890",
-                      "status":  "open"
+                      "status":  "closed",
+                      "closedOn":  "20260716"
                   },
                   {
+                      "exit":  295,
                       "date":  "20260709",
                       "price":  363,
+                      "alphaFinal":  -12.81,
+                      "days":  4,
+                      "reason":  "跌破月線",
                       "name":  "ç½åµ",
+                      "retFinal":  -18.73,
                       "score":  89,
                       "code":  "8016",
-                      "status":  "open"
+                      "status":  "closed",
+                      "closedOn":  "20260716"
                   },
                   {
                       "date":  "20260709",
@@ -25,12 +37,18 @@
                       "status":  "open"
                   },
                   {
+                      "exit":  43.35,
                       "date":  "20260709",
                       "price":  43.6,
+                      "alphaFinal":  5.35,
+                      "days":  4,
+                      "reason":  "外資連2日轉賣",
                       "name":  "èå¯ç¼",
+                      "retFinal":  -0.57,
                       "score":  83,
                       "code":  "2542",
-                      "status":  "open"
+                      "status":  "closed",
+                      "closedOn":  "20260716"
                   },
                   {
                       "date":  "20260709",
@@ -38,6 +56,38 @@
                       "name":  "çµ±ä¸",
                       "score":  83,
                       "code":  "1216",
+                      "status":  "open"
+                  },
+                  {
+                      "name":  "東和鋼鐵",
+                      "code":  "2006",
+                      "price":  70.2,
+                      "score":  91,
+                      "date":  "20260716",
+                      "status":  "open"
+                  },
+                  {
+                      "name":  "慧洋-KY",
+                      "code":  "2637",
+                      "price":  79.4,
+                      "score":  90,
+                      "date":  "20260716",
+                      "status":  "open"
+                  },
+                  {
+                      "name":  "玉山金",
+                      "code":  "2884",
+                      "price":  35.1,
+                      "score":  84,
+                      "date":  "20260716",
+                      "status":  "open"
+                  },
+                  {
+                      "name":  "第一金",
+                      "code":  "2892",
+                      "price":  34.1,
+                      "score":  80,
+                      "date":  "20260716",
                       "status":  "open"
                   }
               ]
