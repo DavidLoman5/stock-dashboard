@@ -1,0 +1,25 @@
+﻿{
+    "period":  "20260319..20260713",
+    "summary":  {
+                    "chip+tech (current)":  {
+                                                "winRate":  51.8,
+                                                "avgAlpha":  7.05,
+                                                "avgRet":  14.5,
+                                                "n":  170
+                                            },
+                    "chip only":  {
+                                      "winRate":  50,
+                                      "avgAlpha":  6.97,
+                                      "avgRet":  14.42,
+                                      "n":  170
+                                  },
+                    "tech only":  {
+                                      "winRate":  60,
+                                      "avgAlpha":  11.1,
+                                      "avgRet":  18.54,
+                                      "n":  170
+                                  }
+                },
+    "generated":  "2026-07-14 04:14",
+    "note":  "overlapping windows; chip/tech only (fund factor not replayable); 20-day forward; top5 daily"
+}

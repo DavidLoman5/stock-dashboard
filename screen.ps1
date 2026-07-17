@@ -141,7 +141,21 @@ foreach($s in $short){
   if($ma60 -ne $null -and $cl -gt $ma60){ $tech+=8 }
   if($ma20p -ne $null -and $ma20 -gt $ma20p){ $tech+=5 }
   if($dist -ge -0.08){ $tech+=4 }
-  if($px[$c].chg -gt 0 -and $px[$c].val -gt 3e8){ $tech+=3 }
+  # --- volume/price structure & candle patterns (user framework: price-volume is king) ---
+  $lb=$serF[$serF.Count-1]
+  $vAvg20 = if($serF.Count -ge 21){ (@($serF[($serF.Count-21)..($serF.Count-2)] | ForEach-Object { $_.v }) | Measure-Object -Average).Average } else { $null }
+  $vr = if($vAvg20 -and $vAvg20 -gt 0){ $lb.v/$vAvg20 } else { $null }
+  $rng=$lb.h-$lb.l
+  $upWick = if($rng -gt 0){ ($lb.h-[math]::Max($lb.o,$lb.c))/$rng } else { 0 }
+  $loWick = if($rng -gt 0){ ([math]::Min($lb.o,$lb.c)-$lb.l)/$rng } else { 0 }
+  $closePos = if($rng -gt 0){ ($lb.c-$lb.l)/$rng } else { 0.5 }
+  # distribution day at highs: huge volume + weak close = possible institutional dumping -> reject
+  if($dist -ge -0.03 -and $vr -ne $null -and $vr -ge 2 -and ($closePos -lt 0.35 -or $upWick -gt 0.6)){ Write-Host ("  drop $c distribution candle (vr={0})" -f [math]::Round($vr,1)); continue }
+  if($lb.chg -gt 0 -and $vr -ne $null -and $vr -ge 1.5){ $tech+=4 }                    # volume-backed advance
+  elseif($lb.chg -gt 0 -and $px[$c].val -gt 3e8){ $tech+=2 }
+  if($dist -ge -0.03 -and $upWick -gt 0.6 -and $vr -ne $null -and $vr -ge 1.2){ $tech-=5 }  # long upper wick at highs
+  if($dist -le -0.10 -and $loWick -gt 0.6){ $tech+=2 }                                  # hammer near lows = support
+  if($tech -lt 0){ $tech=0 }
   # regime-aware: green light rewards momentum
   if($light -eq 'green' -and $ret5 -ge 0.03 -and $ret5 -le 0.15){ $tech+=3 }
   if($tech -gt 30){ $tech=30 }
@@ -231,8 +245,10 @@ foreach($s in $eshort){
   if($ma60 -ne $null -and $cl -gt $ma60){ $tech+=8 }
   if($ma20p -ne $null -and $ma20 -gt $ma20p){ $tech+=5 }
   if($dist -ge -0.05){ $tech+=4 }
-  $lastChg=$serF[$serF.Count-1].chg
-  if($lastChg -gt 0){ $tech+=3 }
+  $lbE=$serF[$serF.Count-1]; $lastChg=$lbE.chg
+  $vAvgE = if($serF.Count -ge 21){ (@($serF[($serF.Count-21)..($serF.Count-2)] | ForEach-Object { $_.v }) | Measure-Object -Average).Average } else { $null }
+  $vrE = if($vAvgE -and $vAvgE -gt 0){ $lbE.v/$vAvgE } else { $null }
+  if($lastChg -gt 0 -and $vrE -ne $null -and $vrE -ge 1.3){ $tech+=3 } elseif($lastChg -gt 0){ $tech+=1 }
   if($tech -gt 30){ $tech=30 }
   $fd=$fin[$c]; $finDelta = if($fd -and $fd.today -ne $null -and $fd.prev -ne $null){ [int]($fd.today-$fd.prev) } else { $null }
   $nm = if($px.ContainsKey($c)){ $px[$c].name } else { $c }
@@ -266,18 +282,21 @@ if(Test-Path $logPath){
       if($p.PSObject.Properties['alphaFinal'] -and $p.alphaFinal -ne $null){ $o.alphaFinal=[double]$p.alphaFinal }
       if($p.PSObject.Properties['closedOn'] -and $p.closedOn){ $o.closedOn="$($p.closedOn)" }
       if($p.PSObject.Properties['days'] -and $p.days -ne $null){ $o.days=[int]$p.days }
+      if($p.PSObject.Properties['reason'] -and $p.reason){ $o.reason="$($p.reason)" }
       $norm += ,$o
     }
   }catch{}
 }
 $idxMap=@{}; for($i=0;$i -lt $tradeDates.Count;$i++){ $idxMap[$tradeDates[$i]]=$idxC[$i] }
 $perfRows=@()
+$histCache=@{}
 foreach($o in $norm){
   if($o.date -eq $lastDate -and $o.status -eq 'open'){ continue }   # logged today, no perf yet
   if($o.status -eq 'closed'){
     $al = if($o.ContainsKey('alphaFinal')){ $o.alphaFinal } else { $null }
     $dy2 = if($o.ContainsKey('days')){ $o.days } else { 20 }
-    $perfRows += [pscustomobject]@{ date=$o.date; code=$o.code; name=$o.name; entry=$o.price; cur=$o.exit; ret=$o.retFinal; alpha=$al; days=$dy2; status='closed' }
+    $rs = if($o.ContainsKey('reason')){ $o.reason } else { '20日到期' }
+    $perfRows += [pscustomobject]@{ date=$o.date; code=$o.code; name=$o.name; entry=$o.price; cur=$o.exit; ret=$o.retFinal; alpha=$al; days=$dy2; status='closed'; reason=$rs }
     continue
   }
   $c=$o.code
@@ -288,12 +307,33 @@ foreach($o in $norm){
   $ret=[math]::Round(($cur/$o.price-1)*100,2)
   $alpha=$null
   if($idxMap.ContainsKey($o.date)){ $alpha=[math]::Round($ret - (($idxLast/$idxMap[$o.date]-1)*100),2) }
-  if($days -ge 20){
-    $o.status='closed'; $o.exit=$cur; $o.retFinal=$ret; $o.days=$days; $o.closedOn=$lastDate
+  # ---- early-exit rules (sell discipline): foreign 2-day sell OR close below MA20 ----
+  $exitReason=$null
+  if($chip.ContainsKey($c)){
+    $fArr=$chip[$c].f
+    if($fArr.Count -ge 2 -and $fArr[$fArr.Count-1] -lt 0 -and $fArr[$fArr.Count-2] -lt 0){ $exitReason='外資連2日轉賣' }
+  }
+  if(-not $exitReason){
+    if(-not $histCache.ContainsKey($c)){
+      $hc=@()
+      foreach($mm in @($prvMM,$curMM)){
+        $r3=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$c&response=json"
+        if($r3 -and $r3.stat -eq 'OK'){ foreach($d3 in $r3.data){ $hc += [double](Num $d3[6]) } }
+        Start-Sleep -Milliseconds 700
+      }
+      $histCache[$c]=$hc
+    }
+    $m20x=SMAlast $histCache[$c] 20
+    if($m20x -ne $null -and $cur -lt $m20x){ $exitReason='跌破月線' }
+  }
+  if($exitReason -or $days -ge 20){
+    $rs = if($exitReason){ $exitReason } else { '20日到期' }
+    $o.status='closed'; $o.exit=$cur; $o.retFinal=$ret; $o.days=$days; $o.closedOn=$lastDate; $o.reason=$rs
     if($alpha -ne $null){ $o.alphaFinal=$alpha }
-    $perfRows += [pscustomobject]@{ date=$o.date; code=$c; name=$o.name; entry=$o.price; cur=$cur; ret=$ret; alpha=$alpha; days=$days; status='closed' }
+    $perfRows += [pscustomobject]@{ date=$o.date; code=$c; name=$o.name; entry=$o.price; cur=$cur; ret=$ret; alpha=$alpha; days=$days; status='closed'; reason=$rs }
+    Write-Host "  early/期滿出場: $c $($o.name) $rs ret=$ret%"
   } else {
-    $perfRows += [pscustomobject]@{ date=$o.date; code=$c; name=$o.name; entry=$o.price; cur=$cur; ret=$ret; alpha=$alpha; days=$days; status='open' }
+    $perfRows += [pscustomobject]@{ date=$o.date; code=$c; name=$o.name; entry=$o.price; cur=$cur; ret=$ret; alpha=$alpha; days=$days; status='open'; reason=$null }
   }
 }
 $closedR=@($perfRows | Where-Object {$_.status -eq 'closed'})
