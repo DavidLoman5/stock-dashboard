@@ -2,7 +2,7 @@
 # v2: regime-aware scoring, 20-day auto-close tracking, dedupe, spark output
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-function Num($s){ if($null -eq $s){return $null}; $t=("$s" -replace '[^0-9\.\-]',''); if($t -eq '' -or $t -eq '-'){return $null}; [double]$t }
+function Num($s){ if($null -eq $s){return $null}; $t=("$s" -replace '[^0-9\.\-]',''); if($t -notmatch '[0-9]'){return $null}; try{ return [double]$t }catch{ return $null } }
 function GetJson($url){
   for($i=0;$i -lt 3;$i++){
     try{
@@ -15,6 +15,44 @@ function GetJson($url){
 }
 function IsElec($ind){ foreach($k in @('半導體','電子','電腦','光電','通信','資訊')){ if("$ind" -like "*$k*"){ return $true } } return $false }
 function StripK($obj){ $o=[ordered]@{}; foreach($pr in $obj.PSObject.Properties){ if($pr.Name -ne 'kline'){ $o[$pr.Name]=$pr.Value } }; [pscustomobject]$o }
+# daily OHLCV series routed by market (TWSE STOCK_DAY / TPEx tradingStock); dt=yyyymmdd for date math
+function GetDailySeries($code,$mms){
+  $serX=@()
+  $isO = ($mkt.ContainsKey($code) -and $mkt[$code] -eq 'o')
+  foreach($mm in $mms){
+    if($isO){
+      $ds="{0}/{1}/01" -f $mm.Substring(0,4),$mm.Substring(4,2)
+      $r=GetJson "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code=$code&date=$ds&response=json"
+      if($r -and $r.tables -and $r.tables[0].data){ foreach($d in $r.tables[0].data){
+        $dp="$($d[0])".Split('/')
+        $serX += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); dt=("{0}{1:00}{2:00}" -f ([int]$dp[0]+1911),[int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double](Num $d[6]); chg=(Num $d[7]); v=[math]::Round([double](Num $d[1]),0) }
+      } }
+    } else {
+      $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$code&response=json"
+      if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
+        $dp="$($d[0])".Split('/')
+        $serX += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); dt=("{0}{1:00}{2:00}" -f ([int]$dp[0]+1911),[int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double](Num $d[6]); chg=(Num $d[7]); v=[math]::Round([double](Num $d[1])/1000,0) }
+      } }
+    }
+    Start-Sleep -Milliseconds 700
+  }
+  return ,$serX
+}
+# strip the internal dt field before splicing kline into the page (saves bytes; JS only needs d/o/h/l/c/chg/v)
+function StripDt($rows){ $out=@(); foreach($r in $rows){ $o=[ordered]@{}; foreach($k in @('d','o','h','l','c','chg','v')){ $o[$k]=$r[$k] }; $out += ,$o }; return ,$out }
+# dividend add-back: on ex-div days TWSE/TPEx chg is vs the adjusted reference price,
+# so per-share payout = chg - (close - prevClose); sum events strictly after entry date
+function DivSumSince($rows,$sinceDt){
+  $s=0.0
+  for($k=1;$k -lt $rows.Count;$k++){
+    if("$($rows[$k].dt)" -le "$sinceDt"){ continue }
+    if($rows[$k].chg -ne $null -and $rows[$k].c -ne $null -and $rows[$k-1].c -ne $null){
+      $dv=$rows[$k].chg-($rows[$k].c-$rows[$k-1].c)
+      if($dv -gt 0.005){ $s+=$dv }
+    }
+  }
+  return $s
+}
 
 Write-Host "[1/8] STOCK_DAY_ALL..."
 $all = GetJson "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
@@ -22,11 +60,25 @@ if(-not $all){ Write-Host "FATAL: STOCK_DAY_ALL failed"; exit 1 }
 $rawDate = "$($all[0].Date)"
 if($rawDate.Length -eq 7){ $lastDate = "{0}{1}" -f ([int]$rawDate.Substring(0,3)+1911), $rawDate.Substring(3) } else { $lastDate = $rawDate }
 Write-Host "  latest trade date = $lastDate rows=$($all.Count)"
-$px=@{}
+$px=@{}; $mkt=@{}
 foreach($r in $all){
   $c="$($r.Code)".Trim()
   $px[$c]=@{ name=$r.Name; c=(Num $r.ClosingPrice); o=(Num $r.OpeningPrice); h=(Num $r.HighestPrice); l=(Num $r.LowestPrice); v=(Num $r.TradeVolume); val=(Num $r.TradeValue); chg=(Num $r.Change) }
+  $mkt[$c]='t'
 }
+
+Write-Host "[1b/8] TPEx mainboard quotes (OTC market)..."
+$otc=GetJson "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes"
+$otcN=0
+if($otc){
+  foreach($r in $otc){
+    $c="$($r.SecuritiesCompanyCode)".Trim()
+    if($px.ContainsKey($c)){ continue }
+    $px[$c]=@{ name=$r.CompanyName; c=(Num $r.Close); o=(Num $r.Open); h=(Num $r.High); l=(Num $r.Low); v=(Num $r.TradingShares); val=(Num $r.TransactionAmount); chg=(Num $r.Change) }
+    $mkt[$c]='o'; $otcN++
+  }
+} else { Write-Host "  WARNING: TPEx quotes failed - screening TWSE only today" }
+Write-Host "  otc rows=$otcN (total px=$($px.Count))"
 $upN=0;$dnN=0
 foreach($k in $px.Keys){ $g=$px[$k].chg; if($g -gt 0){$upN++} elseif($g -lt 0){$dnN++} }
 
@@ -57,6 +109,17 @@ foreach($d in $last5){
     }
   }
   Start-Sleep -Milliseconds 800
+  # TPEx daily institutional trading (OTC): col[4]=foreign net, col[13]=trust net, col[23]=3-insti total
+  $dSlash="{0}/{1}/{2}" -f $d.Substring(0,4),$d.Substring(4,2),$d.Substring(6,2)
+  $r2=GetJson "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade?type=Daily&sect=EW&date=$dSlash&response=json"
+  if($r2 -and $r2.tables -and $r2.tables[0].data){
+    foreach($row in $r2.tables[0].data){
+      $c="$($row[0])".Trim()
+      if(-not $chip.ContainsKey($c)){ $chip[$c]=@{f=@();t=@();tot=@()} }
+      $chip[$c].f += [double](Num $row[4]); $chip[$c].t += [double](Num $row[13]); $chip[$c].tot += [double](Num $row[23])
+    }
+  }
+  Start-Sleep -Milliseconds 800
 }
 if($t86ok -lt 5){ Write-Host "  WARNING: only $t86ok/5 T86 days fetched - chip screening degraded. Consider re-run later." }
 
@@ -71,15 +134,24 @@ $fin=@{}
 $r=GetJson "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date=$lastDate&selectType=ALL&response=json"
 if($r){ $tbl=$r.tables | Where-Object { $_.data -and $_.data.Count -gt 100 } | Select-Object -First 1
   if($tbl){ foreach($row in $tbl.data){ $c="$($row[0])".Trim(); $fin[$c]=@{ today=(Num $row[6]); prev=(Num $row[5]) } } } }
+# TPEx margin balance (OTC): col[2]=prev balance, col[6]=today balance
+$lastSlash="{0}/{1}/{2}" -f $lastDate.Substring(0,4),$lastDate.Substring(4,2),$lastDate.Substring(6,2)
+$r=GetJson "https://www.tpex.org.tw/www/zh-tw/margin/balance?date=$lastSlash&response=json"
+if($r -and $r.tables){ $tbl=$r.tables | Where-Object { $_.data -and $_.data.Count -gt 100 } | Select-Object -First 1
+  if($tbl){ foreach($row in $tbl.data){ $c="$($row[0])".Trim(); if(-not $fin.ContainsKey($c)){ $fin[$c]=@{ today=(Num $row[6]); prev=(Num $row[2]) } } } } }
 
 Write-Host "[6/8] BWIBBU_ALL + revenue..."
 $pe=@{}
 $r=GetJson "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL"
 if($r){ foreach($row in $r){ $c="$($row.Code)".Trim(); $pe[$c]=@{ pe=(Num $row.PEratio); pb=(Num $row.PBratio); dy=(Num $row.DividendYield) } } }
+$r=GetJson "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_peratio_analysis"
+if($r){ foreach($row in $r){ $c="$($row.SecuritiesCompanyCode)".Trim(); if(-not $pe.ContainsKey($c)){ $pe[$c]=@{ pe=(Num $row.PriceEarningRatio); pb=(Num $row.PriceBookRatio); dy=(Num $row.YieldRatio) } } } }
 $rev=@{}
 $r=GetJson "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
 if($r){ foreach($row in $r){ $p=@($row.PSObject.Properties); $c="$($p[2].Value)".Trim(); $rev[$c]=@{ ind="$($p[4].Value)".Trim(); yoy=(Num $p[9].Value); name="$($p[3].Value)".Trim() } } }
-Write-Host "  pe=$($pe.Count) rev=$($rev.Count)"
+$r=GetJson "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O"
+if($r){ foreach($row in $r){ $p=@($row.PSObject.Properties); $c="$($p[2].Value)".Trim(); if(-not $rev.ContainsKey($c)){ $rev[$c]=@{ ind="$($p[4].Value)".Trim(); yoy=(Num $p[9].Value); name="$($p[3].Value)".Trim() } } } }
+Write-Host "  pe=$($pe.Count) rev=$($rev.Count) (TWSE+TPEx)"
 
 # ----- regime light (computed BEFORE scoring so weights can adapt) -----
 $pts=0
@@ -117,15 +189,8 @@ $short = $cands | Sort-Object -Property @{e='chip';Descending=$true}, @{e='tSum'
 $picks=@()
 $curMM=$d0.ToString('yyyyMM01'); $prvMM=$d0.AddMonths(-1).ToString('yyyyMM01'); $prv2MM=$d0.AddMonths(-2).ToString('yyyyMM01'); $prv3MM=$d0.AddMonths(-3).ToString('yyyyMM01')
 foreach($s in $short){
-  $c=$s.code; $serF=@()
-  foreach($mm in @($prv3MM,$prv2MM,$prvMM,$curMM)){
-    $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$c&response=json"
-    if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
-      $dp="$($d[0])".Split('/')
-      $serF += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double](Num $d[6]); chg=(Num $d[7]); v=[math]::Round((Num $d[1])/1000,0) }
-    } }
-    Start-Sleep -Milliseconds 700
-  }
+  $c=$s.code
+  $serF=GetDailySeries $c @($prv3MM,$prv2MM,$prvMM,$curMM)
   if($serF.Count -lt 25){ continue }
   $ser=@($serF | ForEach-Object { $_.c })
   $cl=$ser[$ser.Count-1]
@@ -175,7 +240,7 @@ foreach($s in $short){
   $fd=$fin[$c]; $finDelta = if($fd -and $fd.today -ne $null -and $fd.prev -ne $null){ [int]($fd.today-$fd.prev) } else { $null }
   $spark=@(); $nS=[math]::Min(40,$ser.Count)
   foreach($v in $ser[($ser.Count-$nS)..($ser.Count-1)]){ $spark += [math]::Round($v,2) }
-  $nK=[math]::Min(60,$serF.Count); $kline=@($serF[($serF.Count-$nK)..($serF.Count-1)])
+  $nK=[math]::Min(60,$serF.Count); $kline=StripDt @($serF[($serF.Count-$nK)..($serF.Count-1)])
   $picks += [pscustomobject]@{
     code=$c; name=$px[$c].name; ind=$ind; close=$cl; chgPct=[math]::Round((Num $px[$c].chg)/($cl-(Num $px[$c].chg))*100,2)
     score=($s.chip+$tech+$fund); chip=$s.chip; tech=$tech; fund=$fund
@@ -221,15 +286,8 @@ Write-Host "  etf candidates = $($ecand.Count)"
 $eshort=$ecand | Sort-Object -Property @{e='chip';Descending=$true}, @{e='fSum';Descending=$true} | Select-Object -First 6
 $etfPicks=@()
 foreach($s in $eshort){
-  $c=$s.code; $serF=@()
-  foreach($mm in @($prv3MM,$prv2MM,$prvMM,$curMM)){
-    $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$c&response=json"
-    if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
-      $dp="$($d[0])".Split('/')
-      $serF += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double](Num $d[6]); chg=(Num $d[7]); v=[math]::Round((Num $d[1])/1000,0) }
-    } }
-    Start-Sleep -Milliseconds 700
-  }
+  $c=$s.code
+  $serF=GetDailySeries $c @($prv3MM,$prv2MM,$prvMM,$curMM)
   if($serF.Count -lt 25){ continue }
   $ser=@($serF | ForEach-Object { $_.c })
   $cl=$ser[$ser.Count-1]
@@ -254,7 +312,7 @@ foreach($s in $eshort){
   $nm = if($px.ContainsKey($c)){ $px[$c].name } else { $c }
   $spark=@(); $nS=[math]::Min(40,$ser.Count)
   foreach($v in $ser[($ser.Count-$nS)..($ser.Count-1)]){ $spark += [math]::Round($v,2) }
-  $nK=[math]::Min(60,$serF.Count); $kline=@($serF[($serF.Count-$nK)..($serF.Count-1)])
+  $nK=[math]::Min(60,$serF.Count); $kline=StripDt @($serF[($serF.Count-$nK)..($serF.Count-1)])
   $etfPicks += [pscustomobject]@{
     code=$c; name=$nm; ind='ETF'; close=$cl; chgPct=[math]::Round($lastChg/($cl-$lastChg)*100,2)
     score=($s.chip+$tech); chip=$s.chip; tech=$tech
@@ -276,7 +334,9 @@ if(Test-Path $logPath){
     $lg=Get-Content $logPath -Raw -Encoding UTF8 | ConvertFrom-Json
     foreach($p in @($lg.picks)){
       $o=@{ date="$($p.date)"; code="$($p.code)"; name="$($p.name)"; price=[double]$p.price; score=[int]$p.score }
+      if($px.ContainsKey($o.code) -and $px[$o.code].name){ $o.name="$($px[$o.code].name)" }   # heals legacy mojibake names
       $o.status = if($p.PSObject.Properties['status'] -and $p.status){ "$($p.status)" } else { 'open' }
+      if($p.PSObject.Properties['light'] -and $p.light){ $o.light="$($p.light)" }
       if($p.PSObject.Properties['exit'] -and $p.exit -ne $null){ $o.exit=[double]$p.exit }
       if($p.PSObject.Properties['retFinal'] -and $p.retFinal -ne $null){ $o.retFinal=[double]$p.retFinal }
       if($p.PSObject.Properties['alphaFinal'] -and $p.alphaFinal -ne $null){ $o.alphaFinal=[double]$p.alphaFinal }
@@ -296,7 +356,8 @@ foreach($o in $norm){
     $al = if($o.ContainsKey('alphaFinal')){ $o.alphaFinal } else { $null }
     $dy2 = if($o.ContainsKey('days')){ $o.days } else { 20 }
     $rs = if($o.ContainsKey('reason')){ $o.reason } else { '20日到期' }
-    $perfRows += [pscustomobject]@{ date=$o.date; code=$o.code; name=$o.name; entry=$o.price; cur=$o.exit; ret=$o.retFinal; alpha=$al; days=$dy2; status='closed'; reason=$rs }
+    $lg2=$(if($o.ContainsKey('light')){$o.light}else{$null})
+    $perfRows += [pscustomobject]@{ date=$o.date; code=$o.code; name=$o.name; entry=$o.price; cur=$o.exit; ret=$o.retFinal; alpha=$al; days=$dy2; status='closed'; reason=$rs; light=$lg2 }
     continue
   }
   $c=$o.code
@@ -304,36 +365,37 @@ foreach($o in $norm){
   $cur=$px[$c].c
   if($o.price -le 0){ continue }
   $days=($tradeDates | Where-Object { $_ -gt $o.date -and $_ -le $lastDate }).Count
-  $ret=[math]::Round(($cur/$o.price-1)*100,2)
+  # 2-month history for exit rules + dividend add-back (total-return tracking)
+  if(-not $histCache.ContainsKey($c)){ $histCache[$c]=GetDailySeries $c @($prvMM,$curMM) }
+  $hs=$histCache[$c]
+  $divSum=DivSumSince $hs $o.date
+  $ret=[math]::Round((($cur+$divSum)/$o.price-1)*100,2)
   $alpha=$null
   if($idxMap.ContainsKey($o.date)){ $alpha=[math]::Round($ret - (($idxLast/$idxMap[$o.date]-1)*100),2) }
-  # ---- early-exit rules (sell discipline): foreign 2-day sell OR close below MA20 ----
+  # ---- early-exit rules: foreign 2-day sell / close below MA20 / trailing take-profit ----
   $exitReason=$null
   if($chip.ContainsKey($c)){
     $fArr=$chip[$c].f
     if($fArr.Count -ge 2 -and $fArr[$fArr.Count-1] -lt 0 -and $fArr[$fArr.Count-2] -lt 0){ $exitReason='外資連2日轉賣' }
   }
-  if(-not $exitReason){
-    if(-not $histCache.ContainsKey($c)){
-      $hc=@()
-      foreach($mm in @($prvMM,$curMM)){
-        $r3=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$c&response=json"
-        if($r3 -and $r3.stat -eq 'OK'){ foreach($d3 in $r3.data){ $hc += [double](Num $d3[6]) } }
-        Start-Sleep -Milliseconds 700
-      }
-      $histCache[$c]=$hc
-    }
-    $m20x=SMAlast $histCache[$c] 20
+  if(-not $exitReason -and $hs.Count -ge 20){
+    $hcl=@($hs | ForEach-Object { $_.c })
+    $m20x=SMAlast $hcl 20
     if($m20x -ne $null -and $cur -lt $m20x){ $exitReason='跌破月線' }
+    elseif($ret -ge 15){
+      $m10x=SMAlast $hcl 10
+      if($m10x -ne $null -and $cur -lt $m10x){ $exitReason='移動停利（獲利15%+回檔破10日線）' }
+    }
   }
+  $lg3=$(if($o.ContainsKey('light')){$o.light}else{$null})
   if($exitReason -or $days -ge 20){
     $rs = if($exitReason){ $exitReason } else { '20日到期' }
     $o.status='closed'; $o.exit=$cur; $o.retFinal=$ret; $o.days=$days; $o.closedOn=$lastDate; $o.reason=$rs
     if($alpha -ne $null){ $o.alphaFinal=$alpha }
-    $perfRows += [pscustomobject]@{ date=$o.date; code=$c; name=$o.name; entry=$o.price; cur=$cur; ret=$ret; alpha=$alpha; days=$days; status='closed'; reason=$rs }
+    $perfRows += [pscustomobject]@{ date=$o.date; code=$c; name=$o.name; entry=$o.price; cur=$cur; ret=$ret; alpha=$alpha; days=$days; status='closed'; reason=$rs; light=$lg3 }
     Write-Host "  early/期滿出場: $c $($o.name) $rs ret=$ret%"
   } else {
-    $perfRows += [pscustomobject]@{ date=$o.date; code=$c; name=$o.name; entry=$o.price; cur=$cur; ret=$ret; alpha=$alpha; days=$days; status='open'; reason=$null }
+    $perfRows += [pscustomobject]@{ date=$o.date; code=$c; name=$o.name; entry=$o.price; cur=$cur; ret=$ret; alpha=$alpha; days=$days; status='open'; reason=$null; light=$lg3 }
   }
 }
 $closedR=@($perfRows | Where-Object {$_.status -eq 'closed'})
@@ -350,6 +412,16 @@ if($closedR.Count -gt 0 -or $openR.Count -gt 0){
     openN=$openR.Count
     avgRetOpen=$(if($openR.Count -gt 0){[math]::Round(($openR|Measure-Object -Property ret -Average).Average,2)}else{$null})
   }
+  # win rate grouped by regime light at entry (validates regime-aware scoring)
+  $byLight=@{}
+  foreach($g in @('green','yellow','red')){
+    $gr=@($closedR | Where-Object { $_.light -eq $g -and $_.alpha -ne $null })
+    if($gr.Count -gt 0){
+      $gw=($gr | Where-Object {$_.alpha -gt 0}).Count
+      $byLight[$g]=@{ n=$gr.Count; winRate=[math]::Round($gw/$gr.Count*100,0); avgAlpha=[math]::Round(($gr|Measure-Object -Property alpha -Average).Average,2) }
+    }
+  }
+  if($byLight.Keys.Count -gt 0){ $perfSummary.byLight=$byLight }
 }
 # append today's picks: ONE snapshot per trade date (reruns never append), plus open-code dedupe
 $openCodes=@{}; foreach($o in $norm){ if($o.status -eq 'open'){ $openCodes[$o.code]=$true } }
@@ -358,7 +430,7 @@ $newLogged=0
 if(-not $dateLogged){
   foreach($p in $top5){
     if($openCodes.ContainsKey($p.code)){ continue }
-    $norm += ,@{ date=$lastDate; code=$p.code; name=$p.name; price=$p.close; score=$p.score; status='open' }
+    $norm += ,@{ date=$lastDate; code=$p.code; name=$p.name; price=$p.close; score=$p.score; status='open'; light=$light }
     $newLogged++
   }
 } else { Write-Host "  date $lastDate already logged - snapshot preserved, no append" }

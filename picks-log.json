@@ -7,7 +7,7 @@
                       "alphaFinal":  4.44,
                       "days":  4,
                       "reason":  "跌破月線",
-                      "name":  "æ°¸è±é",
+                      "name":  "永豐金",
                       "retFinal":  -1.48,
                       "score":  89,
                       "code":  "2890",
@@ -21,7 +21,7 @@
                       "alphaFinal":  -12.81,
                       "days":  4,
                       "reason":  "跌破月線",
-                      "name":  "ç½åµ",
+                      "name":  "矽創",
                       "retFinal":  -18.73,
                       "score":  89,
                       "code":  "8016",
@@ -31,7 +31,7 @@
                   {
                       "date":  "20260709",
                       "price":  42.8,
-                      "name":  "ä¸æµ·åé",
+                      "name":  "上海商銀",
                       "score":  85,
                       "code":  "5876",
                       "status":  "open"
@@ -43,7 +43,7 @@
                       "alphaFinal":  5.35,
                       "days":  4,
                       "reason":  "外資連2日轉賣",
-                      "name":  "èå¯ç¼",
+                      "name":  "興富發",
                       "retFinal":  -0.57,
                       "score":  83,
                       "code":  "2542",
@@ -53,7 +53,7 @@
                   {
                       "date":  "20260709",
                       "price":  78.4,
-                      "name":  "çµ±ä¸",
+                      "name":  "統一",
                       "score":  83,
                       "code":  "1216",
                       "status":  "open"
@@ -89,6 +89,15 @@
                       "score":  80,
                       "code":  "2892",
                       "status":  "open"
+                  },
+                  {
+                      "date":  "20260717",
+                      "price":  119.5,
+                      "name":  "中租-KY",
+                      "score":  82,
+                      "code":  "5871",
+                      "status":  "open",
+                      "light":  "red"
                   }
               ]
 }

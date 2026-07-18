@@ -1,4 +1,4 @@
-# backtest.ps1 - validate screening weights on historical data (research tool, run manually)
+﻿# backtest.ps1 - validate screening weights on historical data (research tool, run manually)
 # Method: rebuild chip gate + simplified tech daily over ~75 trading days; measure 20-day forward alpha vs TAIEX.
 # Note: overlapping windows -> stats are indicative, not iid. Fund factor (revenue/PE history) not replayable, tested configs are chip/tech only.
 $ErrorActionPreference='Continue'
@@ -26,6 +26,16 @@ foreach($mm in $months){
     $dates += $dt; $idxMapBT[$dt]=[double](Num $d[4])
   } }
   Start-Sleep -Milliseconds 700
+}
+# regime map from the FULL 5-month window (before trim): index vs MA60 -> bull/bear per date
+$datesAll=@($dates)
+$idxAll=@(); foreach($d in $datesAll){ $idxAll += $idxMapBT[$d] }
+$regMap=@{}
+for($ri=0;$ri -lt $datesAll.Count;$ri++){
+  if($ri -ge 59){
+    $m=($idxAll[($ri-59)..$ri] | Measure-Object -Average).Average
+    $regMap[$datesAll[$ri]]=$(if($idxAll[$ri] -ge $m){'bull'}else{'bear'})
+  }
 }
 if($dates.Count -gt 78){ $dates=@($dates | Select-Object -Last 78) }
 Write-Host "  trade dates = $($dates.Count) ($($dates[0])..$($dates[-1]))"
@@ -117,7 +127,7 @@ for($i=24; $i -le $N-21; $i++){
       if($c0 -eq $null -or $c1 -eq $null -or $c0 -le 0){ continue }
       $ret=($c1/$c0-1)*100
       $ir=($idx1/$idx0-1)*100
-      $results[$cf.name] += [pscustomobject]@{ date=$d; code=$p.code; ret=[math]::Round($ret,2); alpha=[math]::Round($ret-$ir,2) }
+      $results[$cf.name] += [pscustomobject]@{ date=$d; code=$p.code; ret=[math]::Round($ret,2); alpha=[math]::Round($ret-$ir,2); regime=$(if($regMap.ContainsKey($d)){$regMap[$d]}else{'na'}) }
     }
   }
   if(($i-24) % 10 -eq 0){ Write-Host "  eval $($i-23)/$($N-44) date=$d candidates=$($scored.Count)" }
@@ -133,6 +143,15 @@ foreach($cf in $cfgs){
   $avgR=[math]::Round(($rows|Measure-Object -Property ret -Average).Average,2)
   $wr=[math]::Round($win/$rows.Count*100,1)
   $summary[$cf.name]=@{ n=$rows.Count; winRate=$wr; avgAlpha=$avgA; avgRet=$avgR }
+  # split by regime at entry (bull/bear vs MA60) - answers "does tech weighting hold up in downtrends?"
+  foreach($rg in @('bull','bear')){
+    $rr=@($rows | Where-Object {$_.regime -eq $rg})
+    if($rr.Count -gt 0){
+      $w2=($rr | Where-Object {$_.alpha -gt 0}).Count
+      $summary[$cf.name][$rg]=@{ n=$rr.Count; winRate=[math]::Round($w2/$rr.Count*100,1); avgAlpha=[math]::Round(($rr|Measure-Object -Property alpha -Average).Average,2) }
+      Write-Host ("    [{0}] n={1} winRate={2}% avgAlpha={3}%" -f $rg,$rr.Count,$summary[$cf.name][$rg].winRate,$summary[$cf.name][$rg].avgAlpha)
+    }
+  }
   Write-Host ("  {0}: n={1} winRate={2}% avgRet={3}% avgAlpha={4}%" -f $cf.name,$rows.Count,$wr,$avgR,$avgA)
 }
 @{ generated=(Get-Date -Format 'yyyy-MM-dd HH:mm'); period="$($dates[0])..$($dates[-1])"; note='overlapping windows; chip/tech only (fund factor not replayable); 20-day forward; top5 daily'; summary=$summary } |
@@ -144,7 +163,14 @@ $fmtP="{0}/{1}/{2}–{3}/{4}/{5}" -f $dates[0].Substring(0,4),$dates[0].Substrin
 $sm=[ordered]@{}
 $map=@{ 'chip+tech (current)'='籌碼+技術（現行）'; 'chip only'='只看籌碼'; 'tech only'='只看技術' }
 foreach($cf in $cfgs){ $s=$summary[$cf.name]; if($s){ $sm[$map[$cf.name]]=@{ winRate=$s.winRate; avgAlpha=$s.avgAlpha; n=$s.n } } }
-$bt=@{ period=$fmtP; generated=(Get-Date -Format 'yyyy-MM-dd'); regimeNote='樣本期依當時行情'; summary=$sm }
+$bt=@{ period=$fmtP; generated=(Get-Date -Format 'yyyy-MM-dd'); regimeNote='多空以指數vs60日線分組'; summary=$sm }
+$byReg=[ordered]@{}
+foreach($rg in @('bull','bear')){
+  $t2=[ordered]@{}
+  foreach($cf in $cfgs){ $s=$summary[$cf.name]; if($s -and $s.ContainsKey($rg)){ $t2[$map[$cf.name]]=$s[$rg] } }
+  if($t2.Keys.Count -gt 0){ $byReg[$rg]=$t2 }
+}
+if($byReg.Keys.Count -gt 0){ $bt.byRegime=$byReg }
 $idxPath=Join-Path $root 'index.html'
 if(Test-Path $idxPath){
   $enc=New-Object System.Text.UTF8Encoding($false)

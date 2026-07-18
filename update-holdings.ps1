@@ -114,7 +114,7 @@ $HOLDINGS_META=[ordered]@{}
 $context=@()
 foreach($h in $hj.holdings){
   $c="$($h.code)"
-  $HOLDINGS_META[$c]=[ordered]@{ name=$h.name; type=$h.type; theme=$h.theme; lots=$h.lots; color=$h.color; divNote=$(if($divMap.ContainsKey($c)){$divMap[$c]}else{$null}) }
+  $HOLDINGS_META[$c]=[ordered]@{ name=$h.name; type=$h.type; theme=$h.theme; lots=$h.lots; color=$h.color; techLike=$(if($h.PSObject.Properties['techLike']){[bool]$h.techLike}else{$false}); divNote=$(if($divMap.ContainsKey($c)){$divMap[$c]}else{$null}) }
   $ser=@($DASH[$c].series | ForEach-Object { $_.c })
   if($ser.Count -lt 1){ continue }
   $last=$DASH[$c].series[$DASH[$c].series.Count-1]
