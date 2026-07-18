@@ -1,0 +1,45 @@
+﻿{
+    "generated":  "2026-07-18",
+    "closedN":  3,
+    "overall":  {
+                    "winRate":  67,
+                    "avgAlpha":  -1.01,
+                    "avgRet":  -6.93,
+                    "n":  3
+                },
+    "byReason":  {
+                     "跌破月線":  {
+                                  "winRate":  50,
+                                  "avgAlpha":  -4.19,
+                                  "avgRet":  -10.1,
+                                  "n":  2
+                              },
+                     "外資連2日轉賣":  {
+                                     "winRate":  100,
+                                     "avgAlpha":  5.35,
+                                     "avgRet":  -0.57,
+                                     "n":  1
+                                 }
+                 },
+    "byLight":  {
+
+                },
+    "byInd":  {
+
+              },
+    "byAiTag":  {
+
+                },
+    "byChip":  {
+
+               },
+    "byTech":  {
+
+               },
+    "byFund":  {
+
+               },
+    "byYoy":  {
+
+              }
+}

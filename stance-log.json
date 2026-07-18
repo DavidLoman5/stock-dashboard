@@ -1,0 +1,39 @@
+﻿{
+    "rows":  [
+                 {
+                     "date":  "20260717",
+                     "code":  "0050",
+                     "score":  -3,
+                     "stance":  "defend",
+                     "close":  100.15
+                 },
+                 {
+                     "date":  "20260717",
+                     "code":  "00935",
+                     "score":  -2,
+                     "stance":  "defend",
+                     "close":  53.4
+                 },
+                 {
+                     "date":  "20260717",
+                     "code":  "00947",
+                     "score":  -2,
+                     "stance":  "defend",
+                     "close":  32.32
+                 },
+                 {
+                     "date":  "20260717",
+                     "code":  "00990A",
+                     "score":  -2,
+                     "stance":  "defend",
+                     "close":  15.49
+                 },
+                 {
+                     "date":  "20260717",
+                     "code":  "00981A",
+                     "score":  -2,
+                     "stance":  "defend",
+                     "close":  26.43
+                 }
+             ]
+}

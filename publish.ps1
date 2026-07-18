@@ -39,6 +39,27 @@ if((Test-Path $pnPath) -and -not (IsFresh $pnPath)){
 
 [IO.File]::WriteAllText($idxPath, $html, $enc)
 
+# attach AI verdict tags (ai-tags.json: {code:{sust:bool,risk:string}}) to open picks-log
+# entries lacking them - lets evaluate.ps1 score whether AI topic judgment adds value
+$tagPath = Join-Path $root 'ai-tags.json'
+$logPath = Join-Path $root 'picks-log.json'
+if((Test-Path $tagPath) -and (Test-Path $logPath) -and (IsFresh $tagPath)){
+  try{
+    $tags = Get-Content $tagPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $lg = Get-Content $logPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $n=0
+    foreach($pk in $lg.picks){
+      if($pk.status -eq 'open' -and $tags.PSObject.Properties["$($pk.code)"] -and -not $pk.PSObject.Properties['aiSust']){
+        $t=$tags.("$($pk.code)")
+        $pk | Add-Member -NotePropertyName aiSust -NotePropertyValue ([bool]$t.sust) -Force
+        $pk | Add-Member -NotePropertyName aiRisk -NotePropertyValue "$($t.risk)" -Force
+        $n++
+      }
+    }
+    if($n -gt 0){ $lg | ConvertTo-Json -Depth 5 | Out-File $logPath -Encoding UTF8; Write-Host "attached AI tags to $n open picks" }
+  }catch{ Write-Host "ai-tags attach skipped: $($_.Exception.Message)" }
+}
+
 Set-Location $root
 git add -A
 $today = Get-Date -Format 'yyyy-MM-dd'

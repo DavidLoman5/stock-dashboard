@@ -138,6 +138,45 @@ foreach($h in $hj.holdings){
 $context | ConvertTo-Json -Depth 5 | Out-File (Join-Path $root 'holdings-context.json') -Encoding UTF8
 Write-Host "  wrote holdings-context.json ($($context.Count) holdings)"
 
+Write-Host "[5b/6] stance-log.json (rule-engine stance per holding; mirrors page adviseHolding, for evaluate.ps1 validation)..."
+$stancePath=Join-Path $root 'stance-log.json'
+$slog=@()
+if(Test-Path $stancePath){ try{ $slog=@((Get-Content $stancePath -Raw -Encoding UTF8 | ConvertFrom-Json).rows) }catch{ $slog=@() } }
+$already=@($slog | Where-Object { $_.date -eq $lastDate }).Count -gt 0
+if(-not $already){
+  foreach($c in $codes){
+    $s=@($DASH[$c].series); if($s.Count -lt 25){ continue }
+    $cl=@($s | ForEach-Object { $_.c }); $L=$cl.Count; $lastB=$s[$L-1]
+    $m20=SMAlast $cl 20; $m60=SMAlast $cl 60
+    $m20p= if($L -ge 25){ SMAlast ($cl[0..($L-6)]) 20 } else { $null }
+    $tech=0
+    if($m20 -and $lastB.c -gt $m20 -and $m20p -and $m20 -gt $m20p){ $tech=1 }
+    elseif($m60 -and $lastB.c -lt $m60){ $tech=-1 }
+    $f=@($DASH[$c].inst | ForEach-Object { $_.f })
+    $chip2=0
+    if($f.Count){ $f5=($f | Measure-Object -Sum).Sum; $lf=$f[$f.Count-1]
+      if($f5 -gt 0 -and $lf -gt 0){ $chip2=1 } elseif($f5 -lt 0 -and $lf -lt 0){ $chip2=-1 } }
+    $mgA=@($DASH[$c].margin); $mg= if($mgA.Count){ $mgA[$mgA.Count-1] } else { $null }
+    $extra=0
+    if($mg -and $mg.finPrev -gt 0){ $r2=($mg.fin-$mg.finPrev)/$mg.finPrev
+      if($r2 -gt 0.03 -and $chip2 -lt 0){ $extra=-1 } elseif($r2 -lt -0.02 -and $chip2 -gt 0){ $extra=1 } }
+    $vAvg= if($L -ge 21){ (@($s[($L-21)..($L-2)] | ForEach-Object { $_.v }) | Measure-Object -Average).Average } else { $null }
+    $vr= if($vAvg -and $vAvg -gt 0){ $lastB.v/$vAvg } else { $null }
+    $rng=$lastB.h-$lastB.l
+    $upW= if($rng -gt 0){ ($lastB.h-[math]::Max($lastB.o,$lastB.c))/$rng } else { 0 }
+    $cp2= if($rng -gt 0){ ($lastB.c-$lastB.l)/$rng } else { 0.5 }
+    $n40=[math]::Min(40,$L); $hi40=($cl[($L-$n40)..($L-1)] | Measure-Object -Maximum).Maximum
+    $vp=0
+    if(($lastB.c/$hi40-1) -ge -0.03 -and $vr -and $vr -ge 2 -and ($cp2 -lt 0.35 -or $upW -gt 0.6)){ $vp=-1 }
+    elseif($lastB.chg -gt 0 -and $vr -and $vr -ge 1.5){ $vp=1 }
+    $sc=$tech+$chip2+$extra+$vp
+    $lv= if($sc -ge 2){'up'} elseif($sc -ge 0){'hold'} elseif($sc -eq -1){'trim'} else {'defend'}
+    $slog += ,@{ date=$lastDate; code=$c; close=$lastB.c; score=$sc; stance=$lv }
+  }
+  @{ rows=$slog } | ConvertTo-Json -Depth 4 | Out-File $stancePath -Encoding UTF8
+  Write-Host "  stance-log: appended rows for $lastDate (total $($slog.Count))"
+} else { Write-Host "  stance-log: $lastDate already logged" }
+
 Write-Host "[6/6] splice window.DASH / window.META / window.HOLDINGS_META into index.html..."
 $idxPath=Join-Path $root 'index.html'
 $enc=New-Object System.Text.UTF8Encoding($false)

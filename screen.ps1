@@ -336,7 +336,10 @@ if(Test-Path $logPath){
       $o=@{ date="$($p.date)"; code="$($p.code)"; name="$($p.name)"; price=[double]$p.price; score=[int]$p.score }
       if($px.ContainsKey($o.code) -and $px[$o.code].name){ $o.name="$($px[$o.code].name)" }   # heals legacy mojibake names
       $o.status = if($p.PSObject.Properties['status'] -and $p.status){ "$($p.status)" } else { 'open' }
-      if($p.PSObject.Properties['light'] -and $p.light){ $o.light="$($p.light)" }
+      # pass through factor snapshot + AI tags (added at entry; used by evaluate.ps1 attribution)
+      foreach($fld in @('light','chipS','techS','fundS','ret5','dist','yoy','pe','dy','ind','aiSust','aiRisk')){
+        if($p.PSObject.Properties[$fld] -and $null -ne $p.$fld){ $o[$fld]=$p.$fld }
+      }
       if($p.PSObject.Properties['exit'] -and $p.exit -ne $null){ $o.exit=[double]$p.exit }
       if($p.PSObject.Properties['retFinal'] -and $p.retFinal -ne $null){ $o.retFinal=[double]$p.retFinal }
       if($p.PSObject.Properties['alphaFinal'] -and $p.alphaFinal -ne $null){ $o.alphaFinal=[double]$p.alphaFinal }
@@ -430,7 +433,8 @@ $newLogged=0
 if(-not $dateLogged){
   foreach($p in $top5){
     if($openCodes.ContainsKey($p.code)){ continue }
-    $norm += ,@{ date=$lastDate; code=$p.code; name=$p.name; price=$p.close; score=$p.score; status='open'; light=$light }
+    $norm += ,@{ date=$lastDate; code=$p.code; name=$p.name; price=$p.close; score=$p.score; status='open'; light=$light
+                 chipS=$p.chip; techS=$p.tech; fundS=$p.fund; ret5=$p.ret5; dist=$p.dist; yoy=$p.yoy; pe=$p.pe; dy=$p.dy; ind=$p.ind }
     $newLogged++
   }
 } else { Write-Host "  date $lastDate already logged - snapshot preserved, no append" }
