@@ -1,25 +1,509 @@
 ﻿{
-    "period":  "20260319..20260713",
-    "summary":  {
-                    "chip+tech (current)":  {
-                                                "winRate":  51.8,
-                                                "avgAlpha":  7.05,
-                                                "avgRet":  14.5,
-                                                "n":  170
-                                            },
-                    "chip only":  {
-                                      "winRate":  50,
-                                      "avgAlpha":  6.97,
-                                      "avgRet":  14.42,
-                                      "n":  170
-                                  },
-                    "tech only":  {
-                                      "winRate":  60,
-                                      "avgAlpha":  11.1,
-                                      "avgRet":  18.54,
-                                      "n":  170
-                                  }
+    "note":  "walk-forward: IS=first 60% (optimize), OOS=last 40% (validate); TWSE-only; fund factor not replayable; overlapping windows",
+    "panelDays":  200,
+    "current":  {
+                    "rank":  "chip+t",
+                    "exit":  "prod",
+                    "is":  {
+                               "winRate":  38.5,
+                               "avgAlpha":  -0.21,
+                               "avgRet":  0.55,
+                               "avgDays":  4.7,
+                               "n":  470
+                           },
+                    "oos":  {
+                                "winRate":  41.3,
+                                "avgAlpha":  0.17,
+                                "avgRet":  3.48,
+                                "avgDays":  6,
+                                "n":  310
+                            },
+                    "bear":  {
+                                 "winRate":  40,
+                                 "avgAlpha":  1.36,
+                                 "avgRet":  10.21,
+                                 "avgDays":  6.2,
+                                 "n":  5
+                             }
                 },
-    "generated":  "2026-07-14 04:14",
-    "note":  "overlapping windows; chip/tech only (fund factor not replayable); 20-day forward; top5 daily"
+    "grid":  [
+                 {
+                     "rank":  "chip",
+                     "exit":  "hold20",
+                     "is":  {
+                                "winRate":  45.5,
+                                "avgAlpha":  1.62,
+                                "avgRet":  6.26,
+                                "avgDays":  20,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  52.9,
+                                 "avgAlpha":  6.33,
+                                 "avgRet":  16.54,
+                                 "avgDays":  20,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  60,
+                                  "avgAlpha":  12.87,
+                                  "avgRet":  35.58,
+                                  "avgDays":  20,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip",
+                     "exit":  "stop",
+                     "is":  {
+                                "winRate":  40.9,
+                                "avgAlpha":  1.62,
+                                "avgRet":  3.37,
+                                "avgDays":  11.4,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  44.2,
+                                 "avgAlpha":  5.51,
+                                 "avgRet":  11.62,
+                                 "avgDays":  13,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  40,
+                                  "avgAlpha":  9.86,
+                                  "avgRet":  23.7,
+                                  "avgDays":  11,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip",
+                     "exit":  "prod",
+                     "is":  {
+                                "winRate":  41.1,
+                                "avgAlpha":  0.16,
+                                "avgRet":  0.86,
+                                "avgDays":  4.6,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  40,
+                                 "avgAlpha":  0.43,
+                                 "avgRet":  3.46,
+                                 "avgDays":  5.6,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  40,
+                                  "avgAlpha":  1.72,
+                                  "avgRet":  6.98,
+                                  "avgDays":  2.6,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+0.5t",
+                     "exit":  "hold20",
+                     "is":  {
+                                "winRate":  46.6,
+                                "avgAlpha":  1.66,
+                                "avgRet":  6.3,
+                                "avgDays":  20,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  56.5,
+                                 "avgAlpha":  7.72,
+                                 "avgRet":  17.93,
+                                 "avgDays":  20,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  80,
+                                  "avgAlpha":  20.57,
+                                  "avgRet":  43.28,
+                                  "avgDays":  20,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+0.5t",
+                     "exit":  "stop",
+                     "is":  {
+                                "winRate":  40.4,
+                                "avgAlpha":  1.4,
+                                "avgRet":  3.18,
+                                "avgDays":  12,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  46.5,
+                                 "avgAlpha":  6.02,
+                                 "avgRet":  12.74,
+                                 "avgDays":  14,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  60,
+                                  "avgAlpha":  15.41,
+                                  "avgRet":  32.87,
+                                  "avgDays":  14.8,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+0.5t",
+                     "exit":  "prod",
+                     "is":  {
+                                "winRate":  39.4,
+                                "avgAlpha":  -0.14,
+                                "avgRet":  0.62,
+                                "avgDays":  4.7,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  41.9,
+                                 "avgAlpha":  0.42,
+                                 "avgRet":  3.66,
+                                 "avgDays":  6,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  60,
+                                  "avgAlpha":  6.17,
+                                  "avgRet":  12.84,
+                                  "avgDays":  3.6,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+t",
+                     "exit":  "hold20",
+                     "is":  {
+                                "winRate":  46.2,
+                                "avgAlpha":  1.62,
+                                "avgRet":  6.26,
+                                "avgDays":  20,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  55.5,
+                                 "avgAlpha":  7.26,
+                                 "avgRet":  17.47,
+                                 "avgDays":  20,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  60,
+                                  "avgAlpha":  4.53,
+                                  "avgRet":  27.24,
+                                  "avgDays":  20,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+t",
+                     "exit":  "stop",
+                     "is":  {
+                                "winRate":  39.8,
+                                "avgAlpha":  1.4,
+                                "avgRet":  3.17,
+                                "avgDays":  12.1,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  45.8,
+                                 "avgAlpha":  5.56,
+                                 "avgRet":  12.32,
+                                 "avgDays":  14.1,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  40,
+                                  "avgAlpha":  -0.63,
+                                  "avgRet":  16.83,
+                                  "avgDays":  14.8,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+t",
+                     "exit":  "prod",
+                     "is":  {
+                                "winRate":  38.5,
+                                "avgAlpha":  -0.21,
+                                "avgRet":  0.55,
+                                "avgDays":  4.7,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  41.3,
+                                 "avgAlpha":  0.17,
+                                 "avgRet":  3.48,
+                                 "avgDays":  6,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  40,
+                                  "avgAlpha":  1.36,
+                                  "avgRet":  10.21,
+                                  "avgDays":  6.2,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+2t",
+                     "exit":  "hold20",
+                     "is":  {
+                                "winRate":  46.8,
+                                "avgAlpha":  1.78,
+                                "avgRet":  6.42,
+                                "avgDays":  20,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  55.8,
+                                 "avgAlpha":  7.84,
+                                 "avgRet":  18.04,
+                                 "avgDays":  20,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  80,
+                                  "avgAlpha":  16.65,
+                                  "avgRet":  39.36,
+                                  "avgDays":  20,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+2t",
+                     "exit":  "stop",
+                     "is":  {
+                                "winRate":  40,
+                                "avgAlpha":  1.45,
+                                "avgRet":  3.2,
+                                "avgDays":  12.1,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  46.1,
+                                 "avgAlpha":  6.06,
+                                 "avgRet":  12.93,
+                                 "avgDays":  14.3,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  60,
+                                  "avgAlpha":  9.77,
+                                  "avgRet":  28.47,
+                                  "avgDays":  16.4,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+2t",
+                     "exit":  "prod",
+                     "is":  {
+                                "winRate":  38.3,
+                                "avgAlpha":  -0.22,
+                                "avgRet":  0.56,
+                                "avgDays":  4.8,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  41.3,
+                                 "avgAlpha":  0.31,
+                                 "avgRet":  3.7,
+                                 "avgDays":  6.1,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  40,
+                                  "avgAlpha":  2.74,
+                                  "avgRet":  11.64,
+                                  "avgDays":  6.6,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+4t",
+                     "exit":  "hold20",
+                     "is":  {
+                                "winRate":  46.8,
+                                "avgAlpha":  1.78,
+                                "avgRet":  6.42,
+                                "avgDays":  20,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  55.8,
+                                 "avgAlpha":  7.84,
+                                 "avgRet":  18.04,
+                                 "avgDays":  20,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  80,
+                                  "avgAlpha":  16.65,
+                                  "avgRet":  39.36,
+                                  "avgDays":  20,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+4t",
+                     "exit":  "stop",
+                     "is":  {
+                                "winRate":  40,
+                                "avgAlpha":  1.45,
+                                "avgRet":  3.2,
+                                "avgDays":  12.1,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  46.1,
+                                 "avgAlpha":  6.06,
+                                 "avgRet":  12.93,
+                                 "avgDays":  14.3,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  60,
+                                  "avgAlpha":  9.77,
+                                  "avgRet":  28.47,
+                                  "avgDays":  16.4,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "chip+4t",
+                     "exit":  "prod",
+                     "is":  {
+                                "winRate":  38.3,
+                                "avgAlpha":  -0.22,
+                                "avgRet":  0.56,
+                                "avgDays":  4.8,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  41.3,
+                                 "avgAlpha":  0.31,
+                                 "avgRet":  3.7,
+                                 "avgDays":  6.1,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  40,
+                                  "avgAlpha":  2.74,
+                                  "avgRet":  11.64,
+                                  "avgDays":  6.6,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "tech",
+                     "exit":  "hold20",
+                     "is":  {
+                                "winRate":  45.5,
+                                "avgAlpha":  3.03,
+                                "avgRet":  7.67,
+                                "avgDays":  20,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  50.3,
+                                 "avgAlpha":  6.37,
+                                 "avgRet":  16.58,
+                                 "avgDays":  20,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  80,
+                                  "avgAlpha":  15.95,
+                                  "avgRet":  38.66,
+                                  "avgDays":  20,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "tech",
+                     "exit":  "stop",
+                     "is":  {
+                                "winRate":  40.9,
+                                "avgAlpha":  2.05,
+                                "avgRet":  3.97,
+                                "avgDays":  11.4,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  45.5,
+                                 "avgAlpha":  6.49,
+                                 "avgRet":  13.13,
+                                 "avgDays":  13.6,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  60,
+                                  "avgAlpha":  8,
+                                  "avgRet":  27.14,
+                                  "avgDays":  15.8,
+                                  "n":  5
+                              }
+                 },
+                 {
+                     "rank":  "tech",
+                     "exit":  "prod",
+                     "is":  {
+                                "winRate":  45.3,
+                                "avgAlpha":  0.72,
+                                "avgRet":  1.21,
+                                "avgDays":  4,
+                                "n":  470
+                            },
+                     "oos":  {
+                                 "winRate":  43.9,
+                                 "avgAlpha":  1.86,
+                                 "avgRet":  4.35,
+                                 "avgDays":  4.4,
+                                 "n":  310
+                             },
+                     "bear":  {
+                                  "winRate":  40,
+                                  "avgAlpha":  3.41,
+                                  "avgRet":  10.09,
+                                  "avgDays":  3.8,
+                                  "n":  5
+                              }
+                 }
+             ],
+    "bestOOS":  {
+                    "rank":  "chip+2t",
+                    "exit":  "hold20",
+                    "is":  {
+                               "winRate":  46.8,
+                               "avgAlpha":  1.78,
+                               "avgRet":  6.42,
+                               "avgDays":  20,
+                               "n":  470
+                           },
+                    "oos":  {
+                                "winRate":  55.8,
+                                "avgAlpha":  7.84,
+                                "avgRet":  18.04,
+                                "avgDays":  20,
+                                "n":  310
+                            },
+                    "bear":  {
+                                 "winRate":  80,
+                                 "avgAlpha":  16.65,
+                                 "avgRet":  39.36,
+                                 "avgDays":  20,
+                                 "n":  5
+                             }
+                },
+    "splitDate":  "20260318",
+    "generated":  "2026-07-18 15:02",
+    "period":  "2025/09/16-07/17"
 }
