@@ -22,6 +22,7 @@
 - 圖表用 Canvas 手繪，**無外部函式庫/CDN**（CSP 會擋）
 - **台股紅漲綠跌**（--up 紅、--down 綠），別套歐美習慣
 - 證交所日期是民國年（西元-1911）
+- **改 `screen.ps1` 選股/評分/出場規則或 `adviseHolding` 判級規則時，必須同步更新 index.html 的「📐 現行選股與評價邏輯」卡（`id="logicCard"`）與 plan.md**，避免文件與程式漂移
 
 ## 測試與部署
 - 本機測試：`python -m http.server 8000` 開 `http://localhost:8000`

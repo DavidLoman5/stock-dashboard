@@ -16,24 +16,52 @@ function GetJson($url){
 function IsElec($ind){ foreach($k in @('半導體','電子','電腦','光電','通信','資訊')){ if("$ind" -like "*$k*"){ return $true } } return $false }
 function StripK($obj){ $o=[ordered]@{}; foreach($pr in $obj.PSObject.Properties){ if($pr.Name -ne 'kline'){ $o[$pr.Name]=$pr.Value } }; [pscustomobject]$o }
 # daily OHLCV series routed by market (TWSE STOCK_DAY / TPEx tradingStock); dt=yyyymmdd for date math
+# completed months never change -> disk-cached under kline-cache/ (gitignored); current month always fetched live
+$klineCache = Join-Path $root 'kline-cache'
+if(-not (Test-Path $klineCache)){ New-Item -ItemType Directory -Path $klineCache | Out-Null }
 function GetDailySeries($code,$mms){
   $serX=@()
   $isO = ($mkt.ContainsKey($code) -and $mkt[$code] -eq 'o')
+  $curYM=(Get-Date).ToString('yyyyMM')
   foreach($mm in $mms){
+    $ym=$mm.Substring(0,6)
+    $cf=Join-Path $klineCache "$code-$ym.json"
+    if($ym -lt $curYM -and (Test-Path $cf)){
+      try{
+        $hit=@()
+        # PS5.1 gotcha: ConvertFrom-Json emits a JSON array as ONE Object[] pipeline item --
+        # assign first, then enumerate; wrapping the pipeline in @() would nest it instead
+        $cached=Get-Content $cf -Raw -Encoding UTF8 | ConvertFrom-Json
+        foreach($row in @($cached)){
+          if($null -eq $row){ continue }
+          $o=[ordered]@{}; foreach($pr in $row.PSObject.Properties){ $o[$pr.Name]=$pr.Value }
+          $hit += ,$o
+        }
+        # sanity: a real month has >=5 trade days; anything less means corrupt cache -> refetch live
+        if($hit.Count -ge 5){ $serX += $hit; continue }
+      }catch{}
+    }
+    $rowsM=@()
     if($isO){
       $ds="{0}/{1}/01" -f $mm.Substring(0,4),$mm.Substring(4,2)
       $r=GetJson "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code=$code&date=$ds&response=json"
       if($r -and $r.tables -and $r.tables[0].data){ foreach($d in $r.tables[0].data){
+        $cv=Num $d[6]; if($cv -eq $null){ continue }   # no-trade day ("--"): skip, never let close become 0
         $dp="$($d[0])".Split('/')
-        $serX += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); dt=("{0}{1:00}{2:00}" -f ([int]$dp[0]+1911),[int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double](Num $d[6]); chg=(Num $d[7]); v=[math]::Round([double](Num $d[1]),0) }
+        $rowsM += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); dt=("{0}{1:00}{2:00}" -f ([int]$dp[0]+1911),[int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double]$cv; chg=(Num $d[7]); v=[math]::Round([double](Num $d[1]),0) }
       } }
     } else {
       $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$code&response=json"
       if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
+        $cv=Num $d[6]; if($cv -eq $null){ continue }   # no-trade day ("--"): skip, never let close become 0
         $dp="$($d[0])".Split('/')
-        $serX += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); dt=("{0}{1:00}{2:00}" -f ([int]$dp[0]+1911),[int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double](Num $d[6]); chg=(Num $d[7]); v=[math]::Round([double](Num $d[1])/1000,0) }
+        $rowsM += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); dt=("{0}{1:00}{2:00}" -f ([int]$dp[0]+1911),[int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double]$cv; chg=(Num $d[7]); v=[math]::Round([double](Num $d[1])/1000,0) }
       } }
     }
+    if($ym -lt $curYM -and $rowsM.Count -gt 0){
+      try{ ConvertTo-Json -InputObject $rowsM -Depth 3 -Compress | Out-File $cf -Encoding UTF8 }catch{}
+    }
+    $serX += $rowsM
     Start-Sleep -Milliseconds 700
   }
   return ,$serX
@@ -48,7 +76,8 @@ function DivSumSince($rows,$sinceDt){
     if("$($rows[$k].dt)" -le "$sinceDt"){ continue }
     if($rows[$k].chg -ne $null -and $rows[$k].c -ne $null -and $rows[$k-1].c -ne $null){
       $dv=$rows[$k].chg-($rows[$k].c-$rows[$k-1].c)
-      if($dv -gt 0.005){ $s+=$dv }
+      # cap at 10% of prev close: bigger gaps are capital reductions / rights issues, not cash dividends
+      if($dv -gt 0.005 -and $rows[$k-1].c -gt 0 -and ($dv/$rows[$k-1].c) -le 0.10){ $s+=$dv }
     }
   }
   return $s
@@ -191,7 +220,7 @@ $curMM=$d0.ToString('yyyyMM01'); $prvMM=$d0.AddMonths(-1).ToString('yyyyMM01'); 
 foreach($s in $short){
   $c=$s.code
   $serF=GetDailySeries $c @($prv3MM,$prv2MM,$prvMM,$curMM)
-  if($serF.Count -lt 25){ continue }
+  if($serF.Count -lt 25){ Write-Host "  drop $c series too short ($($serF.Count) rows)"; continue }
   $ser=@($serF | ForEach-Object { $_.c })
   $cl=$ser[$ser.Count-1]
   $ma20=SMAlast $ser 20; $ma60=SMAlast $ser 60
@@ -241,8 +270,11 @@ foreach($s in $short){
   $spark=@(); $nS=[math]::Min(40,$ser.Count)
   foreach($v in $ser[($ser.Count-$nS)..($ser.Count-1)]){ $spark += [math]::Round($v,2) }
   $nK=[math]::Min(60,$serF.Count); $kline=StripDt @($serF[($serF.Count-$nK)..($serF.Count-1)])
+  # daily % from the snapshot alone (close & chg from the same endpoint; monthly series may lag a day)
+  $pxC=Num $px[$c].c; $pxChg=Num $px[$c].chg
+  $chgPct=$(if($pxC -ne $null -and $pxChg -ne $null -and ($pxC-$pxChg) -ne 0){ [math]::Round($pxChg/($pxC-$pxChg)*100,2) } else { 0 })
   $picks += [pscustomobject]@{
-    code=$c; name=$px[$c].name; ind=$ind; close=$cl; chgPct=[math]::Round((Num $px[$c].chg)/($cl-(Num $px[$c].chg))*100,2)
+    code=$c; name=$px[$c].name; ind=$ind; close=$cl; chgPct=$chgPct
     score=($s.chip+$tech+$fund); chip=$s.chip; tech=$tech; fund=$fund
     tPos=$s.tPos; fPos=$s.fPos; tSum=[math]::Round($s.tSum/1000,0); fSum=[math]::Round($s.fSum/1000,0)
     finDelta=$finDelta; yoy=$y; pe=$peV; dy=$dyV
@@ -288,7 +320,7 @@ $etfPicks=@()
 foreach($s in $eshort){
   $c=$s.code
   $serF=GetDailySeries $c @($prv3MM,$prv2MM,$prvMM,$curMM)
-  if($serF.Count -lt 25){ continue }
+  if($serF.Count -lt 25){ Write-Host "  drop ETF $c series too short ($($serF.Count) rows)"; continue }
   $ser=@($serF | ForEach-Object { $_.c })
   $cl=$ser[$ser.Count-1]
   $ma20=SMAlast $ser 20; $ma60=SMAlast $ser 60
@@ -313,8 +345,12 @@ foreach($s in $eshort){
   $spark=@(); $nS=[math]::Min(40,$ser.Count)
   foreach($v in $ser[($ser.Count-$nS)..($ser.Count-1)]){ $spark += [math]::Round($v,2) }
   $nK=[math]::Min(60,$serF.Count); $kline=StripDt @($serF[($serF.Count-$nK)..($serF.Count-1)])
+  # daily % from the snapshot alone (fallback to series if the ETF is missing from quotes)
+  $pxCE=$(if($px.ContainsKey($c)){ Num $px[$c].c }else{ $null }); $pxChgE=$(if($px.ContainsKey($c)){ Num $px[$c].chg }else{ $null })
+  $chgPctE=$(if($pxCE -ne $null -and $pxChgE -ne $null -and ($pxCE-$pxChgE) -ne 0){ [math]::Round($pxChgE/($pxCE-$pxChgE)*100,2) }
+             elseif($lastChg -ne $null -and ($cl-$lastChg) -ne 0){ [math]::Round($lastChg/($cl-$lastChg)*100,2) } else { 0 })
   $etfPicks += [pscustomobject]@{
-    code=$c; name=$nm; ind='ETF'; close=$cl; chgPct=[math]::Round($lastChg/($cl-$lastChg)*100,2)
+    code=$c; name=$nm; ind='ETF'; close=$cl; chgPct=$chgPctE
     score=($s.chip+$tech); chip=$s.chip; tech=$tech
     tPos=$s.tPos; fPos=$s.fPos; tSum=[math]::Round($s.tSum/1000,0); fSum=[math]::Round($s.fSum/1000,0)
     finDelta=$finDelta; ret5=[math]::Round($ret5*100,1); dist=[math]::Round($dist*100,1)
@@ -382,12 +418,22 @@ foreach($o in $norm){
     if($fArr.Count -ge 2 -and $fArr[$fArr.Count-1] -lt 0 -and $fArr[$fArr.Count-2] -lt 0){ $exitReason='外資連2日轉賣' }
   }
   if(-not $exitReason -and $hs.Count -ge 20){
-    $hcl=@($hs | ForEach-Object { $_.c })
-    $m20x=SMAlast $hcl 20
-    if($m20x -ne $null -and $cur -lt $m20x){ $exitReason='跌破月線' }
+    # MA rules on dividend-adjusted (total-return) closes: an ex-div gap-down is mechanical,
+    # not a technical break -- without this a fat dividend could fake a MA20/MA10 breach
+    $trS=@(); $cum=0.0
+    for($k2=0;$k2 -lt $hs.Count;$k2++){
+      if($k2 -gt 0 -and $hs[$k2].chg -ne $null -and $hs[$k2].c -ne $null -and $hs[$k2-1].c -ne $null){
+        $dv2=$hs[$k2].chg-($hs[$k2].c-$hs[$k2-1].c)
+        if($dv2 -gt 0.005 -and $hs[$k2-1].c -gt 0 -and ($dv2/$hs[$k2-1].c) -le 0.10){ $cum+=$dv2 }
+      }
+      $trS += ($hs[$k2].c+$cum)
+    }
+    $curTr=$cur+$cum
+    $m20x=SMAlast $trS 20
+    if($m20x -ne $null -and $curTr -lt $m20x){ $exitReason='跌破月線' }
     elseif($ret -ge 15){
-      $m10x=SMAlast $hcl 10
-      if($m10x -ne $null -and $cur -lt $m10x){ $exitReason='移動停利（獲利15%+回檔破10日線）' }
+      $m10x=SMAlast $trS 10
+      if($m10x -ne $null -and $curTr -lt $m10x){ $exitReason='移動停利（獲利15%+回檔破10日線）' }
     }
   }
   $lg3=$(if($o.ContainsKey('light')){$o.light}else{$null})

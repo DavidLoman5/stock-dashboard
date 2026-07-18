@@ -2,3 +2,5 @@
 screen-result.json
 # per-day panel cache for backtest.ps1 (rebuildable from TWSE, ~30MB)
 backtest-cache/
+# per-(code,month) completed-month kline cache for screen.ps1 (rebuildable from TWSE/TPEx)
+kline-cache/

@@ -46,8 +46,9 @@ foreach($c in $codes){
   foreach($mm in $months){
     $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$c&response=json"
     if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
+      $cv=Num $d[6]; if($cv -eq $null){ continue }   # no-trade day ("--"): skip, never let close become 0
       $p="$($d[0])".Split('/')
-      $serF += [ordered]@{ d=("{0}/{1}" -f [int]$p[1],[int]$p[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double](Num $d[6]); chg=(Num $d[7]); v=[math]::Round((Num $d[1])/1000,0) }
+      $serF += [ordered]@{ d=("{0}/{1}" -f [int]$p[1],[int]$p[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double]$cv; chg=(Num $d[7]); v=[math]::Round((Num $d[1])/1000,0) }
     } }
     Start-Sleep -Milliseconds 700
   }

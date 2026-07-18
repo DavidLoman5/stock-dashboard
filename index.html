@@ -304,6 +304,30 @@
   <div class="card perfbox" id="backtestBox"></div>
   <div class="card perfbox" id="evalBox" style="display:none"></div>
 
+  <!-- 現行邏輯說明卡：靜態內容、不被排程覆寫。慣例：改 screen.ps1 / adviseHolding 規則時必須同步更新此卡（見 CLAUDE.md） -->
+  <div class="card perfbox" id="logicCard">
+    <details>
+      <summary style="cursor:pointer;font-weight:700">📐 現行選股與評價邏輯（點開看全部規則）</summary>
+      <div style="margin-top:10px;line-height:1.8;font-size:13px">
+        <b>① 選股漏斗（每交易日自動執行）</b><br>
+        全市場（上市＋上櫃）→ 流動性過濾：日成交值 ≥ 1 億 → <b>籌碼閘門</b>：投信近 5 日中 ≥3 日買超且合計 &gt;30 萬股，<i>或</i> 外資 ≥4 日買超且合計 &gt;300 萬股 → 取籌碼分前 16 檔複審 → <b>技術複審剔除</b>：5 日漲幅 &gt;25%（過熱）／收盤跌破季線／高檔爆量收弱（出貨 K：距 40 日高 -3% 內、量 ≥20 日均量 2 倍、收盤位置弱或長上影）→ 依總分排序，<b>★Top5 寫入追蹤</b>（Top5 全為電子股時，以分差 ≤15 的最高分非電子股替換第 5 名）。<br><br>
+        <b>② 評分公式（100 分制）</b><br>
+        <b>籌碼 40</b>：投信買超天數 ×5（上限 25）＋外資買超天數 ×2（上限 10）＋融資餘額減少 +5。<br>
+        <b>技術 30</b>：站上月線 +10、站上季線 +8、月線上揚 +5、距 40 日高 -8% 內 +4、量增價揚（量 ≥1.5 倍均量）+4（成交值 &gt;3 億但量能普通 +2）、低檔長下影（支撐）+2、綠燈時 5 日漲 3~15%（動能）+3；高檔長上影帶量 −5；上限 30。<br>
+        <b>基本 30</b>：營收 YoY ≥100% +15／≥30% +12／≥10% +8／&gt;0 +4；PE ≤15 +10／≤25 +7／≤40 +4；殖利率 ≥3% +5；非綠燈時殖利率 ≥4% 再 +3、PE ≤15 再 +2（防禦加分）；上限 30。<br><br>
+        <b>③ 大盤紅綠燈</b><br>
+        三項各 1 分：指數 &gt; 月線／全市場法人淨買超／漲家數 &gt; 跌家數。3 分＝🟢 綠燈（積極）、2 分＝🟡 黃燈（中性）、其餘＝🔴 紅燈（防守）；<b>指數跌破季線一律紅燈</b>。綠燈時評分獎勵動能、非綠燈時獎勵防禦（見②）。<br><br>
+        <b>④ 追蹤出場規則（模擬、非下單指令）</b><br>
+        進場＝入選日收盤價；出場四擇一：<b>20 交易日到期</b>／<b>跌破月線</b>／<b>外資連 2 日轉賣</b>／<b>移動停利</b>（獲利 15%+ 回檔破 10 日線）。報酬含息（除息自動還原；月線判斷亦用含息序列，除息跳空不誤觸）。勝率＝出場報酬贏過同期大盤的比率。<br><br>
+        <b>⑤ ETF 動能榜（70 分制）</b><br>
+        籌碼閘門較寬（投信 ≥3 日且 &gt;20 萬股，或外資 ≥4 日且 &gt;100 萬股；成交值 ≥5000 萬）；只計籌碼 40＋技術 30（ETF 無 EPS/PE）；排除槓桿／反向／債券／期貨型（代碼尾碼 L/R/B/U）。<br><br>
+        <b>⑥ 持股判級（規則引擎，同數據永遠同結論）</b><br>
+        四訊號各 ±1：<b>技術</b>（站上上揚月線 +1／跌破季線 −1）、<b>籌碼</b>（外資 5 日淨買且最新日買 +1／淨賣且最新日賣 −1）、<b>融資×法人</b>（融資增 &gt;3% 且法人賣 −1／融資減 &gt;2% 且法人買 +1）、<b>量價</b>（高檔爆量收弱 −1／量增價揚 +1）。總分 ≥2 加碼觀察、≥0 續抱、−1 減碼觀察、≤−2 防守。<br><br>
+        <span style="color:var(--ink-faint);font-size:11.5px">版本 2026-07-18。規則以 screen.ps1 為準；任何規則改動會同步更新本卡與 plan.md。權重調整鐵律：backtest 走前驗證樣本外顯著優於現行＋空頭區不劣化才動手，每月最多一次。以上為資訊整理與研究參考，非投資建議。</span>
+      </div>
+    </details>
+  </div>
+
   <div class="disc">
     <b>免責聲明：</b>本報告由 AI 自動彙整公開新聞與證交所行情資料生成，屬<b>資訊整理與決策輔助</b>，<b>不構成投資建議、買賣要約或個股推介</b>。文中三面分析之「多方／空方／整理訊號」與操作傾向僅為情境說明，非下單指令；作者非持牌投資顧問。行情為最近交易日收盤（見頁首行情基準）；法人買賣超與融資融券單位為「張」，來源證交所（T86／MI_MARGN）；ETF 本身無 EPS／本益比，基本面以成分題材與產業景氣替代。實際交易前請以券商即時報價為準，自行評估風險並為自身決策負責。投資有風險，過往績效不代表未來表現。
   </div>
@@ -364,7 +388,8 @@ window.META={generated:'2026/07/18',lastTrade:'2026-07-17'};
  let tv=0;
  H.forEach(h=>{
   const s=DASH[h.code].series,l=s[s.length-1];
-  h.price=l.c; h.chg=l.chg; h.pct=+((l.chg/(l.c-l.chg))*100).toFixed(2);
+  const lchg=l.chg==null?0:l.chg; /* 停牌日 chg=null 防 NaN 傳染整頁 */
+  h.price=l.c; h.chg=lchg; h.pct=+((lchg/(l.c-lchg))*100).toFixed(2);
   const cl=s.map(x=>x.c); const hi=Math.max(...cl.slice(-Math.min(40,cl.length)));
   h.dd=+(((l.c/hi)-1)*100).toFixed(1);
   h.mv=l.c*SHARES[h.code]; tv+=h.mv;
@@ -451,7 +476,8 @@ function buildEquity(){
  const maps={},cumDiv={};
  H.forEach(h=>{const s=DASH[h.code].series,m={},cd={};let cum=0;
   for(let i=0;i<s.length;i++){
-   if(i>0&&s[i].chg!=null&&s[i].c!=null&&s[i-1].c!=null){const dv=s[i].chg-(s[i].c-s[i-1].c);if(dv>0.005)cum+=dv;}
+   /* dv>10% 前收＝減資/除權等參考價調整、非現金股息，不還原 */
+   if(i>0&&s[i].chg!=null&&s[i].c!=null&&s[i-1].c!=null){const dv=s[i].chg-(s[i].c-s[i-1].c);if(dv>0.005&&s[i-1].c>0&&dv/s[i-1].c<=0.10)cum+=dv;}
    m[s[i].d]=s[i].c;cd[s[i].d]=cum;}
   maps[h.code]=m;cumDiv[h.code]=cd;});
  const tmap={};DASH.TAIEX.forEach(d=>tmap[d.d]=d.c);
@@ -518,7 +544,7 @@ function buildSignals(){
  const tcl=DASH.TAIEX.map(d=>d.c);
  [[20,'月線'],[60,'季線']].forEach(([n,l])=>{const s=cross('加權指數',tcl,n,l);if(s)out.push(s);});
  H.forEach(h=>{
-  const d=DASH[h.code],cl=d.series.map(x=>x.c),nm=`${h.code} ${h.name}`;
+  const d=DASH[h.code],cl=d.series.map(x=>x.c),nm=`${h.code} ${esc(h.name)}`;
   [[20,'月線'],[60,'季線']].forEach(([n,l])=>{const s=cross(nm,cl,n,l);if(s)out.push(s);});
   const ins=d.inst;
   if(ins&&ins.length>=2){
@@ -537,13 +563,14 @@ function buildSignals(){
    const m2=h.divNote.match(/(\d+)\/(\d+)/);
    if(m2){const base=new Date(META.generated.replace(/\//g,'-'));
     const ex=new Date(base.getFullYear(),+m2[1]-1,+m2[2]);
+    if(base-ex>180*86400000)ex.setFullYear(ex.getFullYear()+1); /* 12月看到1月除息＝明年，非過去 */
     const dd2=Math.round((ex-base)/86400000);
     if(dd2===0)out.push({k:'info',t:`${nm} 今日除息——當日跌幅含配息因素，非真跌`});
     else if(dd2>0&&dd2<=5)out.push({k:'info',t:`${nm} ${dd2} 天後除息（${m2[1]}/${m2[2]}）——除息日跳空屬機械性，勿誤判為利空`});}
   }
  });
  let top=null;H.forEach(h=>{const c=h.chg*SHARES[h.code];if(!top||Math.abs(c)>Math.abs(top.c))top={h,c};});
- if(top&&top.c!==0)out.push({k:'info',t:`最近交易日損益主要來自 ${top.h.code} ${top.h.name}（${fmtSignI(Math.round(top.c))} 元）`});
+ if(top&&top.c!==0)out.push({k:'info',t:`最近交易日損益主要來自 ${top.h.code} ${esc(top.h.name)}（${fmtSignI(Math.round(top.c))} 元）`});
  const icon={bull:'▲ 多',bear:'▼ 空',info:'ℹ 提醒'};
  box.innerHTML=out.length?out.map(s=>`<div class="sg"><span class="tag ${s.k}">${icon[s.k]}</span><span>${s.t}</span></div>`).join(''):
   '<div class="sg"><span class="tag info">✓</span><span>今日無特別訊號（無均線穿越、法人轉向或融資急變）</span></div>';
@@ -552,7 +579,7 @@ function buildSignals(){
 /* ---------- allocation ---------- */
 (function(){const bar=document.getElementById('allocBar'),leg=document.getElementById('legend');
  H.forEach(h=>{const s=document.createElement('span');s.style.width=h.weight+'%';s.style.background=h.color;s.title=h.code;bar.appendChild(s);
-  const li=document.createElement('div');li.className='li';li.innerHTML=`<span class="sw" style="background:${h.color}"></span><span class="nm">${h.code} ${h.name}</span><span class="pc num">${h.weight}%</span>`;leg.appendChild(li);});})();
+  const li=document.createElement('div');li.className='li';li.innerHTML=`<span class="sw" style="background:${h.color}"></span><span class="nm">${h.code} ${esc(h.name)}</span><span class="pc num">${h.weight}%</span>`;leg.appendChild(li);});})();
 
 /* ---------- cards ---------- */
 function plColor(v){return v>0?'up-txt':v<0?'down-txt':'';}
@@ -560,8 +587,8 @@ function plColor(v){return v>0?'up-txt':v<0?'down-txt':'';}
  H.forEach((h,i)=>{const up=h.chg>=0;const el=document.createElement('div');
   el.className='h-card';el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',h.name+' 詳細分析');
   el.innerHTML=`<div class="h-accent" style="background:${h.color}"></div><div class="h-body">
-    <div class="h-head"><div><div class="h-name">${h.name} <span class="code">${h.code}</span></div>
-    <div class="h-tag">${h.type} · ${h.theme} · ${h.lots} 張${h.divNote?` · <span class="divchip">💰${h.divNote}</span>`:''}</div></div>
+    <div class="h-head"><div><div class="h-name">${esc(h.name)} <span class="code">${h.code}</span></div>
+    <div class="h-tag">${esc(h.type)} · ${esc(h.theme)} · ${h.lots} 張${h.divNote?` · <span class="divchip">💰${esc(h.divNote)}</span>`:''}</div></div>
     <div class="h-price"><div class="p num ${up?'up-txt':'down-txt'}">${h.price.toFixed(2)}</div>
     <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(h.chg).toFixed(2)}　${fmtSign(h.pct)}%</div></div></div>
     <canvas class="spark" data-i="${i}"></canvas>
@@ -669,8 +696,8 @@ function openModal(i){
   const costs=getCosts();const cv=costs[h.code]||'';
   document.getElementById('mAccent').style.background=h.color;
   document.getElementById('mContent').innerHTML=`
-    <div class="m-head"><div><div class="m-title" id="mTitle">${h.name} <span class="code">${h.code}</span></div>
-    <div class="m-tag">${h.type} · ${h.theme} · 持有 ${h.lots} 張 · 權重 ${h.weight}%${h.divNote?` · <span class="divchip">💰${h.divNote}</span>`:''}</div></div>
+    <div class="m-head"><div><div class="m-title" id="mTitle">${esc(h.name)} <span class="code">${h.code}</span></div>
+    <div class="m-tag">${esc(h.type)} · ${esc(h.theme)} · 持有 ${h.lots} 張 · 權重 ${h.weight}%${h.divNote?` · <span class="divchip">💰${esc(h.divNote)}</span>`:''}</div></div>
     <div class="m-price"><div class="p num ${up?'up-txt':'down-txt'}">${h.price.toFixed(2)}</div>
     <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(h.chg).toFixed(2)}　${fmtSign(h.pct)}% · 距高 ${fmtSign(h.dd,1)}%</div></div></div>
 
@@ -744,8 +771,8 @@ function openPickModal(p,backInd){
  const first=ser[0].d,last=ser[ser.length-1].d;
  document.getElementById('mAccent').style.background=cssv('--accent');
  document.getElementById('mContent').innerHTML=`
-  <div class="m-head"><div><div class="m-title" id="mTitle">${p.name} <span class="code">${p.code}</span>${p.owned?'<span class="ownedchip">已持有</span>':''}</div>
-  <div class="m-tag">${backInd?`<button class="machip" id="backCat" style="margin-right:8px">‹ 返回 ${backInd}</button>`:''}量化選股 · ${p.ind} · 綜合評分 ${p.score}/${p.fund!=null?100:70}（籌 ${p.chip}／技 ${p.tech}${p.fund!=null?'／基 '+p.fund:''}）</div></div>
+  <div class="m-head"><div><div class="m-title" id="mTitle">${esc(p.name)} <span class="code">${p.code}</span>${p.owned?'<span class="ownedchip">已持有</span>':''}</div>
+  <div class="m-tag">${backInd?`<button class="machip" id="backCat" style="margin-right:8px">‹ 返回 ${esc(backInd)}</button>`:''}量化選股 · ${esc(p.ind)} · 綜合評分 ${p.score}/${p.fund!=null?100:70}（籌 ${p.chip}／技 ${p.tech}${p.fund!=null?'／基 '+p.fund:''}）</div></div>
   <div class="m-price"><div class="p num ${up?'up-txt':'down-txt'}">${p.close}</div>
   <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(cp).toFixed(2)}%${dist!=null?` · 距高 ${fmtSign(dist,1)}%`:''}</div></div></div>
   <div class="mlabel">技術走勢 · 近 ${ser.length} 個交易日</div>
@@ -817,8 +844,8 @@ let CATS={};
  const cw=document.getElementById('catsWrap');
  catList.forEach(c=>{
   const el=document.createElement('div');el.className='cat';el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',c.ind+' 入選個股');
-  const names=c.arr.slice(0,4).map(p=>`${p.name}${p.top?'<span class="star">★</span>':''}`).join('、')+(c.arr.length>4?'…':'');
-  el.innerHTML=`<div class="cat-top"><span class="cat-name">${c.ind}</span><span class="cat-score num">${c.top}<small> 最高分</small></span></div>
+  const names=c.arr.slice(0,4).map(p=>`${esc(p.name)}${p.top?'<span class="star">★</span>':''}`).join('、')+(c.arr.length>4?'…':'');
+  el.innerHTML=`<div class="cat-top"><span class="cat-name">${esc(c.ind)}</span><span class="cat-score num">${c.top}<small> 最高分</small></span></div>
    <div class="cat-n">${c.arr.length} 檔入選</div>
    <div class="cat-names">${names}</div>
    <div class="cat-more"><span class="h-more">看個股 ›</span></div>`;
@@ -830,7 +857,7 @@ let CATS={};
  const bar=(lbl,v,max,col)=>`<div class="pk-bar"><span>${lbl}</span><span class="tr"><span class="fl" style="width:${Math.round(v/max*100)}%;background:${col}"></span></span><span class="num">${v}/${max}</span></div>`;
  (PM.etf||[]).forEach(p=>{
   const el=document.createElement('div');el.className='pk';el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',p.name+' 完整 K 線');
-  el.innerHTML=`<div class="pk-top"><span class="pk-name">${p.name}<span class="code">${p.code}</span></span><span class="pk-score">${p.score}<small>/70</small></span></div>
+  el.innerHTML=`<div class="pk-top"><span class="pk-name">${esc(p.name)}<span class="code">${p.code}</span></span><span class="pk-score">${p.score}<small>/70</small></span></div>
    <div class="pk-ind">ETF · 收 <span class="num">${p.close}</span><span class="pill ${p.score>=45?'up':'hold'}" style="font-size:10px;padding:1px 8px">${p.score>=45?'動能強':p.score>=35?'中性偏多':'觀察'}</span>${p.owned?'<span class="ownedchip">已持有</span>':''}</div>
    <canvas class="pkspark"></canvas>
    <div class="pk-bars">${bar('籌碼',p.chip,40,'var(--ma5)')}${bar('技術',p.tech,30,'var(--ma20)')}</div>
@@ -860,7 +887,7 @@ let CATS={};
  }
  const rows=PM.perfRows||[];
  if(rows.length>0){
-  const tr=rows.map(r=>`<tr><td>${String(r.date).replace(/^(\d{4})(\d{2})(\d{2})$/,'$2/$3')}</td><td>${r.name} <span style="color:var(--ink-faint)">${r.code}</span></td><td class="num">${r.entry}</td><td class="num">${r.cur}</td><td class="num ${r.ret>=0?'up-txt':'down-txt'}">${fmtSign(r.ret)}%</td><td class="num ${r.alpha==null?'':(r.alpha>=0?'up-txt':'down-txt')}">${r.alpha==null?'—':fmtSign(r.alpha)+'%'}</td><td class="num">${r.days}</td><td>${r.status==='closed'?('已結案·'+(r.reason||'20日到期')):'持有中'}</td></tr>`).join('');
+  const tr=rows.map(r=>`<tr><td>${String(r.date).replace(/^(\d{4})(\d{2})(\d{2})$/,'$2/$3')}</td><td>${esc(r.name)} <span style="color:var(--ink-faint)">${r.code}</span></td><td class="num">${r.entry}</td><td class="num">${r.cur}</td><td class="num ${r.ret>=0?'up-txt':'down-txt'}">${fmtSign(r.ret)}%</td><td class="num ${r.alpha==null?'':(r.alpha>=0?'up-txt':'down-txt')}">${r.alpha==null?'—':fmtSign(r.alpha)+'%'}</td><td class="num">${r.days}</td><td>${r.status==='closed'?('已結案·'+esc(r.reason||'20日到期')):'持有中'}</td></tr>`).join('');
   html+=`<details><summary>每筆明細（${rows.length}）</summary><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>進場日</th><th style="text-align:left">股票</th><th>進場價</th><th>現價/出場</th><th>報酬</th><th>超額</th><th>天數</th><th>狀態</th></tr></thead><tbody>${tr}</tbody></table></div></details>`;
  }
  pb.innerHTML=html;
@@ -871,11 +898,11 @@ function openCatModal(ind){
  curSeries=null;curCode=null;hoverIdx=null;
  document.getElementById('mAccent').style.background=cssv('--accent');
  document.getElementById('mContent').innerHTML=`
-  <div class="m-head"><div><div class="m-title" id="mTitle">${ind}</div>
+  <div class="m-head"><div><div class="m-title" id="mTitle">${esc(ind)}</div>
   <div class="m-tag">量化入選 ${arr.length} 檔 · 依綜合評分排序 · 點個股看完整 K 線</div></div></div>
   <div style="margin-top:12px">${arr.map(p=>`
    <div class="crow" data-code="${p.code}" tabindex="0" role="button">
-    <span class="cn">${p.name}<span class="code">${p.code}</span>${p.top?'<span class="star">★TOP5</span>':''}</span>
+    <span class="cn">${esc(p.name)}<span class="code">${p.code}</span>${p.top?'<span class="star">★TOP5</span>':''}</span>
     <span class="cs num">${p.score}<small style="color:var(--ink-faint);font-weight:600">/100</small></span>
     <span class="cev">收 ${p.close}（${fmtSign(p.chgPct==null?0:p.chgPct)}%）・${evOf(p)}</span>
    </div>`).join('')}</div>
@@ -933,7 +960,7 @@ function buildEval(){
 }
 function boot(){renderAll();updatePL();fillTop();buildSignals();buildBacktest();buildConc();buildEval();}
 if(window.DASH)boot();else addEventListener('load',boot);
-window.addEventListener('resize',renderAll);
+let __rzT;window.addEventListener('resize',()=>{clearTimeout(__rzT);__rzT=setTimeout(renderAll,150);}); /* 防抖：手機捲動時網址列伸縮不連環重繪 */
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',renderAll);
 new MutationObserver(renderAll).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 </script>
