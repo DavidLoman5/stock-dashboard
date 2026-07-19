@@ -27,6 +27,7 @@
 ## 測試與部署
 - 本機測試：`python -m http.server 8000` 開 `http://localhost:8000`
 - 引擎測試：`powershell -ExecutionPolicy Bypass -File screen.ps1`
+- **迴歸測試（改任何腳本後、commit 前必跑）**：`powershell -ExecutionPolicy Bypass -File tests.ps1`（離線、秒級）
 - 部署：commit 後**由使用者** push 到 `main`（只有他有推送權限）→ 隔天排程沿用程式邏輯改動
 
 ## 定位

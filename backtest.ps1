@@ -1,8 +1,12 @@
-# backtest.ps1 v2 - walk-forward grid backtest (research tool; run manually, ~monthly)
+# backtest.ps1 v2.1 - walk-forward grid backtest (research tool; run manually, ~monthly)
 # Grid: 6 ranking weights (chip vs tech mix) x 3 exit rules (hold20 / ma20 stop / production exits).
 # Walk-forward: first 60% of eval days = in-sample (optimize), last 40% = out-of-sample (validate).
 # Only adopt parameter changes that hold up out-of-sample; log every change in plan.md.
-# Notes: TWSE-only replay (no OTC daily panels); fund factor not replayable; overlapping windows.
+# v2.1 aligned to production screening: T86 gate >=4/5 days, below-MA60 drop, techS includes
+# MA60 +8 (max 27/30), 40-day high, ma20p window ending 5 bars back, evalLo=60.
+# v2.1 results are NOT comparable to the 2026-07-18 v2 first run - re-run supersedes it.
+# Notes: TWSE-only replay (no OTC daily panels); fund factor and volume/candle factors not
+# replayable (panel cache stores close+value only); overlapping windows.
 # Daily panels are cached under backtest-cache/ (gitignored) so re-runs only fetch new dates.
 # ASCII source only.
 $ErrorActionPreference='Continue'
@@ -19,7 +23,7 @@ function GetJson($url){
   return $null
 }
 
-$PANEL=200   # panel days kept (=> ~156 eval days after 24-day lookback + 20-day forward)
+$PANEL=200   # panel days kept (=> ~120 eval days after 60-day lookback + 20-day forward)
 
 Write-Host "[1/4] trade dates + index closes (FMTQIK 11 months)..."
 $months=@(); $now=Get-Date
@@ -106,7 +110,7 @@ $rankCfgs=@(
 $exitKeys=@('hold20','stop','prod')
 $results=@{}
 foreach($rc in $rankCfgs){ foreach($ek in $exitKeys){ $results["$($rc.key)|$ek"]=New-Object System.Collections.ArrayList } }
-$evalLo=24; $evalHi=$N-21
+$evalLo=60; $evalHi=$N-21   # 60-day lookback so every eval day has full MA60 history (consistency with prod)
 $splitI=$evalLo+[math]::Floor(($evalHi-$evalLo)*0.6)
 $splitDate=$dates[$splitI]
 Write-Host "  eval days $($evalHi-$evalLo+1), in-sample until $splitDate"
@@ -118,9 +122,9 @@ for($i=$evalLo; $i -le $evalHi; $i++){
   foreach($code in $tm.Keys){
     if(-not $pxm.ContainsKey($code)){ continue }
     if($pxm[$code].val -lt 1e8){ continue }
-    $tArr=@(); $fArr=@(); $okWin=$true
-    for($k=$i-4;$k -le $i;$k++){ $w=$t86Day[$dates[$k]]; if($w.ContainsKey($code)){ $tArr+=$w[$code].t; $fArr+=$w[$code].f } else { $okWin=$false; break } }
-    if(-not $okWin -or $tArr.Count -lt 5){ continue }
+    $tArr=@(); $fArr=@()
+    for($k=$i-4;$k -le $i;$k++){ $w=$t86Day[$dates[$k]]; if($w.ContainsKey($code)){ $tArr+=$w[$code].t; $fArr+=$w[$code].f } }
+    if($tArr.Count -lt 4){ continue }   # production gate: >=4 of the 5-day window (was 5/5, stricter than prod)
     $tPos=($tArr|Where-Object{$_ -gt 0}).Count; $fPos=($fArr|Where-Object{$_ -gt 0}).Count
     $tSum=($tArr|Measure-Object -Sum).Sum; $fSum=($fArr|Measure-Object -Sum).Sum
     $gate=$false
@@ -129,16 +133,24 @@ for($i=$evalLo; $i -le $evalHi; $i++){
     if(-not $gate){ continue }
     $chipS=[math]::Min(25,$tPos*5)+[math]::Min(10,$fPos*2)
     $cl=CloseAt $code $i; if($cl -eq $null){ continue }
+    # 60-day history: last 25 days must be complete (MA20/slope/ret5 exact); older gaps tolerated (MA60 null like prod)
     $hist=@(); $miss=$false
-    for($k=$i-23;$k -le $i;$k++){ $v=CloseAt $code $k; if($v -eq $null){ $miss=$true; break }; $hist+=$v }
-    if($miss){ continue }
+    for($k=$i-59;$k -le $i;$k++){
+      $v=CloseAt $code $k
+      if($v -eq $null){ if($k -gt $i-25){ $miss=$true; break }; continue }
+      $hist+=$v
+    }
+    if($miss -or $hist.Count -lt 25){ continue }
     $ma20=($hist[($hist.Count-20)..($hist.Count-1)]|Measure-Object -Average).Average
-    $ma20p=($hist[($hist.Count-24)..($hist.Count-5)]|Measure-Object -Average).Average
+    $ma20p=($hist[($hist.Count-25)..($hist.Count-6)]|Measure-Object -Average).Average   # prod: 20d MA ending 5 bars back
     $ret5=$cl/$hist[$hist.Count-6]-1
     if($ret5 -gt 0.25){ continue }
-    $hi=($hist|Measure-Object -Maximum).Maximum
+    $ma60=$(if($hist.Count -ge 60){ ($hist[($hist.Count-60)..($hist.Count-1)]|Measure-Object -Average).Average } else { $null })
+    if($ma60 -ne $null -and $cl -lt $ma60){ continue }   # prod filter: below MA60 -> drop
+    $n40=[math]::Min(40,$hist.Count); $hi=($hist[($hist.Count-$n40)..($hist.Count-1)]|Measure-Object -Maximum).Maximum   # prod: 40-day high
     $techS=0
     if($cl -gt $ma20){ $techS+=10 }
+    if($ma60 -ne $null -and $cl -gt $ma60){ $techS+=8 }   # prod: above MA60 +8 (was missing)
     if($ma20 -gt $ma20p){ $techS+=5 }
     if($cl/$hi-1 -ge -0.08){ $techS+=4 }
     $scored += [pscustomobject]@{ code=$code; chip=$chipS; tech=$techS; tSum=$tSum }

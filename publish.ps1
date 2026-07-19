@@ -18,23 +18,34 @@ function Splice([string]$html,[string]$marker,[string]$payload){
 
 # guard: never splice yesterday's notes (e.g. today's Write step failed but old file remains)
 function IsFresh($path){ ((Get-Date) - (Get-Item $path).LastWriteTime).TotalHours -le 15 }
+# a broken notes file must not abort the whole publish (engine data is still fresh) - retry then skip
+function ReadJsonRetry($path){
+  for($i=0;$i -lt 3;$i++){
+    try{ return (Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json) }catch{ Start-Sleep -Milliseconds 1500 }
+  }
+  return $null
+}
 
 $hnPath = Join-Path $root 'holdings-notes.json'
 if((Test-Path $hnPath) -and -not (IsFresh $hnPath)){
   Write-Host "holdings-notes.json older than 15h - stale, skipping splice"
 } elseif(Test-Path $hnPath){
-  $hn = Get-Content $hnPath -Raw -Encoding UTF8 | ConvertFrom-Json
-  $html = Splice $html 'holdingsnotes' ('window.HOLDINGS_NOTES='+($hn | ConvertTo-Json -Depth 5 -Compress)+';')
-  Write-Host "spliced holdings-notes.json -> window.HOLDINGS_NOTES"
+  $hn = ReadJsonRetry $hnPath
+  if($null -ne $hn){
+    $html = Splice $html 'holdingsnotes' ('window.HOLDINGS_NOTES='+($hn | ConvertTo-Json -Depth 5 -Compress)+';')
+    Write-Host "spliced holdings-notes.json -> window.HOLDINGS_NOTES"
+  } else { Write-Host "WARN: holdings-notes.json unreadable after retries - skipping this splice, publish continues" }
 } else { Write-Host "no holdings-notes.json found - skipping (holdings text stays as-is)" }
 
 $pnPath = Join-Path $root 'picks-notes.json'
 if((Test-Path $pnPath) -and -not (IsFresh $pnPath)){
   Write-Host "picks-notes.json older than 15h - stale, skipping splice"
 } elseif(Test-Path $pnPath){
-  $pn = Get-Content $pnPath -Raw -Encoding UTF8 | ConvertFrom-Json
-  $html = Splice $html 'pknotes' ('window.PICKS_NOTES='+($pn | ConvertTo-Json -Depth 4 -Compress)+';')
-  Write-Host "spliced picks-notes.json -> window.PICKS_NOTES"
+  $pn = ReadJsonRetry $pnPath
+  if($null -ne $pn){
+    $html = Splice $html 'pknotes' ('window.PICKS_NOTES='+($pn | ConvertTo-Json -Depth 4 -Compress)+';')
+    Write-Host "spliced picks-notes.json -> window.PICKS_NOTES"
+  } else { Write-Host "WARN: picks-notes.json unreadable after retries - skipping this splice, publish continues" }
 } else { Write-Host "no picks-notes.json found - skipping (pick notes stay as-is)" }
 
 [IO.File]::WriteAllText($idxPath, $html, $enc)

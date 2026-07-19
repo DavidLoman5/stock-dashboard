@@ -49,15 +49,41 @@ $lastDate = $tradeDates[$tradeDates.Count-1]
 Write-Host "  latest trade date = $lastDate ($($tx.Count) TAIEX rows)"
 
 $otcCodes=@{}
+# completed months never change -> disk-cached like screen.ps1, but with an "h-" prefix:
+# row schema differs (no dt field here), sharing files with screen's cache would silently
+# break its DivSumSince/stale checks
+$klineCache=Join-Path $root 'kline-cache'
+if(-not (Test-Path $klineCache)){ New-Item -ItemType Directory -Path $klineCache | Out-Null }
+$curYM=(Get-Date).ToString('yyyyMM')
 foreach($c in $codes){
   $serF=@()
   foreach($mm in $months){
+    $ym=$mm.Substring(0,6)
+    $cf=Join-Path $klineCache "h-$c-$ym.json"
+    if($ym -lt $curYM -and (Test-Path $cf)){
+      try{
+        $hit=@()
+        # PS5.1: ConvertFrom-Json emits a JSON array as ONE Object[] item - assign first, then enumerate
+        $cached=Get-Content $cf -Raw -Encoding UTF8 | ConvertFrom-Json
+        foreach($row in @($cached)){
+          if($null -eq $row){ continue }
+          $o=[ordered]@{}; foreach($pr in $row.PSObject.Properties){ $o[$pr.Name]=$pr.Value }
+          $hit += ,$o
+        }
+        if($hit.Count -ge 5){ $serF += $hit; continue }
+      }catch{}
+    }
+    $rowsM=@()
     $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$c&response=json"
     if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
       $cv=Num $d[6]; if($cv -eq $null){ continue }   # no-trade day ("--"): skip, never let close become 0
       $p="$($d[0])".Split('/')
-      $serF += [ordered]@{ d=("{0}/{1}" -f [int]$p[1],[int]$p[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double]$cv; chg=(Num $d[7]); v=[math]::Round((Num $d[1])/1000,0) }
+      $rowsM += [ordered]@{ d=("{0}/{1}" -f [int]$p[1],[int]$p[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double]$cv; chg=(Num $d[7]); v=[math]::Round((Num $d[1])/1000,0) }
     } }
+    if($ym -lt $curYM -and $rowsM.Count -gt 0){
+      try{ ConvertTo-Json -InputObject $rowsM -Depth 3 -Compress | Out-File $cf -Encoding UTF8 }catch{}
+    }
+    $serF += $rowsM
     Start-Sleep -Milliseconds 700
   }
   if($serF.Count -eq 0){
