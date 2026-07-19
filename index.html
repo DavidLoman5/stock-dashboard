@@ -1,4 +1,5 @@
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex, nofollow">
 <title>台股投資報告</title>
 <style>
@@ -237,7 +238,7 @@
   <header>
     <h1>台股投資報告</h1>
     <div class="subhead">
-      <span>報告日期：<b>2026/07/18</b></span>
+      <span>報告日期：<b>2026/07/19</b></span>
       <span>行情基準：<b id="baseDate">—</b></span>
       <span>新聞範圍：<b>近 24 小時</b></span>
     </div>
@@ -250,7 +251,8 @@
     <div><div class="k">最近交易日損益</div><div class="v2 num" id="heroDay">—</div><div class="sub num" id="heroDayPct"></div></div>
     <div><div class="k">未實現損益（依成本）</div><div class="v2 num" id="pfPL">—</div><div class="sub num" id="pfPLpct" style="color:var(--ink-faint)">點個股輸入成本價</div></div>
     <div class="stance-wrap">
-      <span class="pill down"><span class="dot"></span>整體傾向：全數觸發防守 · 系統性重挫、紀律優先於恐慌</span>
+      <!-- heroStance：頁面載入後由 fillTop() 依規則引擎判級自動覆寫，此處文字僅為 JS 失敗時的 fallback -->
+      <span class="pill down" id="heroStance"><span class="dot"></span>整體傾向：全數觸發防守 · 系統性重挫、紀律優先於恐慌</span>
       <span class="note">單位 NT$；成本價存在本機瀏覽器，每日更新不會清除</span>
     </div>
   </div>
@@ -383,7 +385,7 @@ const H=Object.keys(window.HOLDINGS_META||{}).map((code,pi)=>{
 const HByCode={};H.forEach(h=>HByCode[h.code]=h);
 
 /* ---------- single source of truth: derive all numbers from official DASH data ---------- */
-window.META={generated:'2026/07/18',lastTrade:'2026-07-17'};
+window.META={generated:'2026/07/19',lastTrade:'2026-07-17'};
 (function hydrate(){
  let tv=0;
  H.forEach(h=>{
@@ -457,6 +459,23 @@ function fillTop(){
  const bd=document.getElementById('baseDate'); if(bd) bd.textContent=META.lastTrade.replace(/-/g,'/')+' 收盤（證交所）';
  const diff=(Date.now()-new Date(META.lastTrade+'T14:00:00+08:00').getTime())/86400000;
  if(diff>5) document.getElementById('staleWarn').hidden=false;
+ /* 整體傾向：由規則引擎判級自動統計（永不與逐檔判級漂移）；HTML 內文字僅為 fallback */
+ const hsEl=document.getElementById('heroStance');
+ if(hsEl){
+  const NM={down:'防守',trim:'減碼觀察',hold:'續抱',up:'加碼觀察'};
+  const cnt={down:0,trim:0,hold:0,up:0};
+  H.forEach(h=>{if(!h.auto)return;const k=h.auto.lv[0],t=h.auto.lv[1];
+   cnt[k==='down'?'down':k==='up'?'up':(t==='減碼觀察'?'trim':'hold')]++;});
+  const tot=cnt.down+cnt.trim+cnt.hold+cnt.up;
+  if(tot>0){
+   const txt=['down','trim','hold','up'].filter(k=>cnt[k]>0).map(k=>`${NM[k]} ${cnt[k]} 檔`).join('・');
+   const c3={down:cnt.down,hold:cnt.trim+cnt.hold,up:cnt.up};
+   let cls='hold';
+   if(c3.down>c3.hold&&c3.down>c3.up)cls='down';else if(c3.up>c3.hold&&c3.up>c3.down)cls='up';
+   hsEl.className='pill '+cls;
+   hsEl.innerHTML=`<span class="dot"></span>整體傾向（規則引擎）：${txt}`;
+  }
+ }
 }
 /* ---------- one-shot cost panel ---------- */
 function buildCostPanel(){

@@ -25,7 +25,18 @@ function Bucket($rows,$prop,$cuts,$labels){
   return $b
 }
 
-$lg = Get-Content (Join-Path $root 'picks-log.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+# OneDrive can transiently lock/garble reads; a null read here would splice a false closedN=0 report
+function ReadJsonRetry($path){
+  for($i=0;$i -lt 3;$i++){
+    try{ return (Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json) }catch{ Start-Sleep -Milliseconds 1500 }
+  }
+  return $null
+}
+$lg = ReadJsonRetry (Join-Path $root 'picks-log.json')
+if($null -eq $lg -or -not $lg.PSObject.Properties['picks']){
+  Write-Host 'FATAL: picks-log.json unreadable - aborting (would otherwise emit an empty/false report)'
+  exit 1
+}
 $closed=@($lg.picks | Where-Object { $_.status -eq 'closed' })
 Write-Host "closed picks: $($closed.Count)"
 

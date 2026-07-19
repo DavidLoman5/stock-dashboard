@@ -19,6 +19,11 @@ function StripK($obj){ $o=[ordered]@{}; foreach($pr in $obj.PSObject.Properties)
 # completed months never change -> disk-cached under kline-cache/ (gitignored); current month always fetched live
 $klineCache = Join-Path $root 'kline-cache'
 if(-not (Test-Path $klineCache)){ New-Item -ItemType Directory -Path $klineCache | Out-Null }
+# prune cache months older than the 4-month window the engine ever reads (codes rotate daily; unbounded otherwise)
+try{
+  $pruneYM=(Get-Date).AddMonths(-5).ToString('yyyyMM')
+  Get-ChildItem $klineCache -Filter '*.json' | Where-Object { $_.Name -match '-(\d{6})\.json$' -and $Matches[1] -lt $pruneYM } | Remove-Item -Force
+}catch{}
 function GetDailySeries($code,$mms){
   $serX=@()
   $isO = ($mkt.ContainsKey($code) -and $mkt[$code] -eq 'o')
@@ -176,9 +181,19 @@ if($r){ foreach($row in $r){ $c="$($row.Code)".Trim(); $pe[$c]=@{ pe=(Num $row.P
 $r=GetJson "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_peratio_analysis"
 if($r){ foreach($row in $r){ $c="$($row.SecuritiesCompanyCode)".Trim(); if(-not $pe.ContainsKey($c)){ $pe[$c]=@{ pe=(Num $row.PriceEarningRatio); pb=(Num $row.PriceBookRatio); dy=(Num $row.YieldRatio) } } } }
 $rev=@{}
+# positional-index guard: these two endpoints are parsed by column position; warn loudly if the layout ever shifts
+function CheckRevCols($rows,$label){
+  if(-not $rows -or @($rows).Count -eq 0){ return }
+  $p0=@(@($rows)[0].PSObject.Properties)
+  if($p0.Count -le 9 -or "$($p0[2].Name)" -notlike '*代號*' -or "$($p0[9].Name)" -notlike '*增減*'){
+    Write-Host "  WARN: $label column layout changed (col2=$($p0[2].Name) col9=$($p0[9].Name)) - yoy/ind may be wrong, review parser"
+  }
+}
 $r=GetJson "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
+CheckRevCols $r 't187ap05_L'
 if($r){ foreach($row in $r){ $p=@($row.PSObject.Properties); $c="$($p[2].Value)".Trim(); $rev[$c]=@{ ind="$($p[4].Value)".Trim(); yoy=(Num $p[9].Value); name="$($p[3].Value)".Trim() } } }
 $r=GetJson "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O"
+CheckRevCols $r 'mopsfin_t187ap05_O'
 if($r){ foreach($row in $r){ $p=@($row.PSObject.Properties); $c="$($p[2].Value)".Trim(); if(-not $rev.ContainsKey($c)){ $rev[$c]=@{ ind="$($p[4].Value)".Trim(); yoy=(Num $p[9].Value); name="$($p[3].Value)".Trim() } } } }
 Write-Host "  pe=$($pe.Count) rev=$($rev.Count) (TWSE+TPEx)"
 
@@ -221,6 +236,8 @@ foreach($s in $short){
   $c=$s.code
   $serF=GetDailySeries $c @($prv3MM,$prv2MM,$prvMM,$curMM)
   if($serF.Count -lt 25){ Write-Host "  drop $c series too short ($($serF.Count) rows)"; continue }
+  $lastDtS="$($serF[$serF.Count-1].dt)"
+  if($lastDtS -ne $lastDate){ Write-Host "  warn $c series stale (last=$lastDtS vs $lastDate) - monthly endpoint lagging, scores use previous bar" }
   $ser=@($serF | ForEach-Object { $_.c })
   $cl=$ser[$ser.Count-1]
   $ma20=SMAlast $ser 20; $ma60=SMAlast $ser 60
@@ -321,6 +338,8 @@ foreach($s in $eshort){
   $c=$s.code
   $serF=GetDailySeries $c @($prv3MM,$prv2MM,$prvMM,$curMM)
   if($serF.Count -lt 25){ Write-Host "  drop ETF $c series too short ($($serF.Count) rows)"; continue }
+  $lastDtE="$($serF[$serF.Count-1].dt)"
+  if($lastDtE -ne $lastDate){ Write-Host "  warn ETF $c series stale (last=$lastDtE vs $lastDate)" }
   $ser=@($serF | ForEach-Object { $_.c })
   $cl=$ser[$ser.Count-1]
   $ma20=SMAlast $ser 20; $ma60=SMAlast $ser 60
@@ -366,8 +385,17 @@ Write-Host "[8/8] picks-log (20-day auto-close, dedupe) + output..."
 $logPath=Join-Path $root 'picks-log.json'
 $norm=@()
 if(Test-Path $logPath){
+  # OneDrive can transiently lock/garble reads; NEVER rebuild history from an unreadable file --
+  # retry, then hard-abort BEFORE any write so tracking history is never overwritten with empty
+  $lg=$null
+  for($try=0;$try -lt 3 -and $null -eq $lg;$try++){
+    try{ $lg=Get-Content $logPath -Raw -Encoding UTF8 | ConvertFrom-Json }catch{ Start-Sleep -Milliseconds 1500 }
+  }
+  if($null -eq $lg -or -not $lg.PSObject.Properties['picks']){
+    Write-Host "FATAL: picks-log.json exists but unreadable after 3 tries - aborting, nothing written"
+    exit 1
+  }
   try{
-    $lg=Get-Content $logPath -Raw -Encoding UTF8 | ConvertFrom-Json
     foreach($p in @($lg.picks)){
       $o=@{ date="$($p.date)"; code="$($p.code)"; name="$($p.name)"; price=[double]$p.price; score=[int]$p.score }
       if($px.ContainsKey($o.code) -and $px[$o.code].name){ $o.name="$($px[$o.code].name)" }   # heals legacy mojibake names
@@ -384,7 +412,10 @@ if(Test-Path $logPath){
       if($p.PSObject.Properties['reason'] -and $p.reason){ $o.reason="$($p.reason)" }
       $norm += ,$o
     }
-  }catch{}
+  }catch{
+    Write-Host "FATAL: picks-log.json normalization failed mid-way ($($_.Exception.Message)) - aborting, nothing written"
+    exit 1
+  }
 }
 $idxMap=@{}; for($i=0;$i -lt $tradeDates.Count;$i++){ $idxMap[$tradeDates[$i]]=$idxC[$i] }
 $perfRows=@()

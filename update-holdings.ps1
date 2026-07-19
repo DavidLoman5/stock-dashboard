@@ -16,6 +16,13 @@ function GetJson($url){
   return $null
 }
 function SMAlast($a,$n){ if($a.Count -lt $n){return $null}; ($a[($a.Count-$n)..($a.Count-1)] | Measure-Object -Average).Average }
+# OneDrive can transiently lock/garble local reads - retry before giving up (caller decides how to fail)
+function ReadJsonRetry($path){
+  for($i=0;$i -lt 3;$i++){
+    try{ return (Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json) }catch{ Start-Sleep -Milliseconds 1500 }
+  }
+  return $null
+}
 
 Write-Host "[1/6] holdings.json..."
 $hj = Get-Content (Join-Path $root 'holdings.json') -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -41,6 +48,7 @@ if($tx.Count -lt 10){ Write-Host "FATAL: FMTQIK returned $($tx.Count) rows - abo
 $lastDate = $tradeDates[$tradeDates.Count-1]
 Write-Host "  latest trade date = $lastDate ($($tx.Count) TAIEX rows)"
 
+$otcCodes=@{}
 foreach($c in $codes){
   $serF=@()
   foreach($mm in $months){
@@ -51,6 +59,20 @@ foreach($c in $codes){
       $serF += [ordered]@{ d=("{0}/{1}" -f [int]$p[1],[int]$p[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double]$cv; chg=(Num $d[7]); v=[math]::Round((Num $d[1])/1000,0) }
     } }
     Start-Sleep -Milliseconds 700
+  }
+  if($serF.Count -eq 0){
+    # not on TWSE -> OTC holding: fall back to TPEx tradingStock (ROC dates; volume already in lots)
+    foreach($mm in $months){
+      $ds="{0}/{1}/01" -f $mm.Substring(0,4),$mm.Substring(4,2)
+      $r=GetJson "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code=$c&date=$ds&response=json"
+      if($r -and $r.tables -and $r.tables[0].data){ foreach($d in $r.tables[0].data){
+        $cv=Num $d[6]; if($cv -eq $null){ continue }
+        $p="$($d[0])".Split('/')
+        $serF += [ordered]@{ d=("{0}/{1}" -f [int]$p[1],[int]$p[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double]$cv; chg=(Num $d[7]); v=[math]::Round([double](Num $d[1]),0) }
+      } }
+      Start-Sleep -Milliseconds 700
+    }
+    if($serF.Count -gt 0){ $otcCodes[$c]=$true; Write-Host "  $c routed to TPEx (OTC)" }
   }
   $DASH[$c]=[ordered]@{ series=$serF; inst=@(); margin=@() }
   Write-Host "  $c series=$($serF.Count)"
@@ -74,6 +96,25 @@ foreach($d in $last5){
   }
   Start-Sleep -Milliseconds 800
 }
+if($otcCodes.Count -gt 0){
+  # OTC institutional trades (TPEx dailyTrade EW): f=col4, t=col13, tot=col23 (indexes proven in screen.ps1);
+  # dealer net derived as tot-f-t instead of guessing an unverified column
+  foreach($d in $last5){
+    $dSlash="{0}/{1}/{2}" -f $d.Substring(0,4),$d.Substring(4,2),$d.Substring(6,2)
+    $r=GetJson "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade?type=Daily&sect=EW&date=$dSlash&response=json"
+    if($r -and $r.tables -and $r.tables[0].data){
+      foreach($row in $r.tables[0].data){
+        $c="$($row[0])".Trim()
+        if($otcCodes.ContainsKey($c)){
+          $dd=("{0}/{1}" -f [int]$d.Substring(4,2),[int]$d.Substring(6,2))
+          $f=[math]::Round((Num $row[4])/1000,0); $t=[math]::Round((Num $row[13])/1000,0); $tot=[math]::Round((Num $row[23])/1000,0)
+          $DASH[$c].inst += [ordered]@{ d=$dd; f=$f; t=$t; de=($tot-$f-$t); tot=$tot }
+        }
+      }
+    }
+    Start-Sleep -Milliseconds 800
+  }
+}
 $last3 = $tradeDates | Select-Object -Last 3
 foreach($d in $last3){
   $r=GetJson "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date=$d&selectType=ALL&response=json"
@@ -88,6 +129,25 @@ foreach($d in $last3){
         }
       }
     }
+  }
+  if($otcCodes.Count -gt 0){
+    # OTC margin balance (TPEx): finPrev=col2, fin=col6 (indexes proven in screen.ps1);
+    # short-sale columns unverified there -> 0 (adviseHolding/stance only use fin/finPrev)
+    $dSlash="{0}/{1}/{2}" -f $d.Substring(0,4),$d.Substring(4,2),$d.Substring(6,2)
+    $r=GetJson "https://www.tpex.org.tw/www/zh-tw/margin/balance?date=$dSlash&response=json"
+    if($r -and $r.tables){
+      $tbl=$r.tables | Where-Object { $_.data -and $_.data.Count -gt 100 } | Select-Object -First 1
+      if($tbl){
+        foreach($row in $tbl.data){
+          $c="$($row[0])".Trim()
+          if($otcCodes.ContainsKey($c)){
+            $dd=("{0}/{1}" -f [int]$d.Substring(4,2),[int]$d.Substring(6,2))
+            $DASH[$c].margin += [ordered]@{ d=$dd; fin=[int](Num $row[6]); finPrev=[int](Num $row[2]); shrt=0; shrtPrev=0 }
+          }
+        }
+      }
+    }
+    Start-Sleep -Milliseconds 800
   }
   Start-Sleep -Milliseconds 800
 }
@@ -141,10 +201,14 @@ Write-Host "  wrote holdings-context.json ($($context.Count) holdings)"
 
 Write-Host "[5b/6] stance-log.json (rule-engine stance per holding; mirrors page adviseHolding, for evaluate.ps1 validation)..."
 $stancePath=Join-Path $root 'stance-log.json'
-$slog=@()
-if(Test-Path $stancePath){ try{ $slog=@((Get-Content $stancePath -Raw -Encoding UTF8 | ConvertFrom-Json).rows) }catch{ $slog=@() } }
+$slog=@(); $slogOk=$true
+if(Test-Path $stancePath){
+  $sj=ReadJsonRetry $stancePath
+  if($null -eq $sj){ $slogOk=$false; Write-Host "  WARN: stance-log.json unreadable after retries - skipping today's append (history never overwritten)" }
+  else{ $slog=@($sj.rows) }
+}
 $already=@($slog | Where-Object { $_.date -eq $lastDate }).Count -gt 0
-if(-not $already){
+if($slogOk -and -not $already){
   foreach($c in $codes){
     $s=@($DASH[$c].series); if($s.Count -lt 25){ continue }
     $cl=@($s | ForEach-Object { $_.c }); $L=$cl.Count; $lastB=$s[$L-1]
@@ -176,7 +240,7 @@ if(-not $already){
   }
   @{ rows=$slog } | ConvertTo-Json -Depth 4 | Out-File $stancePath -Encoding UTF8
   Write-Host "  stance-log: appended rows for $lastDate (total $($slog.Count))"
-} else { Write-Host "  stance-log: $lastDate already logged" }
+} elseif($already){ Write-Host "  stance-log: $lastDate already logged" }
 
 Write-Host "[6/6] splice window.DASH / window.META / window.HOLDINGS_META into index.html..."
 $idxPath=Join-Path $root 'index.html'
