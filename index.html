@@ -287,7 +287,7 @@
     <div class="legend" id="legend"></div>
     <button id="costBtn" class="machip" style="margin-top:12px">⚙ 一次設定全部成本價</button>
     <div class="costpanel" id="costPanel" hidden></div>
-    <div class="eqhead">近三個月績效：投組（含息還原）vs 加權指數（以現行張數回推，起點＝100）</div>
+    <div class="eqhead" id="eqHead">近三個月績效：投組（含息還原）vs 加權指數（以現行張數回推，起點＝100）</div>
     <canvas id="eqChart"></canvas>
     <div class="riskrow" id="riskRow"></div>
     <div class="riskcontrib" id="riskContrib"></div>
@@ -351,7 +351,7 @@
 <script id="evaldata">window.EVAL={"generated":"2026-07-18","closedN":3,"overall":{"winRate":67,"avgAlpha":-1.01,"avgRet":-6.93,"n":3},"byReason":{"跌破月線":{"winRate":50,"avgAlpha":-4.19,"avgRet":-10.1,"n":2},"外資連2日轉賣":{"winRate":100,"avgAlpha":5.35,"avgRet":-0.57,"n":1}},"byLight":{},"byInd":{},"byAiTag":{},"byChip":{},"byTech":{},"byFund":{},"byYoy":{}};</script>
 <script id="backtest">window.BACKTEST={"rows":[{"rank":"chip+t","exit":"prod","cur":true,"best":false,"isWin":43.3,"isAlpha":0.39,"oosWin":37.9,"oosAlpha":-0.39,"oosN":240,"bearWin":60,"bearN":5},{"rank":"tech","exit":"hold20","cur":false,"best":true,"isWin":40.3,"isAlpha":1.89,"oosWin":55.4,"oosAlpha":9.06,"oosN":240,"bearWin":80,"bearN":5},{"rank":"tech","exit":"stop","cur":false,"best":false,"isWin":39.4,"isAlpha":1.75,"oosWin":51.7,"oosAlpha":8.68,"oosN":240,"bearWin":60,"bearN":5},{"rank":"chip","exit":"hold20","cur":false,"best":false,"isWin":48.6,"isAlpha":2.99,"oosWin":55.4,"oosAlpha":7.29,"oosN":240,"bearWin":80,"bearN":5},{"rank":"chip+0.5t","exit":"hold20","cur":false,"best":false,"isWin":51.7,"isAlpha":4.04,"oosWin":55,"oosAlpha":7.19,"oosN":240,"bearWin":80,"bearN":5}],"splitDate":"20260409","generated":"2026-07-19","period":"2025/09/16-07/17"};</script>
 <script id="pknotes">window.PICKS_NOTES={"2006":"鋼構訂單滿載至2027上半年、能見度達2028上半年，受惠AI/半導體擴廠的「非晶片」供應鏈概念，籌碼分數全市場最高(40)。⚠篩選基準為7/16收盤，今日(7/17)全市場崩跌尚未反映在此分數，宜留意反應延遲。","2637":"散裝航運，籌碼與基本面分數均衡(chip33/fund30)，屬景氣循環股，運價波動大，追價前留意BDI指數變化。同上，基準日早於崩跌。","2884":"玉山金，金融股，大盤系統性重挫時金融傳統上具相對防禦性，但今日(7/17)崩跌後是否真能抗跌尚待驗證。","1216":"食品龍頭統一，防禦型收益穩定，適合作為股市劇烈震盪時的資金去化去處，與你持有的00981A/0050等科技部位互補性高。","2892":"第一金，官股金控，籌碼與技術雙強，留意消息面炒作與基本面脫節風險。","00646":"元大S\u0026P500，追蹤美股，惟本次台股重挫的外部導火線正是美股AI資本支出疑慮＋費半重挫，投資美股ETF並非完全免疫於本波系統性風險。","00712":"復華富時不動產REITs，與台股相關性較低、具資產配置分散價值，適合作為股市劇烈波動下的防禦性配置之一。"};</script>
-<script id="holdingsmeta">window.HOLDINGS_META={"0050":{"name":"元大台灣50","type":"被動","theme":"台灣50大權值股","lots":1,"color":null,"techLike":true,"divNote":"7/21 除息"},"00935":{"name":"野村臺灣新科技50","type":"被動","theme":"台灣科技50","lots":1,"color":null,"techLike":true,"divNote":null},"00947":{"name":"台新臺灣IC設計","type":"被動","theme":"IC 設計＋記憶體","lots":1,"color":null,"techLike":true,"divNote":null},"00990A":{"name":"主動元大AI新經濟","type":"主動","theme":"全球 AI · 約58%美股 · 不配息","lots":2,"color":null,"techLike":true,"divNote":null},"00981A":{"name":"主動統一台股增長","type":"主動","theme":"台股大型成長股","lots":1,"color":null,"techLike":true,"divNote":null}};</script>
+<script id="holdingsmeta">window.HOLDINGS_META={"_trades":[],"0050":{"name":"元大台灣50","type":"被動","theme":"台灣50大權值股","lots":1,"color":null,"techLike":true,"divNote":"7/21 除息"},"00935":{"name":"野村臺灣新科技50","type":"被動","theme":"台灣科技50","lots":1,"color":null,"techLike":true,"divNote":null},"00947":{"name":"台新臺灣IC設計","type":"被動","theme":"IC 設計＋記憶體","lots":1,"color":null,"techLike":true,"divNote":null},"00990A":{"name":"主動元大AI新經濟","type":"主動","theme":"全球 AI · 約58%美股 · 不配息","lots":2,"color":null,"techLike":true,"divNote":null},"00981A":{"name":"主動統一台股增長","type":"主動","theme":"台股大型成長股","lots":1,"color":null,"techLike":true,"divNote":null}};</script>
 <script id="holdingsnotes">window.HOLDINGS_NOTES={"0050":{"sigFund":["bull","偏多"],"tech":"收 100.15、單日暴跌 6.25 元（−5.87%），同時跌破月線（MA20≈106.7）與季線（MA60≈101.0）——本波首次「季線失守」。成交量暴增至 52.1 萬張（近月均量約 8～10 萬張的 5 倍以上），為台股史上最大單日跌點下的恐慌性巨量。","chip":"三大法人單日大賣逾 41.7 萬張（外資 −22.2 萬張、自營 −19.8 萬張），5 日累計轉為淨賣 −32.2 萬張。融資今日反而大增至 18,333 張（較昨 +2,285 張、+14.2%）——「融資逆勢加碼＋法人恐慌倒貨」是籌碼轉亂訊號，非健康承接。","fund":"ETF 本身無 EPS／本益比，改看成分：台積電＋金融＋半導體權值綜合體。台積電 7/16 法說會財報與資本支出展望均優於預期（全年營收成長目標維持逾 30%），但市場轉而憂心 AI 資本支出規模擴大恐壓縮獲利率，加上美伊情勢升溫推升油價與通膨疑慮，三重利空引爆本次史上最大單日跌點。基本面題材未變，短線估值需重新評估。","rec":"規則引擎四級判定已觸發「防守」（技術面破季線、籌碼轉賣、融資逆勢增）。條件式參考：本次為全市場系統性重挫（費半前日重挫4.29%、美伊局勢），非個股利空，不宜恐慌殺出；但季線 101.0 已破，若後續無法收復且法人續賣，防守紀律應優先於情緒判斷；台積電基本面本身未變。非買賣指令。","news":[{"t":"台股崩跌2953點、台積電大跌180元，雙創史上單日最大跌勢","s":"ETtoday","u":"https://finance.ettoday.net/news/3202946"},{"t":"台股上演717慘案，崩跌2953點創史上最大跌點","s":"聯合新聞網","u":"https://udn.com/news/story/7251/9634167"},{"t":"0050、0056實際配息揭曉，7/21同步除息","s":"Newtalk","u":"https://newtalk.tw/news/view/2026-07-17/1047809"}]},"00935":{"sigFund":["neu","偏多"],"tech":"收 53.40，單日重挫 7.85%，跌破月線（MA20≈60.2）與季線（MA60≈57.4），為投組回檔第二深者（波段高點以來 −16.8%）。量能放大至 3.24 萬張（近月均量約 1 萬張的 3 倍），與大盤同步系統性重挫，非個股特有利空。","chip":"三大法人由 7/16 賣轉 7/17 更大賣，5 日累計 −1.16 萬張，外資單日賣超 −5,700 張。融資今日 5,638 張、較昨減 211 張，散戶同步縮手，籌碼全面轉弱。","fund":"ETF 無 EPS；成分為台灣科技 50，與 0050／00947／00981A 高度重疊，本波同步重挫再度印證「重複押注同一題材」的集中度風險。中長線 AI／半導體題材本質未變，短線需與大盤同步觀察止穩訊號。","rec":"規則引擎判定「防守」（跌破季線＋法人賣超）。條件式參考：與 0050 高度重疊，此波下跌屬系統性風險而非基本面惡化；若季線 57.4 未能收復、外資賣超未收斂，維持防守；資金有限時無需與 0050 同時加碼。非買賣指令。","news":[{"t":"台股收盤跌2953點！史上最大，4萬3關卡也沒了","s":"Yahoo股市","u":"https://tw.stock.yahoo.com/news/%E5%8F%B0%E8%82%A1%E6%94%B6%E7%9B%A4%E8%B7%8C2953%E9%BB%9E%EF%BC%81%E5%8F%B2%E4%B8%8A%E6%9C%80%E5%A4%A7-4%E8%90%AC3%E9%97%9C%E5%8D%A1%E4%B9%9F%E6%B2%92%E4%BA%86-010319896.html"},{"t":"台股收盤／暴跌2953點史上最大！摜破43K、台積電失守2300元","s":"TVBS","u":"https://news.tvbs.com.tw/money/3259915"}]},"00947":{"sigFund":["bull","多方"],"tech":"收 32.32，單日跌 8.23%，同時跌破月線（MA20≈38.2）與季線（MA60≈36.6），波段高點以來已回檔近 25%——為投組跌幅最深者。成交量 1.13 萬張，較近月均量略增但非爆量出貨，屬普跌格局下的順勢下殺。","chip":"三大法人 5 日累計轉賣 −2,540 張，外資單日 −51 張（賣壓已較前幾日收斂）。融資今日 5,376 張、較昨大減 931 張（−14.8%）——融資大幅去化，顯示追高散戶在此波重挫中已被迫停損出場。","fund":"ETF 無 EPS；成分聚焦記憶體 DRAM 漲價與 IC 設計／ASIC，產業基本面題材仍偏多，惟股價前波已高基期，本次修正部分屬獲利了結與系統性風險交織，非產業轉空。","rec":"規則引擎判定「防守」（已破季線＋跌幅居冠）。條件式參考：融資大幅去化屬籌碼健康化的一環，但季線 36.6 尚未收復前不宜加碼；若外資轉為連續買超，可視為止跌訊號；波動度全投組最高，部位大小應相應控管。非買賣指令。","news":[{"t":"《盤後解析》黑五大屠殺！台股崩跌2954點，史上最大收盤跌點","s":"時報資訊","u":"https://www.chinatimes.com/realtimenews/20260717002686-260410"},{"t":"台股盤中跌逾2000點，1500檔股票走跌，台積電跌100元","s":"新唐人","u":"https://www.ntdtv.com/b5/2026/07/17/a104116122.html"}]},"00990A":{"sigFund":["bull","多方"],"tech":"收 15.49，單日重挫 9.89%（投組跌幅最大），持續為唯一原已跌破季線者，本波回檔擴大至 −28.7%，波動度居投組之冠。成交量 8.6 萬張，較均量放大近 2 倍，跟隨費半（前一交易日重挫 4.29%）同步破底。","chip":"三大法人 5 日累計轉賣 −4.07 萬張、外資單日賣超 −3.11 萬張，一改 7/15～16 轉買訊號，籌碼再度轉弱。融資今日 23,179 張、較昨減 372 張，散戶亦同步撤出。","fund":"主動選股、投資全球 AI 產業鏈（美股約 58%）。本次重挫的根源正是美股 AI 資本支出獲利率疑慮＋費半重挫，直接命中此檔核心持股；美伊情勢升溫、油價走高更添通膨疑慮。作為投組唯一海外分散部位，短線受創最深，但長線 AI 基礎建設需求題材未變。","rec":"規則引擎判定「防守」（本波跌幅、籌碼皆為投組最弱）。條件式參考：它是分散美股曝險的核心部位，但本次重挫恰是「美股 AI 疑慮」的直接體現，分散價值與風險同時放大；若續破前低且外資未見回補，應嚴格執行防守紀律，不宜以「長線分散」為由無條件攤平。非買賣指令。","news":[{"t":"台股崩跌2953點、台積電大跌180元，雙創史上單日最大跌勢","s":"ETtoday","u":"https://finance.ettoday.net/news/3202946"},{"t":"元大全球 AI 新經濟：投資 AI 晶片、資料中心、能源與高速傳輸","s":"口袋證券","u":"https://www.pocket.tw/etf/tw/00990A/"}]},"00981A":{"sigFund":["bull","多方"],"tech":"收 26.43，單日跌 8.70%，同步跌破月線（MA20≈30.5）與季線（MA60≈29.9）——前一交易日才守穩的季線，今日一次性摜破，波段以來回檔 18.1%。成交量暴增至 51.3 萬張（近月均量約 15～20 萬張的 2.5～3 倍），為主動型 ETF 中資金最集中的重挫。","chip":"三大法人單日大賣逾 22.2 萬張（外資 −13.7 萬張、自營 −8.5 萬張），一舉抹去 7/15～16 剛出現的法人回補訊號，5 日累計轉為淨賣 −24.1 萬張。融資今日 150,245 張、較昨減 1,021 張，籌碼由樂觀轉為全面撤退。","fund":"ETF 無 EPS；主動經理人第一大持股為台積電，題材與台積電法說高度連動。7/16 法說展望本身正向（營收目標維持逾 30% 成長），但市場對 AI 資本支出獲利率的疑慮蓋過財報利多，導致隔日重挫。基本面尚未惡化，屬情緒面主導的系統性修正。","rec":"規則引擎判定「防守」（前一日剛浮現的法人回補訊號今日反轉抹去）。條件式參考：季線 29.9 已破，「融資減＋法人賣」需持續觀察是否轉為健康去化或恐慌性倒貨；台積電基本面未變，但短線籌碼結構明顯轉弱，防守紀律優先於情緒判斷。非買賣指令。","news":[{"t":"台股上演717慘案，崩跌2953點創史上最大跌點","s":"聯合新聞網","u":"https://udn.com/news/story/7251/9634167"},{"t":"台積電法說會7月16日登場，聚焦全年成長目標和資本支出","s":"聯合新聞網","u":"https://udn.com/news/story/7240/9607915"}]}};</script>
 <script>
 const fmt=(n,d=0)=>n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -368,13 +368,16 @@ const setCost=(c,v)=>{const o=getCosts();if(v>0)o[c]=v;else delete o[c];localSto
 /* holdings structural data (HOLDINGS_META, from holdings.json) and daily-written text (HOLDINGS_NOTES)
    are spliced in by update-holdings.ps1 / publish.ps1 — see <script id="holdingsmeta"/"holdingsnotes">.
    H[] is derived at runtime; numeric fields (price/chg/pct/dd/weight) come from hydrate() below. */
+/* HOLDINGS_META 內 _ 開頭為特殊 key（_trades=交易紀錄），不是持股 */
+const HCODES=Object.keys(window.HOLDINGS_META||{}).filter(c=>!c.startsWith('_'));
+const TRADES=((window.HOLDINGS_META||{})._trades||[]).filter(t=>t&&t.code&&t.d&&t.lots>0&&t.price>0);
 const SHARES={};
-Object.keys(window.HOLDINGS_META||{}).forEach(c=>{SHARES[c]=(HOLDINGS_META[c].lots||1)*1000;});
+HCODES.forEach(c=>{SHARES[c]=(HOLDINGS_META[c].lots||1)*1000;});
 
 /* holdings.json 沒有 color 欄位時給預設色盤——color:null 會讓 canvas 漸層丟例外、
    中斷 renderAll（此前「riskContrib 首次載入空白」的根因） */
 const PALETTE=['#e8590c','#1971c2','#7048e8','#0ca678','#e64980','#f08c00','#3bc9db'];
-const H=Object.keys(window.HOLDINGS_META||{}).map((code,pi)=>{
+const H=HCODES.map((code,pi)=>{
  const m=HOLDINGS_META[code],n=(window.HOLDINGS_NOTES||{})[code]||{};
  return {code,name:m.name,type:m.type,theme:m.theme,lots:m.lots,color:m.color||PALETTE[pi%PALETTE.length],divNote:m.divNote,
   sig:{fund:n.sigFund||['neu','中性']},
@@ -458,8 +461,14 @@ function fillTop(){
  const mx=Math.max(...tx.map(d=>d.c)); const ddI=(tl.c/mx-1)*100;
  const md=document.getElementById('mDist'); if(md){md.textContent=fmtSign(ddI,1)+'%'; md.className='num '+plColor(ddI);}
  const bd=document.getElementById('baseDate'); if(bd) bd.textContent=META.lastTrade.replace(/-/g,'/')+' 收盤（證交所）';
- const diff=(Date.now()-new Date(META.lastTrade+'T14:00:00+08:00').getTime())/86400000;
- if(diff>5) document.getElementById('staleWarn').hidden=false;
+ /* 過期警示：算 lastTrade 之後到今天的「平日數」≥2 就亮（原本 >5 天才亮，排程漏跑要一週後才發現）。
+    2 天以上連假會誤亮，文案已涵蓋——寧可誤亮也不要漏亮 */
+ {const lt=new Date(META.lastTrade+'T14:00:00+08:00'),now=new Date();let wd=0;
+  const d=new Date(lt);d.setDate(d.getDate()+1);
+  for(let g=0;d<=now&&g<30;d.setDate(d.getDate()+1),g++){const w=d.getDay();if(w>0&&w<6)wd++;}
+  const sw=document.getElementById('staleWarn');
+  if(sw&&wd>=2){sw.hidden=false;
+   sw.textContent=`⚠ 資料可能未更新：行情基準（${META.lastTrade.replace(/-/g,'/')}）已落後 ${wd} 個平日——排程可能未執行或連續假期，請確認電腦上的 Claude App 有開啟。`;}}
  /* 整體傾向：由規則引擎判級自動統計（永不與逐檔判級漂移）；HTML 內文字僅為 fallback */
  const hsEl=document.getElementById('heroStance');
  if(hsEl){
@@ -501,15 +510,44 @@ function buildEquity(){
    m[s[i].d]=s[i].c;cd[s[i].d]=cum;}
   maps[h.code]=m;cumDiv[h.code]=cd;});
  const tmap={};DASH.TAIEX.forEach(d=>tmap[d.d]=d.c);
- const dates=DASH.TAIEX.map(d=>d.d).filter(d=>H.every(h=>maps[h.code][d]!=null));
+ let dates=DASH.TAIEX.map(d=>d.d).filter(d=>H.every(h=>maps[h.code][d]!=null));
  if(dates.length<10)return;
- const port=dates.map(d=>H.reduce((s,h)=>s+(maps[h.code][d]+cumDiv[h.code][d])*SHARES[h.code],0));
+ /* ---- TWR：由 trades 反推每日實際股數與現金流；trades 為空時 flow=0、股數恆定，數學上等同舊算法 ---- */
+ /* 序列日期 "M/D" 轉可比較的 yyyymmdd（由 META.lastTrade 年份向前回推，處理跨年） */
+ const isoD=(function(){const out=new Array(dates.length);let y=+META.lastTrade.slice(0,4),pm=null;
+  for(let i=dates.length-1;i>=0;i--){const [m,dd]=dates[i].split('/').map(Number);if(pm!=null&&m>pm)y--;pm=m;out[i]=y*10000+m*100+dd;}return out;})();
+ const shDelta=dates.map(()=>null),flowsAt=new Array(dates.length).fill(0);
+ let hasWinTrades=false;
+ TRADES.forEach(t=>{
+  if(!SHARES.hasOwnProperty(t.code))return;
+  const p=String(t.d).split('-');if(p.length<3)return;
+  const tn=(+p[0])*10000+(+p[1])*100+(+p[2]);
+  if(tn<=isoD[0]||tn>isoD[isoD.length-1])return;      /* 窗前=已含在期初股數；窗後=未來，忽略 */
+  let i=isoD.findIndex(x=>x>=tn);if(i<0)return;
+  const sh=(t.side==='sell'?-1:1)*t.lots*1000;
+  (shDelta[i]=shDelta[i]||{})[t.code]=(shDelta[i][t.code]||0)+sh;
+  flowsAt[i]+=sh*t.price;
+  hasWinTrades=true;});
+ const open={};H.forEach(h=>{open[h.code]=SHARES[h.code];});
+ shDelta.forEach(m=>{if(m)for(const c in m)open[c]-=m[c];});
+ const sharesAt=[];{let cur={...open};
+  for(let i=0;i<dates.length;i++){const m=shDelta[i];if(m)for(const c in m)cur[c]=(cur[c]||0)+m[c];sharesAt.push({...cur});}}
+ const mv=dates.map((d,i)=>H.reduce((s,h)=>s+(maps[h.code][d]+cumDiv[h.code][d])*Math.max(0,sharesAt[i][h.code]||0),0));
+ /* 期初市值為 0（窗內才開倉）→ 從首個非零日起算 */
+ let s0=0;while(s0<mv.length&&mv[s0]<=0)s0++;
+ if(mv.length-s0<10)return;
+ if(s0>0){dates=dates.slice(s0);}
+ const mv2=mv.slice(s0),fl2=flowsAt.slice(s0);
  const idx=dates.map(d=>tmap[d]);
- const pn=port.map(v=>v/port[0]*100), inx=idx.map(v=>v/idx[0]*100);
+ const pn=[100];
+ for(let i=1;i<mv2.length;i++){const prev=mv2[i-1];pn.push(prev>0?pn[pn.length-1]*((mv2[i]-fl2[i])/prev):pn[pn.length-1]);}
+ const inx=idx.map(v=>v/idx[0]*100);
+ const eh=document.getElementById('eqHead');
+ if(eh&&hasWinTrades)eh.textContent='近三個月績效：投組（TWR·含息·依實際交易紀錄）vs 加權指數（起點＝100）';
  priceChart(cv,pn,cssv('--accent'),{grid:true,pad:{t:8,r:8,b:8,l:8},lw:2,overlays:[{vals:inx,color:cssv('--ink-faint')}]});
  const pRet=pn[pn.length-1]-100, iRet=inx[inx.length-1]-100;
  const rets=[],mrets=[];
- for(let i=1;i<port.length;i++){rets.push(port[i]/port[i-1]-1);mrets.push(idx[i]/idx[i-1]-1);}
+ for(let i=1;i<pn.length;i++){rets.push(pn[i]/pn[i-1]-1);mrets.push(idx[i]/idx[i-1]-1);}
  const mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
  const mR=mean(rets),mM=mean(mrets);
  const vol=Math.sqrt(mean(rets.map(r=>(r-mR)**2)))*Math.sqrt(252)*100;
@@ -684,10 +722,17 @@ function drawSparks(){document.querySelectorAll('canvas.spark').forEach(cv=>{con
 function drawMarket(){const cv=document.getElementById('mchart');if(cv)priceChart(cv,DASH.TAIEX.map(d=>d.c),cssv('--down'),{grid:true,pad:{t:8,r:8,b:8,l:8},lw:1.8});}
 
 /* ---------- P&L ---------- */
+/* trades 買進均價（僅 buy；作為未輸入成本時的預設，localStorage 輸入永遠優先） */
+function tradeAvgCost(code){
+  const b=TRADES.filter(t=>t.code===code&&t.side!=='sell');
+  if(!b.length)return null;
+  let sh=0,amt=0;b.forEach(t=>{sh+=t.lots*1000;amt+=t.lots*1000*t.price;});
+  return sh>0?amt/sh:null;
+}
 function updatePL(){
   const costs=getCosts();let totCost=0,totVal=0,haveAny=false;
-  H.forEach(h=>{const sh=SHARES[h.code];const c=costs[h.code];const el=document.querySelector(`[data-plcard="${h.code}"]`);
-   if(c>0){haveAny=true;totVal+=h.price*sh;totCost+=c*sh;const pl=(h.price-c)*sh;const pct=(h.price-c)/c*100;if(el){el.textContent=`損益 ${fmtSignI(Math.round(pl))} (${fmtSign(pct,1)}%)`;el.className='pl num '+plColor(pl);}}
+  H.forEach(h=>{const sh=SHARES[h.code];const cLS=costs[h.code];const av=cLS>0?null:tradeAvgCost(h.code);const c=cLS>0?cLS:av;const el=document.querySelector(`[data-plcard="${h.code}"]`);
+   if(c>0){haveAny=true;totVal+=h.price*sh;totCost+=c*sh;const pl=(h.price-c)*sh;const pct=(h.price-c)/c*100;if(el){el.textContent=`損益 ${fmtSignI(Math.round(pl))} (${fmtSign(pct,1)}%)${av?'·依交易均價':''}`;el.className='pl num '+plColor(pl);}}
    else if(el){el.textContent='未設成本';el.className='pl num';el.style.color='var(--ink-faint)';}});
   const out=document.getElementById('pfPL'),outp=document.getElementById('pfPLpct');
   if(haveAny){const pl=totVal-totCost;const pct=totCost>0?pl/totCost*100:0;out.textContent=fmtSignI(Math.round(pl));out.className='v2 num '+plColor(pl);outp.textContent=fmtSign(pct,2)+'%（部分依已輸入成本）';outp.className='sub num '+plColor(pl);}
@@ -696,6 +741,9 @@ function updatePL(){
 
 /* ---------- modal ---------- */
 const ov=document.getElementById('ov');let curMA={5:false,20:false,60:false},curCode=null,curSeries=null,curMode='k',hoverIdx=null,lastGeom=null;
+let lastFocusEl=null;
+/* 記住開 modal 前的焦點元素（modal 內互開如 cat→pick 不覆寫，保留最初觸發卡片） */
+function rememberFocus(){if(!ov.classList.contains('open'))lastFocusEl=document.activeElement;}
 function renderBigChart(){const ser=curSeries;if(!ser)return;const closes=ser.map(s=>s.c);
   const ov2=[];if(curMA[5])ov2.push({vals:sma(closes,5),color:cssv('--ma5')});if(curMA[20])ov2.push({vals:sma(closes,20),color:cssv('--ma20')});if(curMA[60])ov2.push({vals:sma(closes,60),color:cssv('--ma60')});
   const bc=document.getElementById('bc');
@@ -770,7 +818,7 @@ function openModal(i){
 
     <div class="subhd" style="margin-top:18px">近 24 小時新聞 · 國內外 · 附來源</div>
     <ul class="news">${newsHtml}</ul>`;
-  ov.classList.add('open');document.body.style.overflow='hidden';
+  rememberFocus();ov.classList.add('open');document.body.style.overflow='hidden';
   renderBigChart();
   // MA toggles
   document.querySelectorAll('.machip[data-ma]').forEach(btn=>btn.addEventListener('click',()=>{const n=+btn.dataset.ma;curMA[n]=!curMA[n];btn.setAttribute('aria-pressed',curMA[n]);renderBigChart();}));
@@ -780,11 +828,14 @@ function openModal(i){
   // cost input
   const inEl=document.getElementById('costIn');const recalc=()=>{const v=parseFloat(inEl.value);const out=document.getElementById('mPL');
     if(v>0){setCost(h.code,v);const sh=SHARES[h.code];const pl=(h.price-v)*sh;const pct=(h.price-v)/v*100;out.innerHTML=`損益 <span class="${plColor(pl)}">${fmtSignI(Math.round(pl))}　${fmtSign(pct,1)}%</span>`;}
-    else{setCost(h.code,0);out.innerHTML='<small>輸入成本以計算損益</small>';}updatePL();};
+    else{setCost(h.code,0);const av=tradeAvgCost(h.code);
+      if(av){const sh=SHARES[h.code];const pl=(h.price-av)*sh;const pct=(h.price-av)/av*100;out.innerHTML=`依交易均價 ${av.toFixed(2)}：損益 <span class="${plColor(pl)}">${fmtSignI(Math.round(pl))}　${fmtSign(pct,1)}%</span>`;}
+      else out.innerHTML='<small>輸入成本以計算損益</small>';}updatePL();};
   inEl.addEventListener('input',recalc);recalc();
   document.getElementById('mClose').focus();
 }
-function closeModal(){ov.classList.remove('open');document.body.style.overflow='';curCode=null;curSeries=null;hoverIdx=null;}
+function closeModal(){ov.classList.remove('open');document.body.style.overflow='';curCode=null;curSeries=null;hoverIdx=null;
+ if(lastFocusEl&&document.contains(lastFocusEl)){try{lastFocusEl.focus();}catch(e){}}lastFocusEl=null;}
 
 /* ---------- pick full K-line modal (reuses same chart engine) ---------- */
 function openPickModal(p,backInd){
@@ -825,7 +876,7 @@ function openPickModal(p,backInd){
   <div class="an-text" style="font-size:13px">${evOf(p)}</div>
   ${p.note?`<div class="mlabel">題材筆記</div><div class="pk-note" style="margin-top:0">${esc(p.note)}</div>`:''}
   <div style="margin-top:14px;font-size:11.5px;color:var(--ink-faint)">量化篩選僅供研究參考、非投資建議、非推介買進。</div>`;
- ov.classList.add('open');document.body.style.overflow='hidden';
+ rememberFocus();ov.classList.add('open');document.body.style.overflow='hidden';
  renderBigChart();
  document.querySelectorAll('.machip[data-ma]').forEach(btn=>btn.addEventListener('click',()=>{const n=+btn.dataset.ma;curMA[n]=!curMA[n];btn.setAttribute('aria-pressed',curMA[n]);renderBigChart();}));
  document.querySelectorAll('.machip.mode').forEach(btn=>btn.addEventListener('click',()=>{curMode=btn.dataset.mode;document.querySelectorAll('.machip.mode').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===curMode)));renderBigChart();}));
@@ -837,6 +888,16 @@ function openPickModal(p,backInd){
 document.getElementById('mClose').addEventListener('click',closeModal);
 ov.addEventListener('click',e=>{if(e.target===ov)closeModal();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ov.classList.contains('open'))closeModal();});
+/* focus trap：Tab 在 modal 內循環、不逸出到背景；關閉時還原焦點（見 closeModal / 各 open* 內的 rememberFocus） */
+document.addEventListener('keydown',e=>{
+ if(e.key!=='Tab'||!ov.classList.contains('open'))return;
+ const list=[...ov.querySelectorAll('button,input,a[href],summary,[tabindex]:not([tabindex="-1"])')].filter(el=>el.offsetParent!==null);
+ if(!list.length)return;
+ const first=list[0],last=list[list.length-1];
+ if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+ else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+ else if(!ov.contains(document.activeElement)){e.preventDefault();first.focus();}
+});
 
 /* ---------- quant picks ---------- */
 window.PICKS_NOTES=window.PICKS_NOTES||{};
@@ -938,7 +999,7 @@ function openCatModal(ind){
     <span class="cev">收 ${p.close}（${fmtSign(p.chgPct==null?0:p.chgPct)}%）・${evOf(p)}</span>
    </div>`).join('')}</div>
   <div style="margin-top:14px;font-size:11.5px;color:var(--ink-faint)">量化篩選僅供研究參考、非投資建議、非推介買進。</div>`;
- ov.classList.add('open');document.body.style.overflow='hidden';
+ rememberFocus();ov.classList.add('open');document.body.style.overflow='hidden';
  document.querySelectorAll('.crow').forEach(row=>{
   const p=arr.find(x=>x.code===row.dataset.code);
   row.addEventListener('click',()=>openPickModal(p,ind));

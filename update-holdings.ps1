@@ -198,6 +198,8 @@ Write-Host "  div notes: $($divMap.Count) upcoming"
 
 Write-Host "[5/6] compute holdings-context.json (small, for AI to read) + HOLDINGS_META..."
 $HOLDINGS_META=[ordered]@{}
+# trades ride along as a special _-prefixed key (like _market in notes); page filters _ keys out of H
+$HOLDINGS_META['_trades']=@($hj.trades)
 $context=@()
 foreach($h in $hj.holdings){
   $c="$($h.code)"

@@ -1,6 +1,6 @@
 {
-  "note": "持股唯一事實來源。1 張 = 1000 股。每日排程讀此檔產生報告。異動方式：直接跟 Claude 說（例：買了一張 0056 均價 38.5），或自行編輯此檔。成本價不存此檔（公開 repo），存於瀏覽器 localStorage。",
-  "updated": "2026-07-12",
+  "note": "持股唯一事實來源。1 張 = 1000 股。異動方式：直接跟 Claude 說（例：7/2 買了一張 0050 成交價 100.5）——Claude 會同時更新 holdings[].lots 並 append 一筆 trades[]。trades 記成交價（2026-07-19 使用者拍板：接受公開於 repo）；瀏覽器 localStorage 的成本輸入仍可覆寫頁面顯示。trades 格式：{\"d\":\"2026-07-02\",\"side\":\"buy|sell\",\"code\":\"0050\",\"lots\":1,\"price\":100.5}。績效曲線依 trades 以 TWR 計算實際持有期間報酬；trades 為空時退回「現行張數整段持有」假設。",
+  "updated": "2026-07-19",
   "holdings": [
     { "code": "0050",   "name": "元大台灣50",       "lots": 1, "type": "被動", "theme": "台灣50大權值股", "techLike": true },
     { "code": "00935",  "name": "野村臺灣新科技50", "lots": 1, "type": "被動", "theme": "台灣科技50", "techLike": true },

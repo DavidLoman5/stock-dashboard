@@ -5,7 +5,7 @@
 ## 這是什麼
 - 單檔 `index.html`（HTML+CSS+原生JS+Canvas，自足、無外部相依）= 整個儀表板
 - `screen.ps1` = 量化選股引擎（PowerShell），每天抓上市（證交所）＋上櫃（櫃買中心）全市場資料→篩選評分→把結果拼回 index.html；追蹤報酬含息（除權息自動還原）、出場規則含移動停利
-- `holdings.json` = 持股唯一事實來源（1張=1000股；成本價不放這，存瀏覽器 localStorage）
+- `holdings.json` = 持股唯一事實來源（1張=1000股）。`trades[]` 記交易含**成交價**（2026-07-19 使用者拍板同意公開）；使用者回報交易時**同步改 lots 並 append trades**。瀏覽器 localStorage 成本輸入仍可覆寫頁面損益顯示
 - 線上：https://davidloman5.github.io/stock-dashboard/ ｜ 排程每交易日 08:30 自動 `git push` 更新
 
 ## 改之前必知：哪些會被每日排程覆寫（別手改）
