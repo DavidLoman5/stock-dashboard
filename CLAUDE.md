@@ -9,8 +9,8 @@
 - 線上：https://davidloman5.github.io/stock-dashboard/ ｜ 排程每交易日 08:30 自動 `git push` 更新
 
 ## 改之前必知：哪些會被每日排程覆寫（別手改）
-- `window.DASH={...}`、`const H=[...]` 的數字欄位、`<script id="pkdata">`、`<script id="pkline">`、`<script id="pknotes">`
-- Hero 市值/損益、大盤數字、權重、今日訊號、績效曲線 → 全由頁面 JS 自動算，勿寫死
+- splice 區塊全部：`<script id>` = `dashdata`（DASH）、`holdingsmeta`、`holdingsnotes`（含 `_market` 市場風向）、`pkdata`、`pkline`、`pknotes`、`evaldata`（週五）、`backtest`（月跑）
+- Hero 市值/損益/整體傾向（heroStance）、大盤數字、市場風向區（windBox/miSox/miMood）、權重、今日訊號、績效曲線 → 全由頁面 JS 自動算或每日 `_market` 覆寫，勿寫死；HTML 內殘留文字僅為 JS 失敗時的 fallback
 
 ## 可以安全改（改了會保留並生效）
 - CSS 樣式、版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯、渲染器、`screen.ps1` 的選股演算法、`holdings.json`

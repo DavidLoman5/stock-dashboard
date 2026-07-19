@@ -60,6 +60,13 @@
 
 ## ✅ 已完成
 
+- 2026-07-19 **v12 市場風向自動化＋文件同步**：
+  1. 修復：大盤行情卡的市場風向區（wind 文字/費半週跌幅/情緒標籤）原本無任何更新機制、
+     會永遠停在 7/17 崩跌語境——新增 `_market` key（holdings-notes.json）＋頁面 buildWind() 渲染，
+     排程 SKILL.md 已加每日必寫欄位（與 v10 heroStance 同模式，走既有 splice 管道零新腳本）
+  2. 文件全面同步：README 重寫（管線圖、完整檔案地圖、八個 splice 區塊、PS5.1 陷阱、防清空慣例）、
+     CLAUDE.md 覆寫清單補全（原漏 holdingsmeta/holdingsnotes/evaldata/backtest 四個 marker）
+  3. 清理：openPickModal 的 p.ev 死碼
 - 2026-07-19 **v11 回測對齊生產＋流程收尾**：
   1. backtest.ps1 v2.1：修正回測與生產策略不一致——T86 由 5/5 放寬為 ≥4/5、補「跌破季線剔除」、
      技術分補季線 +8（19→27/30）、距高改 40 日、ma20p 窗口對齊（差一天）、evalLo=60；

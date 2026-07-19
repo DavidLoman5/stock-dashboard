@@ -268,10 +268,11 @@
     <div class="mmeta">
       <div class="mi">成交金額<b class="num" id="mAmt">—</b></div>
       <div class="mi">距波段高<b class="num" id="mDist">—</b></div>
-      <div class="mi">半導體(週)<b class="down-txt num">−6.26%</b></div>
-      <div class="mi">市場風向<b class="down-txt">恐慌性重挫</b></div>
+      <div class="mi">半導體(週)<b class="down-txt num" id="miSox">−6.26%</b></div>
+      <div class="mi">市場風向<b class="down-txt" id="miMood">恐慌性重挫</b></div>
     </div>
-    <div class="wind">
+    <!-- windBox＋miSox＋miMood：由 buildWind() 依 HOLDINGS_NOTES._market 每日覆寫（AI 撰寫、publish.ps1 splice）；此處內容僅為 fallback -->
+    <div class="wind" id="windBox">
       <b>台股 7/17 史上最大單日崩跌，一次摜破4萬5、4萬4、4萬3三大關卡。</b>加權指數收 42,671.27，暴跌 2,953.71 點（−6.47%），創史上最大單日跌點，成交量暴增至 1兆3,332億元。台積電（2330）重挫 180 元（−7.29%）收 2,290 元、失守2,300元關卡；聯發科重挫 8.92%；國巨、聯電更以跌停作收。
       <b>三大利空夾擊：</b>美國費城半導體指數(SOX)前一交易日重挫 4.29%（本週累計約 −6.26%），台積電 ADR 同步下跌 2.32%；台積電 7/16 法說會財報與資本支出展望雖優於預期（全年營收成長目標維持逾30%），但市場轉而憂心 AI 資本支出規模持續擴大恐壓縮獲利率；美國與伊朗緊張情勢升溫，推升國際油價與通膨疑慮。研判：<b>屬情緒面主導的系統性重挫，非個別產業利空；短線恐慌尚未止穩，留意能否守住月線／季線等技術支撐，追高與過度攤平皆宜謹慎。</b>
     </div>
@@ -549,6 +550,17 @@ function buildConc(){
  else el.hidden=true;
 }
 
+/* ---------- market wind text（AI 每日經 holdings-notes.json 的 _market key 更新；缺時保留 HTML fallback） ---------- */
+function buildWind(){
+ const M=(window.HOLDINGS_NOTES||{})._market;if(!M)return;
+ const w=document.getElementById('windBox');
+ if(w&&(M.wind||M.windLead))w.innerHTML=`${M.windLead?`<b>${esc(M.windLead)}</b>`:''}${esc(M.wind||'')}`;
+ const sx=document.getElementById('miSox');
+ if(sx&&M.sox){const neg=/^[-−]/.test(String(M.sox).trim());sx.textContent=M.sox;sx.className='num '+(neg?'down-txt':'up-txt');}
+ const md=document.getElementById('miMood');
+ if(md&&M.mood){md.textContent=M.mood;md.className=M.moodK==='bull'?'up-txt':M.moodK==='bear'?'down-txt':'';}
+}
+
 /* ---------- today's auto-detected signals ---------- */
 function buildSignals(){
  const box=document.getElementById('signalsBox');if(!box)return;
@@ -810,7 +822,7 @@ function openPickModal(p,backInd){
     <span>季線 <b>${maV(60)}</b>（${relMA(60)}）</span>
   </div>
   <div class="mlabel">入選證據</div>
-  <div class="an-text" style="font-size:13px">${p.ev||evOf(p)}</div>
+  <div class="an-text" style="font-size:13px">${evOf(p)}</div>
   ${p.note?`<div class="mlabel">題材筆記</div><div class="pk-note" style="margin-top:0">${esc(p.note)}</div>`:''}
   <div style="margin-top:14px;font-size:11.5px;color:var(--ink-faint)">量化篩選僅供研究參考、非投資建議、非推介買進。</div>`;
  ov.classList.add('open');document.body.style.overflow='hidden';
@@ -970,7 +982,7 @@ function buildEval(){
   <div style="overflow-x:auto;margin-top:8px"><table class="tbl"><thead><tr><th style="text-align:left">分組</th><th>勝率(贏大盤)</th><th>平均超額</th><th>樣本</th></tr></thead><tbody>${rows}</tbody></table></div>${sf}`;
  box.style.display='';
 }
-function boot(){renderAll();updatePL();fillTop();buildSignals();buildBacktest();buildConc();buildEval();}
+function boot(){renderAll();updatePL();fillTop();buildWind();buildSignals();buildBacktest();buildConc();buildEval();}
 if(window.DASH)boot();else addEventListener('load',boot);
 let __rzT;window.addEventListener('resize',()=>{clearTimeout(__rzT);__rzT=setTimeout(renderAll,150);}); /* 防抖：手機捲動時網址列伸縮不連環重繪 */
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',renderAll);
