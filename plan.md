@@ -62,6 +62,27 @@
 
 ## ✅ 已完成
 
+- 2026-07-21 **v14 全面安全/隱私/bug 稽核＋修復**（3 個 subagent 分別稽核 index.html／screen.ps1＋tests.ps1／repo 隱私外洩，安全性整體乾淨：無金鑰外洩、XSS 有 esc()/safeUrl() 把關、CSP 嚴格）：
+  1. 修復 index.html 手機版跑版：缺少 `<meta name="viewport">`（CSS 明明 mobile-first 寫的斷點從未生效，手機瀏覽器以桌面 980px 版面縮放顯示）；同時補 `<!DOCTYPE html>`（原本無 doctype，靠瀏覽器寬鬆解析救回，非標準）
+  2. 修復折線圖 hover 對不準：`attachChartHover` 原本無論 K 線／折線模式一律用 K 線的座標反推公式，
+     折線模式下 tooltip 可能指向鄰近一天；改為依 `curMode` 分流對應 `candleChart`/`priceChart` 各自的 X(i) 反函數
+  3. 修復 screen.ps1 靜默失敗：大盤指數 FMTQIK 四個月全部抓取失敗時，原本會悄悄產生「今日無標的」
+     的假結果並照常覆蓋 index.html（跟真的「今天沒有合格股票」無法區分）——改為仿照 STOCK_DAY_ALL
+     的 FATAL 中止；另外 TPEx 法人買賣超（insti/dailyTrade）抓取失敗原本完全沒有追蹤/警告，
+     新增 `$tpexOk` 計數＋警告（比照既有 `$t86ok`／T86 的做法）；`idxOk`/`tpexOk` 一併寫入 meta 供日後檢視
+  4. 修復 Top5 分散化替換的產業判斷漏洞：`IsElec('')`（產業別查無資料）回傳 false，
+     原本會被當成「確認非電子股」去替換第 5 名，實際上只是資料缺失、並非真的分散；
+     改為要求替換候選 `ind` 非空且非電子股，符合本卡 logicCard ①「以最高分非電子股替換」的原意
+  5. 修復 FMTQIK 日期補零不一致：第 125 行組 `tradeDates` 時月/日未補零（其餘 ROC 轉換處都有補零），
+     若 TWSE 來源哪天不補零會悄悄產生錯誤格式的日期字串，破壞下游日期比對；已統一補零
+  6. 修正 screen.ps1 開頭錯誤註解「(ASCII source only)」——檔案其實含中文字面值（IsElec 關鍵字、
+     出場原因字串等），靠 BOM 才能正確解析，錯誤註解可能誤導未來的人把 BOM 拿掉
+  7. 隱私：commit 作者 email 從真實 Gmail 改為 GitHub noreply（僅影響本 repo 之後的 commit，
+     `git config --local user.email`；已推送的歷史 commit 未改寫，風險太高不做）
+  8. 稽核中發現但本輪未處理（使用者選擇暫不動）：`.claude/settings.json` 內含本機 Windows 帳號名稱
+     與資料夾路徑（含舊 OneDrive 路徑），已提交進公開 repo；screen.ps1 splice() 找不到 marker 時
+     只警告不阻擋寫檔；holdings.json 讀取失敗靜默吞掉（catch{} 空區塊）；折線圖以外的 cosmetic bug
+     （degenerate candle fallback 選錯 curMode）——待日後決定是否處理
 - 2026-07-19 **v13 trades 實際持有期間績效＋警示收緊＋無障礙**：
   1. trades[] 啟用並**記錄成交價**（使用者拍板接受公開，取代原「成交價不入 repo」原則）；
      績效曲線改 TWR（時間加權）按實際持有期間計算——修正「7 月買的持股被回推成 4 月就持有」

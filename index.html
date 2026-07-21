@@ -1,4 +1,6 @@
+<!DOCTYPE html>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex, nofollow">
 <title>台股投資報告</title>
@@ -754,7 +756,9 @@ function attachChartHover(){
   const bc=document.getElementById('bc'),tip=document.getElementById('tip');
   const move=e=>{if(!curSeries)return;const r=bc.getBoundingClientRect();const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
     const ser=curSeries,n=ser.length;const pl=(lastGeom&&lastGeom.padL)||10,pr=(lastGeom&&lastGeom.padR)||10;
-    let i=Math.round((cx-pl)/(r.width-pl-pr)*n-0.5);i=Math.max(0,Math.min(n-1,i));
+    /* candle mode: X(i)=pad.l+iw*(i+0.5); line mode: X(i)=pad.l+span*(i/(n-1)) -- different inverses, mode-dependent */
+    let i=curMode==='k'?Math.round((cx-pl)/(r.width-pl-pr)*n-0.5):Math.round((cx-pl)/(r.width-pl-pr)*(n-1));
+    i=Math.max(0,Math.min(n-1,i));
     if(i!==hoverIdx){hoverIdx=i;renderBigChart();}
     const s=ser[i],cl=s.chg>0?'up-txt':s.chg<0?'down-txt':'';
     tip.innerHTML=`<b>${s.d}</b>　開 ${s.o}　高 ${s.h}　低 ${s.l}　收 <b class="${cl}">${s.c}</b>（${fmtSign(s.chg)}）　量 ${fmt(s.v)} 張`;

@@ -1,4 +1,4 @@
-﻿# screen.ps1 - TWSE quant screening engine v2 (ASCII source only)
+﻿# screen.ps1 - TWSE quant screening engine v2 (UTF-8 with BOM; contains CJK literals, e.g. IsElec/exit-reason strings)
 # v2: regime-aware scoring, 20-day auto-close tracking, dedupe, spark output
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -119,12 +119,19 @@ foreach($k in $px.Keys){ $g=$px[$k].chg; if($g -gt 0){$upN++} elseif($g -lt 0){$
 Write-Host "[2/8] FMTQIK (index history)..."
 $months=@(); $d0=[datetime]::ParseExact($lastDate,'yyyyMMdd',$null)
 for($m=3;$m -ge 0;$m--){ $months += $d0.AddMonths(-$m).ToString('yyyyMM01') }
-$idxC=@(); $tradeDates=@()
+$idxC=@(); $tradeDates=@(); $idxOk=0
 foreach($mm in $months){
   $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=$mm&response=json"
-  if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){ $idxC += (Num $d[4]); $p="$($d[0])".Split('/'); $tradeDates += ("{0}{1}{2}" -f ([int]$p[0]+1911), $p[1], $p[2]) } }
+  if($r -and $r.stat -eq 'OK'){
+    $idxOk++
+    foreach($d in $r.data){ $idxC += (Num $d[4]); $p="$($d[0])".Split('/'); $tradeDates += ("{0}{1:00}{2:00}" -f ([int]$p[0]+1911), [int]$p[1], [int]$p[2]) }
+  }
   Start-Sleep -Milliseconds 700
 }
+# total failure here would silently produce an empty-picks run indistinguishable from a real
+# no-qualifying-stocks day (regime defaults to red, screening loops never execute) -> abort instead
+if($idxC.Count -eq 0){ Write-Host "FATAL: FMTQIK failed for all $($months.Count) months - no index data, aborting to avoid overwriting good data with a silently-empty run"; exit 1 }
+if($idxOk -lt $months.Count){ Write-Host "  WARNING: only $idxOk/$($months.Count) FMTQIK months fetched - regime/index calc may be degraded" }
 function SMAlast($a,$n){ if($a.Count -lt $n){return $null}; ($a[($a.Count-$n)..($a.Count-1)] | Measure-Object -Average).Average }
 $idxLast=$idxC[$idxC.Count-1]; $idxMA20=SMAlast $idxC 20; $idxMA60=SMAlast $idxC 60
 $last5=$tradeDates | Select-Object -Last 5
@@ -132,6 +139,7 @@ $last5=$tradeDates | Select-Object -Last 5
 Write-Host "[3/8] T86 x5 days: $($last5 -join ',')"
 $chip=@{}
 $t86ok=0
+$tpexOk=0
 foreach($d in $last5){
   $r=GetJson "https://www.twse.com.tw/rwd/zh/fund/T86?date=$d&selectType=ALL&response=json"
   if($r -and $r.stat -eq 'OK'){
@@ -147,6 +155,7 @@ foreach($d in $last5){
   $dSlash="{0}/{1}/{2}" -f $d.Substring(0,4),$d.Substring(4,2),$d.Substring(6,2)
   $r2=GetJson "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade?type=Daily&sect=EW&date=$dSlash&response=json"
   if($r2 -and $r2.tables -and $r2.tables[0].data){
+    $tpexOk++
     foreach($row in $r2.tables[0].data){
       $c="$($row[0])".Trim()
       if(-not $chip.ContainsKey($c)){ $chip[$c]=@{f=@();t=@();tot=@()} }
@@ -156,6 +165,7 @@ foreach($d in $last5){
   Start-Sleep -Milliseconds 800
 }
 if($t86ok -lt 5){ Write-Host "  WARNING: only $t86ok/5 T86 days fetched - chip screening degraded. Consider re-run later." }
+if($tpexOk -lt 5){ Write-Host "  WARNING: only $tpexOk/5 TPEx insti days fetched - OTC chip screening degraded. Consider re-run later." }
 
 Write-Host "[4/8] BFI82U (market inst amount)..."
 $instNet=$null
@@ -304,7 +314,9 @@ $picks = $picks | Sort-Object -Property @{e='score';Descending=$true}
 $allPicks=@($picks | Select-Object -First 16)
 $top5=@($allPicks | Select-Object -First 5)
 if($top5.Count -eq 5 -and (@($top5 | Where-Object { -not (IsElec $_.ind) })).Count -eq 0){
-  $alt=$allPicks | Where-Object { -not (IsElec $_.ind) } | Select-Object -First 1
+  # require a KNOWN non-electronics industry for the swap-in; an unresolved ind='' isn't
+  # confirmed diversification, just missing data, so it must not qualify as the "alt" pick
+  $alt=$allPicks | Where-Object { $_.ind -and -not (IsElec $_.ind) } | Select-Object -First 1
   if($alt -and ($top5[4].score - $alt.score) -le 15){ $top5 = @($top5[0..3]) + @($alt) }
 }
 foreach($p in $allPicks){ $isTop=@($top5 | Where-Object { $_.code -eq $p.code }).Count -gt 0; $p | Add-Member -NotePropertyName top -NotePropertyValue $isTop -Force }
@@ -518,7 +530,7 @@ if(-not $dateLogged){
 @{ picks=$norm } | ConvertTo-Json -Depth 5 | Out-File $logPath -Encoding UTF8
 
 $regimeObj=@{ light=$light; idx=[math]::Round($idxLast,2); ma20=[math]::Round($idxMA20,2); ma60=[math]::Round($idxMA60,2); instNet=$instNet; up=$upN; down=$dnN }
-$metaObj=@{ candidates=$cands.Count; shortlist=@($short).Count; etfCand=$ecand.Count; newLogged=$newLogged; t86ok=$t86ok; revRows=$rev.Count }
+$metaObj=@{ candidates=$cands.Count; shortlist=@($short).Count; etfCand=$ecand.Count; newLogged=$newLogged; t86ok=$t86ok; tpexOk=$tpexOk; idxOk=$idxOk; revRows=$rev.Count }
 $out=@{
   date=$lastDate
   regime=$regimeObj
