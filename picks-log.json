@@ -53,41 +53,41 @@
                   {
                       "date":  "20260709",
                       "price":  78.4,
+                      "aiSust":  true,
                       "name":  "統一",
                       "score":  83,
                       "code":  "1216",
                       "status":  "open",
-                      "aiSust":  true,
                       "aiRisk":  "本益比已達21.6倍偏貴，若市場風險偏好回升、資金退出防禦股，估值有回落壓力"
                   },
                   {
                       "date":  "20260716",
                       "price":  70.2,
+                      "aiSust":  false,
                       "name":  "東和鋼鐵",
                       "score":  91,
                       "code":  "2006",
                       "status":  "open",
-                      "aiSust":  false,
                       "aiRisk":  "鋼價與營建/公共工程景氣連動，抗跌主要反映資金避險輪動而非基本面加速成長，若鋼價或營建需求轉弱，動能恐消退"
                   },
                   {
                       "date":  "20260716",
                       "price":  79.4,
+                      "aiSust":  false,
                       "name":  "慧洋-KY",
                       "score":  90,
                       "code":  "2637",
                       "status":  "open",
-                      "aiSust":  false,
                       "aiRisk":  "散裝運價具強烈景氣循環性，年增57.9%恐含低基期效應，一旦全球貿易需求降溫或新船運力過剩，運價與獲利恐快速回落"
                   },
                   {
                       "date":  "20260716",
                       "price":  35.1,
+                      "aiSust":  true,
                       "name":  "玉山金",
                       "score":  84,
                       "code":  "2884",
                       "status":  "open",
-                      "aiSust":  true,
                       "aiRisk":  "三商壽合併案股權稀釋與整合效益需時間驗證，若大盤持續探底，金融股評價同樣承壓"
                   },
                   {
@@ -96,18 +96,20 @@
                       "name":  "第一金",
                       "score":  80,
                       "code":  "2892",
-                      "status":  "open"
+                      "status":  "open",
+                      "aiSust":  true,
+                      "aiRisk":  "降息循環或企業放款品質惡化將壓抑淨利差與資產品質"
                   },
                   {
                       "date":  "20260717",
                       "price":  119.5,
+                      "aiSust":  false,
+                      "aiRisk":  "首季合併延滯率升至5.1%，獲利成長主因信用減損損失減少而非本業擴張，資產品質是最大變數",
                       "name":  "中租-KY",
                       "score":  82,
                       "code":  "5871",
                       "status":  "open",
-                      "light":  "red",
-                      "aiSust":  false,
-                      "aiRisk":  "首季合併延滯率升至5.1%，獲利成長主因信用減損損失減少而非本業擴張，資產品質是最大變數"
+                      "light":  "red"
                   }
               ]
 }

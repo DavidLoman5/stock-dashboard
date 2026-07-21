@@ -34,6 +34,41 @@
                      "score":  -2,
                      "stance":  "defend",
                      "close":  26.43
+                 },
+                 {
+                     "date":  "20260720",
+                     "code":  "0050",
+                     "score":  -3,
+                     "stance":  "defend",
+                     "close":  99.2
+                 },
+                 {
+                     "date":  "20260720",
+                     "code":  "00935",
+                     "score":  -2,
+                     "stance":  "defend",
+                     "close":  52.2
+                 },
+                 {
+                     "date":  "20260720",
+                     "code":  "00947",
+                     "score":  -1,
+                     "stance":  "trim",
+                     "close":  31.61
+                 },
+                 {
+                     "date":  "20260720",
+                     "code":  "00990A",
+                     "score":  -1,
+                     "stance":  "trim",
+                     "close":  15.82
+                 },
+                 {
+                     "date":  "20260720",
+                     "code":  "00981A",
+                     "score":  -1,
+                     "stance":  "trim",
+                     "close":  25.9
                  }
              ]
 }
