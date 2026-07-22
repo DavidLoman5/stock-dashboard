@@ -51,14 +51,20 @@
                       "closedOn":  "20260716"
                   },
                   {
-                      "date":  "20260709",
-                      "price":  78.4,
-                      "aiSust":  true,
+                      "days":  7,
+                      "exit":  79.6,
                       "name":  "統一",
-                      "score":  83,
+                      "aiSust":  true,
+                      "closedOn":  "20260721",
+                      "alphaFinal":  4,
+                      "retFinal":  1.53,
+                      "reason":  "外資連2日轉賣",
+                      "aiRisk":  "本益比已達21.6倍偏貴，若市場風險偏好回升、資金退出防禦股，估值有回落壓力",
+                      "price":  78.4,
+                      "status":  "closed",
+                      "date":  "20260709",
                       "code":  "1216",
-                      "status":  "open",
-                      "aiRisk":  "本益比已達21.6倍偏貴，若市場風險偏好回升、資金退出防禦股，估值有回落壓力"
+                      "score":  83
                   },
                   {
                       "date":  "20260716",
@@ -91,14 +97,20 @@
                       "aiRisk":  "三商壽合併案股權稀釋與整合效益需時間驗證，若大盤持續探底，金融股評價同樣承壓"
                   },
                   {
-                      "date":  "20260716",
-                      "price":  34.1,
+                      "days":  3,
+                      "exit":  34.45,
                       "name":  "第一金",
-                      "score":  80,
-                      "code":  "2892",
-                      "status":  "open",
                       "aiSust":  true,
-                      "aiRisk":  "降息循環或企業放款品質惡化將壓抑淨利差與資產品質"
+                      "closedOn":  "20260721",
+                      "alphaFinal":  4.08,
+                      "retFinal":  1.03,
+                      "reason":  "外資連2日轉賣",
+                      "aiRisk":  "降息循環或企業放款品質惡化將壓抑淨利差與資產品質",
+                      "price":  34.1,
+                      "status":  "closed",
+                      "date":  "20260716",
+                      "code":  "2892",
+                      "score":  80
                   },
                   {
                       "date":  "20260717",
@@ -110,6 +122,26 @@
                       "code":  "5871",
                       "status":  "open",
                       "light":  "red"
+                  },
+                  {
+                      "dist":  -3,
+                      "techS":  26,
+                      "ind":  "建材營造",
+                      "ret5":  1.6,
+                      "code":  "2542",
+                      "dy":  9.07,
+                      "name":  "興富發",
+                      "yoy":  16.470871837166957,
+                      "price":  44.1,
+                      "status":  "open",
+                      "pe":  13.57,
+                      "chipS":  30,
+                      "date":  "20260721",
+                      "light":  "yellow",
+                      "score":  84,
+                      "fundS":  28,
+                      "aiSust":  false,
+                      "aiRisk":  "2026年16案完工交屋為時間點集中認列的一次性效應，隔年若無同等交屋量，營收恐大幅回落"
                   }
               ]
 }
