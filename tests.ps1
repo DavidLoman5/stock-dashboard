@@ -11,7 +11,7 @@ $fails=@()
 function Assert($ok,$name){ if($ok){ Write-Host "  PASS $name" } else { Write-Host "  FAIL $name"; $script:fails+=$name } }
 
 Write-Host "[1] syntax parse..."
-foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1','backtest.ps1')){
+foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1','backtest.ps1','build-demo.ps1')){
   $tok=$null;$err=$null
   [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root $f),[ref]$tok,[ref]$err)
   Assert ($err.Count -eq 0) "syntax $f"
@@ -19,7 +19,7 @@ foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1',
 }
 
 Write-Host "[2] UTF-8 BOM convention (pwsh 7 does not need it; kept so CJK literals survive a PS5.1/Windows run)..."
-foreach($f in @('screen.ps1','update-holdings.ps1','publish.ps1')){
+foreach($f in @('screen.ps1','update-holdings.ps1','publish.ps1','build-demo.ps1')){
   $b=[IO.File]::ReadAllBytes((Join-Path $root $f))
   Assert ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) "BOM $f"
 }
@@ -81,6 +81,28 @@ Assert ($null -ne (Select-String -Path (Join-Path $root 'screen.ps1') -Pattern '
 Assert ($null -ne (Select-String -Path (Join-Path $root 'update-holdings.ps1') -Pattern 'history never overwritten' -SimpleMatch)) "update-holdings stance-log guard"
 Assert ($null -ne (Select-String -Path (Join-Path $root 'evaluate.ps1') -Pattern 'FATAL: picks-log.json unreadable' -SimpleMatch)) "evaluate.ps1 read guard"
 Assert ($null -ne (Select-String -Path (Join-Path $root 'publish.ps1') -Pattern 'publish continues' -SimpleMatch)) "publish.ps1 notes fallback"
+
+Write-Host "[8] multi-user privacy guards (nothing personal may reach the repo)..."
+# .gitignore must cover every per-deployment artifact. Losing one of these lines is how a real
+# user's portfolio ends up on GitHub Pages, so it is a test, not a convention.
+$gi = Get-Content (Join-Path $root '.gitignore') -Raw
+foreach($pat in @('data/','*.db','config.json')){
+  Assert ($gi -split "`n" | Where-Object { $_.Trim() -eq $pat }) "gitignore covers $pat"
+}
+# the committed holdings.json is the public demo: it must never carry real transaction prices
+$hj = Get-Content (Join-Path $root 'holdings.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+Assert (@($hj.trades).Count -eq 0) "holdings.json demo carries no trades (found $(@($hj.trades).Count))"
+# build-demo.ps1 publishes guest-level notes only; `rec`/`news` are owner-specific advice
+$bd = Get-Content (Join-Path $root 'build-demo.ps1') -Raw
+Assert ($bd -match "'sigFund','tech','chip','fund'") "build-demo publishes factual note fields only"
+Assert ($bd -notmatch "'rec'") "build-demo never publishes rec"
+# tracked files must not include anything from data/ (belt and braces if .gitignore regressed)
+if(Get-Command git -ErrorAction SilentlyContinue){
+  Push-Location $root
+  $tracked = @(git ls-files 'data' 'config.json' '*.db' 2>$null)
+  Pop-Location
+  Assert ($tracked.Count -eq 0) "no per-deployment files tracked by git (found: $($tracked -join ', '))"
+}
 
 Write-Host ""
 if($fails.Count -eq 0){ Write-Host "ALL TESTS PASSED"; exit 0 }

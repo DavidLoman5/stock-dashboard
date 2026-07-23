@@ -1,12 +1,9 @@
 {
-  "note": "持股唯一事實來源。1 張 = 1000 股。異動方式：直接跟 Claude 說（例：7/2 買了一張 0050 成交價 100.5）——Claude 會同時更新 holdings[].lots 並 append 一筆 trades[]。trades 記成交價（2026-07-19 使用者拍板：接受公開於 repo）；瀏覽器 localStorage 的成本輸入仍可覆寫頁面顯示。trades 格式：{\"d\":\"2026-07-02\",\"side\":\"buy|sell\",\"code\":\"0050\",\"lots\":1,\"price\":100.5}。績效曲線依 trades 以 TWR 計算實際持有期間報酬；trades 為空時退回「現行張數整段持有」假設。",
-  "updated": "2026-07-19",
+  "note": "【公開 demo 用的範例持股，不是任何人的真實部位】多使用者伺服器模式下這個檔只有兩個用途：(1) GitHub Pages 靜態展示站的示範組合（build-demo.ps1 讀它產生公開頁面）；(2) 讓別人 clone 這個 repo 後不必先建帳號也能直接跑 update-holdings.ps1 看到結果。真實持股一律存在伺服器 DB（data/app.db，已 gitignore），用網頁的「編輯持股」或 python3 -m server.admin import-holdings 維護，絕不寫回這個檔。1 張 = 1000 股。trades 格式：{\"d\":\"2026-07-02\",\"side\":\"buy|sell\",\"code\":\"0050\",\"lots\":1,\"price\":100.5}；績效曲線依 trades 以 TWR 計算，trades 為空時退回「現行張數整段持有」假設。",
+  "updated": "2026-07-23",
   "holdings": [
-    { "code": "0050",   "name": "元大台灣50",       "lots": 1, "type": "被動", "theme": "台灣50大權值股", "techLike": true },
-    { "code": "00935",  "name": "野村臺灣新科技50", "lots": 1, "type": "被動", "theme": "台灣科技50", "techLike": true },
-    { "code": "00947",  "name": "台新臺灣IC設計",   "lots": 1, "type": "被動", "theme": "IC 設計＋記憶體", "techLike": true },
-    { "code": "00990A", "name": "主動元大AI新經濟", "lots": 2, "type": "主動", "theme": "全球 AI · 約58%美股 · 不配息", "techLike": true },
-    { "code": "00981A", "name": "主動統一台股增長", "lots": 1, "type": "主動", "theme": "台股大型成長股", "techLike": true }
+    { "code": "0050",  "name": "元大台灣50",       "lots": 1, "type": "被動", "theme": "台灣50大權值股", "techLike": true },
+    { "code": "00935", "name": "野村臺灣新科技50", "lots": 1, "type": "被動", "theme": "台灣科技50", "techLike": true }
   ],
   "trades": []
 }

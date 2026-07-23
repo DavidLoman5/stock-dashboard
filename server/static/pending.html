@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex, nofollow">
+<title>等待核准－台股投資報告</title>
+<style>
+  :root{
+    --bg:#f5f6f9;--surface:#fff;--line:#dfe2ea;--ink:#1a1e27;--ink-soft:#545b6b;
+    --ink-faint:#8b92a3;--accent:#b6842f;--accent-soft:#f2e7cf;
+    --shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);--radius:14px;
+    --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",-apple-system,"Segoe UI",system-ui,sans-serif;
+  }
+  @media(prefers-color-scheme:dark){:root{
+    --bg:#0e121b;--surface:#161c28;--line:#2a3346;--ink:#e7eaf1;--ink-soft:#a3abbd;
+    --ink-faint:#6b7488;--accent:#d9ad57;--accent-soft:#2a2413;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       padding:24px;background:var(--bg);color:var(--ink);font-family:var(--font);
+       -webkit-font-smoothing:antialiased}
+  .card{width:100%;max-width:420px;background:var(--surface);border:1px solid var(--line);
+        border-radius:var(--radius);box-shadow:var(--shadow);padding:30px 26px;text-align:center}
+  .badge{display:inline-block;padding:4px 12px;border-radius:99px;font-size:11.5px;
+         font-weight:700;background:var(--accent-soft);color:var(--accent);margin-bottom:16px}
+  h1{margin:0 0 10px;font-size:18px;letter-spacing:.02em}
+  p{margin:0 0 14px;font-size:13px;color:var(--ink-soft);line-height:1.75}
+  .foot{margin-top:22px;padding-top:16px;border-top:1px solid var(--line);
+        font-size:11.5px;color:var(--ink-faint);line-height:1.7}
+  button{font:inherit;font-size:13px;padding:9px 20px;border-radius:9px;cursor:pointer;
+         border:1px solid var(--line);background:transparent;color:var(--ink-soft)}
+  button:hover{border-color:var(--accent);color:var(--ink)}
+</style>
+<div class="card">
+  <span class="badge">等待核准</span>
+  <h1>申請已送出</h1>
+  <p>你的帳號已建立，需要管理者核准後才能看到儀表板內容。核准後直接重新整理此頁即可。</p>
+  <button id="out">登出</button>
+  <p class="foot">本站為個人自架的資訊整理工具，非投資建議、非個股推介，
+    也<b>絕不會</b>要求你提供券商帳號、密碼或 API 金鑰。</p>
+</div>
+<script>
+document.getElementById('out').onclick = async () => {
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      credentials: 'same-origin',
+      body: '{}'
+    });
+  } catch (e) { /* log out locally regardless */ }
+  location.href = '/login';
+};
+</script>

@@ -1,131 +1,4 @@
 {
-  "regime": {
-    "ma20": 45301.33,
-    "idx": 44850.81,
-    "instNet": 338.0,
-    "down": 1156,
-    "light": "yellow",
-    "ma60": 43895.42,
-    "up": 1024
-  },
-  "etf": [
-    {
-      "code": "00646",
-      "name": "元大S&P500",
-      "close": 76.1,
-      "chgPct": 0.39,
-      "score": 53,
-      "chip": 26,
-      "tech": 27,
-      "owned": false,
-      "tPos": 4,
-      "fPos": 3,
-      "tSum": 825.0,
-      "fSum": 1327.0,
-      "finDelta": 0,
-      "ret5": -1.0,
-      "dist": -1.0
-    },
-    {
-      "code": "0050",
-      "name": "元大台灣50",
-      "close": 103.9,
-      "chgPct": 1.32,
-      "score": 41,
-      "chip": 32,
-      "tech": 9,
-      "owned": true,
-      "tPos": 5,
-      "fPos": 1,
-      "tSum": 13339.0,
-      "fSum": -314143.0,
-      "finDelta": -8737,
-      "ret5": -2.3,
-      "dist": -6.5
-    },
-    {
-      "code": "00662",
-      "name": "富邦NASDAQ",
-      "close": 120.25,
-      "chgPct": 0.58,
-      "score": 38,
-      "chip": 26,
-      "tech": 12,
-      "owned": false,
-      "tPos": 3,
-      "fPos": 3,
-      "tSum": 280.0,
-      "fSum": -3.0,
-      "finDelta": -47,
-      "ret5": -1.6,
-      "dist": -3.0
-    },
-    {
-      "code": "0052",
-      "name": "富邦科技",
-      "close": 60.9,
-      "chgPct": 0.5,
-      "score": 32,
-      "chip": 23,
-      "tech": 9,
-      "owned": false,
-      "tPos": 2,
-      "fPos": 4,
-      "tSum": 1041.0,
-      "fSum": 2393.0,
-      "finDelta": -390,
-      "ret5": -2.1,
-      "dist": -6.7
-    },
-    {
-      "code": "00981D",
-      "name": "主動中信非投等債",
-      "close": 10.45,
-      "chgPct": -0.29,
-      "score": 32,
-      "chip": 15,
-      "tech": 17,
-      "owned": false,
-      "tPos": 0,
-      "fPos": 5,
-      "tSum": 0.0,
-      "fSum": 9417.0,
-      "finDelta": -980,
-      "ret5": -0.2,
-      "dist": -0.7
-    }
-  ],
-  "perf": {
-    "avgRetClosed": -1.96,
-    "winRate": 71.0,
-    "closedN": 7,
-    "openN": 4,
-    "avgAlphaClosed": 0.45,
-    "avgRetOpen": 3.61,
-    "byLight": {
-      "red": {
-        "avgAlpha": -2.18,
-        "n": 1,
-        "winRate": 0.0
-      },
-      "yellow": {
-        "avgAlpha": 0.25,
-        "n": 1,
-        "winRate": 100.0
-      }
-    }
-  },
-  "meta": {
-    "newLogged": 0,
-    "tpexOk": 5,
-    "candidates": 134,
-    "idxOk": 4,
-    "shortlist": 16,
-    "etfCand": 23,
-    "revRows": 1973,
-    "t86ok": 5
-  },
-  "date": "20260722",
   "picks": [
     {
       "code": "2027",
@@ -413,5 +286,132 @@
       "ret5": -22.5,
       "dist": -25.3
     }
-  ]
+  ],
+  "perf": {
+    "avgAlphaClosed": 0.45,
+    "avgRetOpen": 3.61,
+    "avgRetClosed": -1.96,
+    "byLight": {
+      "yellow": {
+        "n": 1,
+        "avgAlpha": 0.25,
+        "winRate": 100.0
+      },
+      "red": {
+        "n": 1,
+        "avgAlpha": -2.18,
+        "winRate": 0.0
+      }
+    },
+    "closedN": 7,
+    "winRate": 71.0,
+    "openN": 4
+  },
+  "regime": {
+    "up": 1024,
+    "ma60": 43895.42,
+    "instNet": 338.0,
+    "ma20": 45301.33,
+    "down": 1156,
+    "light": "yellow",
+    "idx": 44850.81
+  },
+  "date": "20260722",
+  "etf": [
+    {
+      "code": "00646",
+      "name": "元大S&P500",
+      "close": 76.1,
+      "chgPct": 0.39,
+      "score": 53,
+      "chip": 26,
+      "tech": 27,
+      "owned": false,
+      "tPos": 4,
+      "fPos": 3,
+      "tSum": 825.0,
+      "fSum": 1327.0,
+      "finDelta": 0,
+      "ret5": -1.0,
+      "dist": -1.0
+    },
+    {
+      "code": "0050",
+      "name": "元大台灣50",
+      "close": 103.9,
+      "chgPct": 1.32,
+      "score": 41,
+      "chip": 32,
+      "tech": 9,
+      "owned": true,
+      "tPos": 5,
+      "fPos": 1,
+      "tSum": 13339.0,
+      "fSum": -314143.0,
+      "finDelta": -8737,
+      "ret5": -2.3,
+      "dist": -6.5
+    },
+    {
+      "code": "00662",
+      "name": "富邦NASDAQ",
+      "close": 120.25,
+      "chgPct": 0.58,
+      "score": 38,
+      "chip": 26,
+      "tech": 12,
+      "owned": false,
+      "tPos": 3,
+      "fPos": 3,
+      "tSum": 280.0,
+      "fSum": -3.0,
+      "finDelta": -47,
+      "ret5": -1.6,
+      "dist": -3.0
+    },
+    {
+      "code": "0052",
+      "name": "富邦科技",
+      "close": 60.9,
+      "chgPct": 0.5,
+      "score": 32,
+      "chip": 23,
+      "tech": 9,
+      "owned": false,
+      "tPos": 2,
+      "fPos": 4,
+      "tSum": 1041.0,
+      "fSum": 2393.0,
+      "finDelta": -390,
+      "ret5": -2.1,
+      "dist": -6.7
+    },
+    {
+      "code": "00981D",
+      "name": "主動中信非投等債",
+      "close": 10.45,
+      "chgPct": -0.29,
+      "score": 32,
+      "chip": 15,
+      "tech": 17,
+      "owned": false,
+      "tPos": 0,
+      "fPos": 5,
+      "tSum": 0.0,
+      "fSum": 9417.0,
+      "finDelta": -980,
+      "ret5": -0.2,
+      "dist": -0.7
+    }
+  ],
+  "meta": {
+    "t86ok": 5,
+    "shortlist": 16,
+    "revRows": 1973,
+    "candidates": 134,
+    "etfCand": 23,
+    "tpexOk": 5,
+    "idxOk": 4,
+    "newLogged": 0
+  }
 }

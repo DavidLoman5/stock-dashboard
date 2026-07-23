@@ -4,3 +4,12 @@ screen-result.json
 backtest-cache/
 # per-(code,month) completed-month kline cache for screen.ps1 (rebuildable from TWSE/TPEx)
 kline-cache/
+# server mode: everything below is per-deployment and MUST NOT be committed.
+# data/ holds the JSON the server serves (rebuildable); *.db holds real users' portfolios.
+data/
+*.db
+*.db-wal
+*.db-shm
+config.json
+__pycache__/
+*.pyc

@@ -2,6 +2,16 @@
 # AI never sees raw API responses: this script fetches, computes, and splices
 # window.DASH / window.META / window.HOLDINGS_META directly into index.html,
 # then writes a small holdings-context.json for the AI to read for writing analysis text.
+#
+# Server mode (multi-user): -HoldingsFile points at the owner's portfolio exported from the
+# app DB, and -CodesFrom adds the union of every active user's codes so one fetch serves
+# everyone (quotes are identical per code; only lots/trades are personal). Both default to
+# the single-user behaviour, so a fresh clone still runs with just holdings.json.
+param(
+  [string]$HoldingsFile,
+  [string]$CodesFrom,
+  [string]$DataDir
+)
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 function Num($s){ if($null -eq $s){return $null}; $t=("$s" -replace '[^0-9\.\-]',''); if($t -notmatch '[0-9]'){return $null}; try{ return [double]$t }catch{ return $null } }
@@ -24,10 +34,34 @@ function ReadJsonRetry($path){
   return $null
 }
 
-Write-Host "[1/6] holdings.json..."
-$hj = Get-Content (Join-Path $root 'holdings.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-$codes = @($hj.holdings | ForEach-Object { "$($_.code)" })
-Write-Host "  codes: $($codes -join ', ')"
+if(-not $DataDir){ $DataDir = Join-Path $root 'data' }
+if(-not (Test-Path $DataDir)){ New-Item -ItemType Directory -Path $DataDir | Out-Null }
+# Server mode is detected, not configured: if the app DB has exported an owner portfolio we
+# analyse that, otherwise we fall back to the in-repo holdings.json. A fresh clone has no
+# data/ dir and so behaves exactly like the original single-user script.
+if(-not $HoldingsFile){
+  $ownerExport = Join-Path $DataDir 'owner-holdings.json'
+  $HoldingsFile = if(Test-Path $ownerExport){ $ownerExport } else { Join-Path $root 'holdings.json' }
+}
+if(-not $CodesFrom){
+  $codesExport = Join-Path $DataDir 'active-codes.json'
+  if(Test-Path $codesExport){ $CodesFrom = $codesExport }
+}
+
+Write-Host "[1/6] $(Split-Path -Leaf $HoldingsFile)..."
+$hj = Get-Content $HoldingsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+$ownCodes = @($hj.holdings | ForEach-Object { "$($_.code)" })
+# extra codes = other users' holdings; fetched into DASH so the server can serve them, but
+# they never reach HOLDINGS_META / holdings-context.json (those stay this portfolio's only)
+$extraCodes = @()
+if($CodesFrom -and (Test-Path $CodesFrom)){
+  $cf = ReadJsonRetry $CodesFrom
+  # a broken/empty codes file must not silently shrink the fetch set - warn and carry on
+  if($null -eq $cf){ Write-Host "  WARN: $CodesFrom unreadable - fetching own codes only" }
+  else { $extraCodes = @(@($cf.codes) | ForEach-Object { "$_" } | Where-Object { $_ -and $ownCodes -notcontains $_ } | Select-Object -Unique) }
+}
+$codes = @($ownCodes) + @($extraCodes)
+Write-Host "  codes: $($ownCodes -join ', ')$(if($extraCodes.Count){" (+$($extraCodes.Count) shared: $($extraCodes -join ', '))"})"
 
 Write-Host "[2/6] STOCK_DAY per holding (4 months) + FMTQIK (TAIEX)..."
 $today = Get-Date
@@ -281,11 +315,24 @@ function Splice([string]$html,[string]$marker,[string]$payload){
   $i2=$html.IndexOf('</script>',$i1)
   return $html.Substring(0,$i1+$st.Length)+$payload+$html.Substring($i2)
 }
-$html = Splice $html 'dashdata' ('window.DASH='+($DASH|ConvertTo-Json -Depth 6 -Compress)+';')
+# the page only ever renders HOLDINGS_META's codes - splicing other users' quotes would just
+# bloat index.html, so the static page gets this portfolio's slice and data/quotes.json gets all
+$DASHPage=[ordered]@{}
+foreach($k in $DASH.Keys){ if($k -eq 'TAIEX' -or $ownCodes -contains $k){ $DASHPage[$k]=$DASH[$k] } }
+$html = Splice $html 'dashdata' ('window.DASH='+($DASHPage|ConvertTo-Json -Depth 6 -Compress)+';')
 $html = Splice $html 'holdingsmeta' ('window.HOLDINGS_META='+($HOLDINGS_META|ConvertTo-Json -Depth 4 -Compress)+';')
 $genDate = $today.ToString('yyyy/MM/dd')
 $lastTradeIso = "$($lastDate.Substring(0,4))-$($lastDate.Substring(4,2))-$($lastDate.Substring(6,2))"
 $html = $html -replace 'window\.META=\{[^}]*\};', ("window.META={generated:'$genDate',lastTrade:'$lastTradeIso'};")
 $html = $html -replace '報告日期：<b>[^<]*</b>', "報告日期：<b>$genDate</b>"
 [IO.File]::WriteAllText($idxPath,$html,$enc)
+
+# server-mode exports: same payloads the page gets, as plain JSON for server.py to serve
+# per user. Written last so a failure here can never leave index.html half-spliced.
+Write-Host "[6b] data exports for server mode..."
+$DASH | ConvertTo-Json -Depth 6 -Compress | Out-File (Join-Path $DataDir 'quotes.json') -Encoding UTF8
+$HOLDINGS_META | ConvertTo-Json -Depth 4 -Compress | Out-File (Join-Path $DataDir 'holdings-meta.json') -Encoding UTF8
+([ordered]@{ generated=$genDate; lastTrade=$lastTradeIso }) | ConvertTo-Json -Compress | Out-File (Join-Path $DataDir 'meta.json') -Encoding UTF8
+Write-Host "  wrote quotes.json ($($DASH.Keys.Count) keys), holdings-meta.json, meta.json -> $DataDir"
+
 Write-Host "DONE. lastTrade=$lastDate holdings=$($codes.Count) divNotes=$($divMap.Count)"

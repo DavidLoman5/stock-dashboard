@@ -1,0 +1,35 @@
+{
+  "_comment": "Copy to config.json (gitignored) and edit. Every key is optional - server/config.py holds the defaults. Only the keys listed here are accepted; an unknown key is a startup error rather than a silently ignored typo.",
+
+  "host": "127.0.0.1",
+  "port": 8787,
+
+  "_comment_origins": "Public URL(s) the site is served on. Used to reject cross-site POSTs. Leave empty to accept only same-origin requests (matched against the Host header).",
+  "allowedOrigins": ["https://stock.example.com"],
+
+  "_comment_registration": "registrationOpen=false hides public sign-up entirely; requireInvite=true keeps sign-up open but demands a code from `admin.py invite`. Either way a new account still needs owner approval before it sees anything.",
+  "registrationOpen": true,
+  "requireInvite": false,
+  "inviteDays": 7,
+  "maxRegistrationsPerIpPerDay": 3,
+  "pendingExpiryDays": 30,
+
+  "sessionDays": 14,
+  "idleDays": 3,
+  "maxLoginFailures": 10,
+  "lockoutMinutes": 15,
+
+  "_comment_caps": "Bound the daily fetch: it scales with distinct codes, not user count.",
+  "maxCodesPerUser": 30,
+  "maxDistinctCodes": 200,
+
+  "_comment_cookie": "secureCookie=false ONLY for plain-http local testing. Behind the tunnel it must be true.",
+  "secureCookie": true,
+
+  "_comment_proxy": "Cloudflare Tunnel makes every request look like it came from 127.0.0.1, so the real client IP (used for rate limiting) has to be read from a header. Safe only because the server binds loopback and cloudflared is the only thing that can reach it. Set false if anything else can.",
+  "trustProxyHeader": true,
+  "proxyHeader": "CF-Connecting-IP",
+
+  "dbPath": "data/app.db",
+  "dataDir": "data"
+}

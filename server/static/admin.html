@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex, nofollow">
+<title>帳號管理－台股投資報告</title>
+<style>
+  :root{
+    --bg:#f5f6f9;--surface:#fff;--surface-2:#eef0f5;--line:#dfe2ea;--ink:#1a1e27;
+    --ink-soft:#545b6b;--ink-faint:#8b92a3;--accent:#b6842f;--accent-soft:#f2e7cf;
+    --err:#d0342c;--ok:#12885e;--warn:#9a7a1e;
+    --shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);--radius:14px;
+    --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",-apple-system,"Segoe UI",system-ui,sans-serif;
+  }
+  @media(prefers-color-scheme:dark){:root{
+    --bg:#0e121b;--surface:#161c28;--surface-2:#1d2534;--line:#2a3346;--ink:#e7eaf1;
+    --ink-soft:#a3abbd;--ink-faint:#6b7488;--accent:#d9ad57;--accent-soft:#2a2413;
+    --err:#ff5d51;--ok:#34c48d;--warn:#e0b955;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px 16px 60px;background:var(--bg);color:var(--ink);
+       font-family:var(--font);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px;margin:0 auto}
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px}
+  h1{margin:0;font-size:19px;letter-spacing:.02em}
+  a{color:var(--accent)}
+  .sub{margin:0 0 20px;font-size:12.5px;color:var(--ink-faint);line-height:1.6}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+        box-shadow:var(--shadow);padding:18px 18px 6px;margin-bottom:18px}
+  h2{margin:0 0 12px;font-size:14px;letter-spacing:.02em}
+  h2 .count{color:var(--ink-faint);font-weight:400}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:11.5px;color:var(--ink-faint);font-weight:700;
+     padding:0 8px 7px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  .u{font-weight:700}
+  .meta{font-size:11px;color:var(--ink-faint);margin-top:2px;line-height:1.5}
+  .note{font-size:11.5px;color:var(--ink-soft);margin-top:3px;line-height:1.55;
+        max-width:280px;overflow-wrap:anywhere}
+  .pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;
+        background:var(--surface-2);color:var(--ink-soft);white-space:nowrap}
+  .pill.active{background:#e2f3ec;color:#0a6b49}
+  .pill.pending{background:#f6edd6;color:#7a5f12}
+  .pill.suspended{background:#fbe9e7;color:#a52a22}
+  .pill.owner{background:var(--accent-soft);color:var(--accent)}
+  @media(prefers-color-scheme:dark){
+    .pill.active{background:#123027;color:#34c48d}
+    .pill.pending{background:#2e2712;color:#e0b955}
+    .pill.suspended{background:#3a1c1a;color:#ff8079}
+  }
+  .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  button{font:inherit;font-size:12px;padding:5px 11px;border-radius:8px;cursor:pointer;
+         border:1px solid var(--line);background:var(--surface-2);color:var(--ink)}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  button.danger{color:var(--err)}
+  button:disabled{opacity:.5;cursor:default}
+  .msg{font-size:12.5px;min-height:1.3em;margin:0 0 14px;line-height:1.6}
+  .msg.err{color:var(--err)}
+  .msg.ok{color:var(--ok)}
+  .empty{color:var(--ink-faint);font-size:12.5px;padding:4px 8px 14px}
+  code{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:12px;
+       overflow-wrap:anywhere}
+</style>
+<div class="wrap">
+  <header>
+    <h1>帳號管理</h1>
+    <a href="/">← 回儀表板</a>
+  </header>
+  <p class="sub">核准後對方才看得到任何資料；暫停後對方<b>下一次操作立即失效</b>，不必等登入階段過期。</p>
+
+  <p class="msg" id="msg" role="status" aria-live="polite"></p>
+
+  <div class="card">
+    <h2>待核准 <span class="count" id="cPending"></span></h2>
+    <table><tbody id="tPending"></tbody></table>
+    <p class="empty" id="ePending" hidden>目前沒有待核准的申請。</p>
+  </div>
+
+  <div class="card">
+    <h2>所有帳號 <span class="count" id="cAll"></span></h2>
+    <table>
+      <thead><tr><th>帳號</th><th>狀態</th><th>持股</th><th style="text-align:right">操作</th></tr></thead>
+      <tbody id="tAll"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>邀請碼</h2>
+    <p class="sub" style="margin-bottom:12px">關閉公開註冊時使用。每組只能用一次。</p>
+    <button id="mkInvite">產生邀請碼</button>
+    <p class="msg" id="inviteOut" style="margin-top:12px"></p>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+function say(el, text, kind){ el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+
+async function call(path, body){
+  const opts = {credentials: 'same-origin'};
+  if (body) {
+    opts.method = 'POST';
+    opts.headers = {'Content-Type': 'application/json'};
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(path, opts);
+  if (res.status === 401) { location.href = '/login'; throw new Error('unauthenticated'); }
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* ignore */ }
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+
+/* every field below is user-supplied (username, note, reg_ip). Build nodes with textContent
+   only - never innerHTML - so none of it can be interpreted as markup. */
+function cell(tag, text, cls){
+  const el = document.createElement(tag);
+  if (text != null) el.textContent = text;
+  if (cls) el.className = cls;
+  return el;
+}
+function pill(text, cls){ return cell('span', text, 'pill ' + cls); }
+
+function actionButton(label, cls, onClick){
+  const b = cell('button', label, cls);
+  b.onclick = async () => {
+    b.disabled = true;
+    try { await onClick(); } finally { b.disabled = false; }
+  };
+  return b;
+}
+
+const STATUS_TEXT = {pending: '待核准', active: '已啟用', suspended: '已停用'};
+
+async function act(action, user, confirmText){
+  if (confirmText && !confirm(confirmText)) return;
+  try {
+    await call('/api/admin/users', {action, id: user.id});
+    say($('msg'), '已對 ' + user.username + ' 執行「' + action + '」', 'ok');
+    await load();
+  } catch (e) {
+    say($('msg'), e.message, 'err');
+  }
+}
+
+function pendingRow(u){
+  const tr = document.createElement('tr');
+  const td = document.createElement('td');
+  td.appendChild(cell('div', u.username, 'u'));
+  td.appendChild(cell('div', '申請於 ' + u.created_at + '（IP ' + (u.reg_ip || '—') + '）', 'meta'));
+  if (u.note) td.appendChild(cell('div', u.note, 'note'));
+  tr.appendChild(td);
+
+  const tdA = document.createElement('td');
+  tdA.style.textAlign = 'right';
+  const acts = cell('div', null, 'acts');
+  acts.appendChild(actionButton('核准', 'primary', () => act('approve', u)));
+  acts.appendChild(actionButton('拒絕', 'danger',
+    () => act('reject', u, '拒絕並刪除 ' + u.username + ' 的申請？')));
+  tdA.appendChild(acts);
+  tr.appendChild(tdA);
+  return tr;
+}
+
+function userRow(u){
+  const tr = document.createElement('tr');
+  const td = document.createElement('td');
+  td.appendChild(cell('div', u.username, 'u'));
+  const last = u.last_login_at ? ('上次登入 ' + u.last_login_at) : '尚未登入過';
+  td.appendChild(cell('div', last, 'meta'));
+  tr.appendChild(td);
+
+  const tdS = document.createElement('td');
+  tdS.appendChild(pill(STATUS_TEXT[u.status] || u.status, u.status));
+  if (u.tier === 'owner') { tdS.appendChild(document.createTextNode(' ')); tdS.appendChild(pill('owner', 'owner')); }
+  tr.appendChild(tdS);
+
+  tr.appendChild(cell('td', String(u.codes) + ' 檔'));
+
+  const tdA = document.createElement('td');
+  tdA.style.textAlign = 'right';
+  const acts = cell('div', null, 'acts');
+  if (u.tier !== 'owner') {
+    if (u.status === 'pending') acts.appendChild(actionButton('核准', 'primary', () => act('approve', u)));
+    if (u.status === 'active') acts.appendChild(actionButton('暫停', '', () => act('suspend', u)));
+    if (u.status === 'suspended') acts.appendChild(actionButton('恢復', 'primary', () => act('resume', u)));
+    acts.appendChild(actionButton('刪除', 'danger',
+      () => act('delete', u, '刪除 ' + u.username + ' 及其所有持股與交易紀錄？此操作無法復原。')));
+  } else {
+    acts.appendChild(cell('span', '（不可停用）', 'meta'));
+  }
+  tdA.appendChild(acts);
+  tr.appendChild(tdA);
+  return tr;
+}
+
+async function load(){
+  let data;
+  try { data = await call('/api/admin/users'); }
+  catch (e) { say($('msg'), e.message, 'err'); return; }
+
+  const users = data.users || [];
+  const pending = users.filter(u => u.status === 'pending');
+
+  const tp = $('tPending');
+  tp.replaceChildren(...pending.map(pendingRow));
+  $('ePending').hidden = pending.length > 0;
+  $('cPending').textContent = pending.length ? '（' + pending.length + '）' : '';
+
+  $('tAll').replaceChildren(...users.map(userRow));
+  $('cAll').textContent = '（' + users.length + '）';
+}
+
+$('mkInvite').onclick = async () => {
+  try {
+    const r = await call('/api/admin/invite', {});
+    const out = $('inviteOut');
+    out.className = 'msg ok';
+    out.replaceChildren(document.createTextNode('邀請碼（一次性）：'), cell('code', r.code));
+  } catch (e) { say($('inviteOut'), e.message, 'err'); }
+};
+
+load();
+</script>

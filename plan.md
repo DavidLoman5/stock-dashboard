@@ -4,6 +4,47 @@
 > 改動原則見 `CLAUDE.md`；本檔不會被每日流程覆寫。
 > **改引擎/腳本後、commit 前先跑 `pwsh -File tests.ps1`**（離線迴歸測試，秒級）。
 
+## 🌐 多使用者伺服器模式（2026-07-23 建置）
+
+從「單人靜態站＋每日重寫 index.html」擴充為「這台機器當伺服器、每人登入看自己持股」，
+同時把個人財務資料移出公開 repo。安裝與營運細節見 `SETUP.md`。
+
+**架構決策（做成這樣的理由）**
+- **行情共用、持股個人**：`0050` 的 K 線／法人／融資對誰都一樣，只有張數與交易是個人的。
+  每日抓「所有 active 使用者代號的聯集」抓一次全體共用 → API 成本隨**標的數**成長，不隨人數。
+- **AI 註解也依代號共用**：個股三面判讀對誰都一樣 → guest 讀 owner 當日產出的共用快取；
+  組合層級傾向改用既有規則引擎 `adviseHolding`（純行情算得出來，不需 AI）。
+- **token 只花在 owner 身上（硬規則）**：每日 AI 步驟的唯一輸入是 `holdings-context.json`，
+  由 `-HoldingsFile`＝owner 匯出檔產生。guest 新增股票只多一次免費 TWSE 抓取，不觸發任何
+  Claude 呼叫。`server/test_server.py::TestTokenIsolation` 長期守著這條。
+- **Python 標準庫、零相依**：`http.server`＋`sqlite3`＋`hashlib.scrypt`＋`secrets`，
+  不需 pip/venv，與前端「零外部資源」的原則一致，別人 clone 下來不必裝任何東西。
+- **伺服器端 splice 而非前端 fetch**：`index.html` 在 parse 時就把 `window.*` 推導成
+  `HCODES`/`H`/`hydrate()` 等 const，改成非同步載入等於重寫整個 boot 流程。改為由
+  `server.py` 逐使用者把同樣的區塊 splice 進去，前端邏輯**一行未動**。
+
+**帳號控制**：註冊 → `pending`（看不到任何資料）→ owner 在 `/admin` 核准 → `active`；
+可隨時 `suspend`，因為每個請求都重查 `users.status`，**下一次請求即失效**，不必等 session 過期。
+
+**參數**（`config.json`，範本見 `config.example.json`）：sessionDays 14／idleDays 3／
+maxLoginFailures 10／lockoutMinutes 15／maxCodesPerUser 30／maxDistinctCodes 200／
+maxRegistrationsPerIpPerDay 3／pendingExpiryDays 30。
+
+- [ ] **改 SKILL.md 改用 `run-daily.sh` 兩段式**（`--phase fetch` → AI 寫 notes → `--phase publish`）。
+      在改好之前 `export-owner`／`export-codes` 不會跑：`update-holdings.ps1` 會自動沿用上次匯出
+      所以不會壞，但新使用者的股票不會被抓、owner 在網頁上改的持股當天不生效。**這是唯一還沒接上的環節。**
+- [ ] 首次對外開放前：裝 cloudflared、`secureCookie` 設回 `true`、`allowedOrigins` 填實際網址
+- [ ] 前端 JS 尚未在真實瀏覽器驗證過（本機無 JS runtime／無瀏覽器工具）：
+      帳號列、持股編輯 dialog、登入頁要人工開一次確認 console 無錯、CSP 無違規
+- [ ] 考慮把 `felix` 帳號密碼換掉（建置時由 Claude 設定，見交付說明）
+- [ ] **根因修掉「AI 文字帶出其他持股」**：每日 notes 是在「看得到整個投組」的情境下寫的，
+      所以 `_market.wind` 會寫「投組今日明顯分化：00990A(+0.96%)與00981A…」、個股 `fund` 會寫
+      「成分股與0050/00947/00981A高度重疊」——都會洩漏 owner 的真實部位。
+      目前用**白名單＋比對 owner 實際代號**擋掉（`payload.MARKET_PUBLIC_FIELDS`、
+      `payload._mentions_other_holding`、`build-demo.ps1` 同規則），代價是偶爾少一段文字。
+      正解是改 SKILL.md 的 prompt：個股註解寫成**與投組無關的單檔敘述**，投組層級的話另放
+      owner-only 欄位。改完之後過濾器就幾乎不會觸發（但**不要移除**，它是 fail-closed 的保險）。
+
 ## 🔁 自我改進閉環（2026-07-18 上線）
 
 架構：進場記因子快照（picks-log）＋AI 判讀標籤（ai-tags→掛回 log）＋持股判級日誌（stance-log）

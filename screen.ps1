@@ -558,7 +558,19 @@ $summaryOut=@{
 $summaryOut | ConvertTo-Json -Depth 5 | Out-File (Join-Path $root 'screen-summary.json') -Encoding UTF8
 Write-Host "  wrote screen-summary.json (slim, for AI to read instead of screen-result.json)"
 
-# splice PICKS_KLINE + PICKS_DATA directly into index.html
+# build PICKS_KLINE + PICKS_DATA once, then (a) splice into index.html for the static page
+# and (b) export as JSON for server mode. Picks are market-wide, so every user shares them.
+$kd=[ordered]@{}
+foreach($p in @($allPicks)+@($etfTop)){ $kd[$p.code]=@{ chgPct=$p.chgPct; dist=$p.dist; kline=$p.kline } }
+# cap page detail rows: all open + last 40 closed (full history stays in picks-log.json),
+# otherwise index.html grows without bound as closed picks accumulate
+$perfRowsPage=@($perfRows | Where-Object {$_.status -eq 'open'})+@(@($perfRows | Where-Object {$_.status -eq 'closed'}) | Select-Object -Last 40)
+$pd=[ordered]@{
+  date=$lastDate; regime=$regimeObj; meta=$metaObj; perf=$perfSummary; perfRows=$perfRowsPage
+  picks=@($allPicks | ForEach-Object { StripK $_ })
+  etf=@($etfTop | ForEach-Object { StripK $_ })
+}
+
 $idxPath=Join-Path $root 'index.html'
 if(Test-Path $idxPath){
   $enc=New-Object System.Text.UTF8Encoding($false)
@@ -570,21 +582,17 @@ if(Test-Path $idxPath){
     $i2=$html.IndexOf('</script>',$i1)
     return $html.Substring(0,$i1+$st.Length)+$payload+$html.Substring($i2)
   }
-  $kd=[ordered]@{}
-  foreach($p in @($allPicks)+@($etfTop)){ $kd[$p.code]=@{ chgPct=$p.chgPct; dist=$p.dist; kline=$p.kline } }
   $html=Splice $html 'pkline' ('window.PICKS_KLINE='+($kd|ConvertTo-Json -Depth 6 -Compress)+';')
-  # cap page detail rows: all open + last 40 closed (full history stays in picks-log.json),
-  # otherwise index.html grows without bound as closed picks accumulate
-  $perfRowsPage=@($perfRows | Where-Object {$_.status -eq 'open'})+@(@($perfRows | Where-Object {$_.status -eq 'closed'}) | Select-Object -Last 40)
-  $pd=[ordered]@{
-    date=$lastDate; regime=$regimeObj; meta=$metaObj; perf=$perfSummary; perfRows=$perfRowsPage
-    picks=@($allPicks | ForEach-Object { StripK $_ })
-    etf=@($etfTop | ForEach-Object { StripK $_ })
-  }
   $html=Splice $html 'pkdata' ('window.PICKS_DATA='+($pd|ConvertTo-Json -Depth 6 -Compress)+';')
   [IO.File]::WriteAllText($idxPath,$html,$enc)
   Write-Host "  spliced PICKS_KLINE + PICKS_DATA into index.html"
 }
+
+$dataDir=Join-Path $root 'data'
+if(-not (Test-Path $dataDir)){ New-Item -ItemType Directory -Path $dataDir | Out-Null }
+$pd | ConvertTo-Json -Depth 6 -Compress | Out-File (Join-Path $dataDir 'picks.json') -Encoding UTF8
+$kd | ConvertTo-Json -Depth 6 -Compress | Out-File (Join-Path $dataDir 'picks-kline.json') -Encoding UTF8
+Write-Host "  wrote data/picks.json + data/picks-kline.json"
 Write-Host "DONE. light=$light idx=$idxLast stocks=$($allPicks.Count) etf=$($etfTop.Count) newLogged=$newLogged openPos=$($openR.Count) closed=$($closedR.Count)"
 foreach($p in $top5){ Write-Host ("  TOP {0} {1} score={2} (chip{3}/tech{4}/fund{5})" -f $p.code,$p.name,$p.score,$p.chip,$p.tech,$p.fund) }
 foreach($p in $etfTop){ Write-Host ("  ETF {0} {1} score={2}/70 owned={3}" -f $p.code,$p.name,$p.score,$p.owned) }

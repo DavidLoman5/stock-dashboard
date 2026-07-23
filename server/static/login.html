@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex, nofollow">
+<title>登入－台股投資報告</title>
+<style>
+  :root{
+    --bg:#f5f6f9;--surface:#fff;--line:#dfe2ea;--ink:#1a1e27;--ink-soft:#545b6b;--ink-faint:#8b92a3;
+    --accent:#b6842f;--accent-soft:#f2e7cf;--err:#d0342c;--ok:#12885e;
+    --shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);--radius:14px;
+    --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",-apple-system,"Segoe UI",system-ui,sans-serif;
+  }
+  @media(prefers-color-scheme:dark){:root{
+    --bg:#0e121b;--surface:#161c28;--line:#2a3346;--ink:#e7eaf1;--ink-soft:#a3abbd;--ink-faint:#6b7488;
+    --accent:#d9ad57;--accent-soft:#2a2413;--err:#ff5d51;--ok:#34c48d;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       padding:24px;background:var(--bg);color:var(--ink);font-family:var(--font);
+       -webkit-font-smoothing:antialiased}
+  .card{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--line);
+        border-radius:var(--radius);box-shadow:var(--shadow);padding:28px 26px}
+  h1{margin:0 0 4px;font-size:19px;letter-spacing:.02em}
+  .sub{margin:0 0 22px;font-size:12.5px;color:var(--ink-faint);line-height:1.6}
+  .tabs{display:flex;gap:6px;margin-bottom:18px}
+  .tab{flex:1;padding:8px 0;font:inherit;font-size:13px;cursor:pointer;border-radius:9px;
+       border:1px solid var(--line);background:transparent;color:var(--ink-soft)}
+  .tab[aria-selected="true"]{background:var(--accent-soft);border-color:var(--accent);
+       color:var(--ink);font-weight:700}
+  label{display:block;font-size:12px;color:var(--ink-soft);margin:0 0 5px}
+  input,textarea{width:100%;padding:10px 11px;margin-bottom:14px;font:inherit;font-size:14px;
+        color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:9px}
+  input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  textarea{resize:vertical;min-height:62px}
+  button.go{width:100%;padding:11px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;
+        color:#fff;background:var(--accent);border:0;border-radius:9px}
+  button.go:disabled{opacity:.55;cursor:default}
+  .msg{margin:14px 0 0;font-size:12.5px;line-height:1.65;min-height:1.2em}
+  .msg.err{color:var(--err)}
+  .msg.ok{color:var(--ok)}
+  .hint{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);
+        font-size:11.5px;color:var(--ink-faint);line-height:1.7}
+</style>
+<div class="card">
+  <h1>台股投資報告</h1>
+  <p class="sub">資訊整理與決策輔助，非投資建議、非個股推介。</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" id="tabLogin" role="tab" aria-selected="true">登入</button>
+    <button class="tab" id="tabReg" role="tab" aria-selected="false">申請帳號</button>
+  </div>
+
+  <div id="paneLogin">
+    <label for="lu">帳號</label>
+    <input id="lu" autocomplete="username" autocapitalize="off" spellcheck="false">
+    <label for="lp">密碼</label>
+    <input id="lp" type="password" autocomplete="current-password">
+    <button class="go" id="doLogin">登入</button>
+  </div>
+
+  <div id="paneReg" hidden>
+    <label for="ru">帳號（3-24 個英數字、底線或連字號）</label>
+    <input id="ru" autocomplete="username" autocapitalize="off" spellcheck="false">
+    <label for="rp">密碼（至少 10 字元）</label>
+    <input id="rp" type="password" autocomplete="new-password">
+    <label for="rn">簡短說明你是誰（管理者審核時會看到）</label>
+    <textarea id="rn" maxlength="200"></textarea>
+    <div id="inviteWrap" hidden>
+      <label for="ri">邀請碼</label>
+      <input id="ri" autocapitalize="off" spellcheck="false">
+    </div>
+    <button class="go" id="doReg">送出申請</button>
+  </div>
+
+  <p class="msg" id="msg" role="status" aria-live="polite"></p>
+
+  <p class="hint">申請後需經管理者核准才能使用。本站只儲存你自行輸入的股票代號、張數與成交價，
+    <b>絕不會</b>要求券商帳號、密碼或 API 金鑰——任何要求提供這些資訊的頁面都不是本站。</p>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const msg = $('msg');
+function say(text, kind){ msg.textContent = text || ''; msg.className = 'msg' + (kind ? ' ' + kind : ''); }
+
+function showTab(reg){
+  $('tabLogin').setAttribute('aria-selected', String(!reg));
+  $('tabReg').setAttribute('aria-selected', String(reg));
+  $('paneLogin').hidden = reg;
+  $('paneReg').hidden = !reg;
+  say('');
+}
+$('tabLogin').onclick = () => showTab(false);
+$('tabReg').onclick = () => showTab(true);
+
+async function post(path, body){
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    credentials: 'same-origin',
+    body: JSON.stringify(body)
+  });
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* non-JSON error page */ }
+  return {ok: res.ok, status: res.status, data};
+}
+
+/* keep the button disabled for the whole round trip: scrypt makes login intentionally slow,
+   and a double submit would just burn another hash and count as another failed attempt */
+async function run(btn, fn){
+  btn.disabled = true;
+  try { await fn(); }
+  catch (e) { say('連線失敗，請稍後再試', 'err'); }
+  finally { btn.disabled = false; }
+}
+
+$('doLogin').onclick = () => run($('doLogin'), async () => {
+  say('登入中…');
+  const r = await post('/api/auth/login', {username: $('lu').value, password: $('lp').value});
+  if (r.ok) { location.href = '/'; return; }
+  say(r.data.error || '登入失敗', 'err');
+});
+
+$('doReg').onclick = () => run($('doReg'), async () => {
+  say('送出中…');
+  const r = await post('/api/auth/register', {
+    username: $('ru').value, password: $('rp').value,
+    note: $('rn').value, invite: $('ri') ? $('ri').value : ''
+  });
+  if (r.ok) {
+    say(r.data.message || '註冊完成，等待核准。', 'ok');
+    $('ru').value = $('rp').value = $('rn').value = '';
+    return;
+  }
+  say(r.data.error || '註冊失敗', 'err');
+});
+
+for (const el of document.querySelectorAll('input')) {
+  el.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    ($('paneReg').hidden ? $('doLogin') : $('doReg')).click();
+  });
+}
+</script>
