@@ -48,10 +48,11 @@
 
 ## 🤔 待決策（需要使用者拍板）
 
-- [ ] **Ubuntu 上要不要重建自動排程**：舊機（Windows）的 08:30 排程未隨遷移重建，
-  目前 crontab 空、無 systemd timer，每日流程靠使用者手動觸發 Claude Code。
-  選項：(a) 維持手動；(b) 建 cron `30 8 * * 1-5` 呼叫 Claude Code 跑該 SKILL；
-  (c) 改雲端排程（但流程需本機 pwsh＋git，雲端不適用）。
+- [ ] **「今日已跑過就跳過」的判斷要不要改用 lastTrade**：2026-07-23 出現實例——上午 11:06 手動跑
+  （盤中，用 07/22 收盤），20:00 排程觸發後以「今天已執行過」為由跳過，結果當日頁面 lastTrade
+  停在 2026-07-22、07/23 收盤沒進頁面。建議把 wrapper／SKILL.md 的跳過條件改成
+  「`window.META.lastTrade` 已等於最新交易日才跳過」，而非「今天有沒有 commit 過」。
+  （屬本機 wrapper／SKILL.md 改動，不在此 repo）
 - [ ] **補登歷史交易**（使用者動作）：把五檔持股的實際買進「日期＋成交價」告訴 Claude 補入
   holdings.json trades[]，TWR 績效曲線與成本自動帶入即全面生效；未補前曲線退回舊假設。
 
@@ -81,7 +82,9 @@
      （重試邏輯保留，讀取失敗防清空仍是硬規則）
   5. 修正本檔 v14 第 8 點的過時描述：`.claude/settings.json` 的 Windows 帳號名稱／OneDrive 路徑
      已於 e741e72 改為 Linux 路徑；其餘未處理項移入 Backlog
-  6. 排程現況記錄為待決策（見上）——README 原本聲稱的 cron `30 8 * * 1-5` 在本機並不存在
+  6. 排程敘述更正為實況：使用者 crontab `0 20 * * 1-5 /home/felix/run-stock-briefing.sh`
+     （wrapper 跑 `claude -p --permission-mode auto`＋SKILL.md，日誌 `~/stock-briefing-cron.log`），
+     時段由舊機 08:30（前一日收盤）改為收盤後 20:00；README 原本寫的 `30 8 * * 1-5` 已不適用
 - 2026-07-21 **v14 安全/隱私/bug 稽核＋修復**（3 個 subagent 分別稽核 index.html／screen.ps1＋tests.ps1／
   repo 隱私；安全性整體乾淨：無金鑰外洩、XSS 有 esc()/safeUrl()、CSP 嚴格）：
   1. 手機版跑版：補 `<meta name="viewport">`（mobile-first 斷點從未生效）＋補 `<!DOCTYPE html>`
