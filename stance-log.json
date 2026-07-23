@@ -139,6 +139,41 @@
       "score": -1,
       "date": "20260722",
       "code": "00981A"
+    },
+    {
+      "date": "20260723",
+      "stance": "trim",
+      "close": 103.9,
+      "score": -1,
+      "code": "0050"
+    },
+    {
+      "date": "20260723",
+      "stance": "trim",
+      "close": 56.9,
+      "score": -1,
+      "code": "00935"
+    },
+    {
+      "date": "20260723",
+      "stance": "trim",
+      "close": 34.79,
+      "score": -1,
+      "code": "00947"
+    },
+    {
+      "date": "20260723",
+      "stance": "hold",
+      "close": 16.86,
+      "score": 0,
+      "code": "00990A"
+    },
+    {
+      "date": "20260723",
+      "stance": "hold",
+      "close": 28.69,
+      "score": 0,
+      "code": "00981A"
     }
   ]
 }
