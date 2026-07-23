@@ -1,97 +1,97 @@
-﻿[
-    {
-        "code":  "0050",
-        "name":  "元大台灣50",
-        "price":  102.5,
-        "chg":  0,
-        "pct":  0,
-        "ma20":  105.88,
-        "ma60":  101.47,
-        "ma20SlopeUp":  false,
-        "distFromHigh40":  -7.8,
-        "foreignSum5d":  -311940,
-        "foreignLast2":  [
-                             -97368,
-                             -4227
-                         ],
-        "marginToday":  57630,
-        "marginDelta":  -1600,
-        "divNote":  null
-    },
-    {
-        "code":  "00935",
-        "name":  "野村臺灣新科技50",
-        "price":  55.4,
-        "chg":  3.2,
-        "pct":  6.13,
-        "ma20":  59.29,
-        "ma60":  57.57,
-        "ma20SlopeUp":  false,
-        "distFromHigh40":  -13.7,
-        "foreignSum5d":  -7875,
-        "foreignLast2":  [
-                             -3244,
-                             2835
-                         ],
-        "marginToday":  5618,
-        "marginDelta":  3,
-        "divNote":  null
-    },
-    {
-        "code":  "00947",
-        "name":  "台新臺灣IC設計",
-        "price":  33.4,
-        "chg":  1.79,
-        "pct":  5.66,
-        "ma20":  37.27,
-        "ma60":  36.68,
-        "ma20SlopeUp":  false,
-        "distFromHigh40":  -22.4,
-        "foreignSum5d":  664,
-        "foreignLast2":  [
-                             134,
-                             660
-                         ],
-        "marginToday":  5203,
-        "marginDelta":  16,
-        "divNote":  null
-    },
-    {
-        "code":  "00990A",
-        "name":  "主動元大AI新經濟",
-        "price":  16.43,
-        "chg":  0.61,
-        "pct":  3.86,
-        "ma20":  18.83,
-        "ma60":  18.61,
-        "ma20SlopeUp":  false,
-        "distFromHigh40":  -24.4,
-        "foreignSum5d":  -22984,
-        "foreignLast2":  [
-                             20864,
-                             3946
-                         ],
-        "marginToday":  21214,
-        "marginDelta":  23,
-        "divNote":  null
-    },
-    {
-        "code":  "00981A",
-        "name":  "主動統一台股增長",
-        "price":  27.72,
-        "chg":  1.82,
-        "pct":  7.03,
-        "ma20":  29.94,
-        "ma60":  29.94,
-        "ma20SlopeUp":  false,
-        "distFromHigh40":  -14.1,
-        "foreignSum5d":  -25044,
-        "foreignLast2":  [
-                             3874,
-                             56033
-                         ],
-        "marginToday":  174603,
-        "marginDelta":  18869,
-        "divNote":  null
-    }
+[
+  {
+    "code": "0050",
+    "name": "元大台灣50",
+    "price": 103.85,
+    "chg": 1.35,
+    "pct": 1.32,
+    "ma20": 105.57,
+    "ma60": 101.7,
+    "ma20SlopeUp": false,
+    "distFromHigh40": -6.6,
+    "foreignSum5d": -322569.0,
+    "foreignLast2": [
+      -4227.0,
+      23625.0
+    ],
+    "marginToday": 48893,
+    "marginDelta": -8737,
+    "divNote": null
+  },
+  {
+    "code": "00935",
+    "name": "野村臺灣新科技50",
+    "price": 57.0,
+    "chg": 1.6,
+    "pct": 2.89,
+    "ma20": 58.98,
+    "ma60": 57.7,
+    "ma20SlopeUp": false,
+    "distFromHigh40": -11.2,
+    "foreignSum5d": -8569.0,
+    "foreignLast2": [
+      2835.0,
+      332.0
+    ],
+    "marginToday": 5600,
+    "marginDelta": -18,
+    "divNote": null
+  },
+  {
+    "code": "00947",
+    "name": "台新臺灣IC設計",
+    "price": 35.55,
+    "chg": 2.15,
+    "pct": 6.44,
+    "ma20": 36.98,
+    "ma60": 36.78,
+    "ma20SlopeUp": false,
+    "distFromHigh40": -17.4,
+    "foreignSum5d": 1668.0,
+    "foreignLast2": [
+      660.0,
+      671.0
+    ],
+    "marginToday": 5535,
+    "marginDelta": 332,
+    "divNote": null
+  },
+  {
+    "code": "00990A",
+    "name": "主動元大AI新經濟",
+    "price": 16.7,
+    "chg": 0.27,
+    "pct": 1.64,
+    "ma20": 18.61,
+    "ma60": 18.63,
+    "ma20SlopeUp": false,
+    "distFromHigh40": -23.1,
+    "foreignSum5d": -19921.0,
+    "foreignLast2": [
+      3946.0,
+      5543.0
+    ],
+    "marginToday": 20764,
+    "marginDelta": -450,
+    "divNote": null
+  },
+  {
+    "code": "00981A",
+    "name": "主動統一台股增長",
+    "price": 28.5,
+    "chg": 0.78,
+    "pct": 2.81,
+    "ma20": 29.79,
+    "ma60": 29.95,
+    "ma20SlopeUp": false,
+    "distFromHigh40": -11.7,
+    "foreignSum5d": -31882.0,
+    "foreignLast2": [
+      56033.0,
+      52627.0
+    ],
+    "marginToday": 171599,
+    "marginDelta": -3004,
+    "divNote": null
+  }
 ]
