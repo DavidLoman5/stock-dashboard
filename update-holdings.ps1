@@ -16,7 +16,7 @@ function GetJson($url){
   return $null
 }
 function SMAlast($a,$n){ if($a.Count -lt $n){return $null}; ($a[($a.Count-$n)..($a.Count-1)] | Measure-Object -Average).Average }
-# OneDrive can transiently lock/garble local reads - retry before giving up (caller decides how to fail)
+# local reads can transiently fail (lock/partial write) - retry before giving up (caller decides how to fail)
 function ReadJsonRetry($path){
   for($i=0;$i -lt 3;$i++){
     try{ return (Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json) }catch{ Start-Sleep -Milliseconds 1500 }
@@ -63,7 +63,7 @@ foreach($c in $codes){
     if($ym -lt $curYM -and (Test-Path $cf)){
       try{
         $hit=@()
-        # PS5.1: ConvertFrom-Json emits a JSON array as ONE Object[] item - assign first, then enumerate
+        # assign first, then enumerate via @(): version-agnostic (pwsh 7 unrolls, PS5.1 emits one item)
         $cached=Get-Content $cf -Raw -Encoding UTF8 | ConvertFrom-Json
         foreach($row in @($cached)){
           if($null -eq $row){ continue }

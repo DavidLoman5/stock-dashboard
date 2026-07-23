@@ -25,7 +25,7 @@ function Bucket($rows,$prop,$cuts,$labels){
   return $b
 }
 
-# OneDrive can transiently lock/garble reads; a null read here would splice a false closedN=0 report
+# a transient read failure here would splice a false closedN=0 report - retry, then abort in the caller
 function ReadJsonRetry($path){
   for($i=0;$i -lt 3;$i++){
     try{ return (Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json) }catch{ Start-Sleep -Milliseconds 1500 }

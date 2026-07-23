@@ -1,4 +1,5 @@
 ﻿# screen.ps1 - TWSE quant screening engine v2 (UTF-8 with BOM; contains CJK literals, e.g. IsElec/exit-reason strings)
+# Runs on pwsh 7 (Linux); BOM is not required there but is kept so the file also parses under Windows PS5.1.
 # v2: regime-aware scoring, 20-day auto-close tracking, dedupe, spark output
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -34,8 +35,8 @@ function GetDailySeries($code,$mms){
     if($ym -lt $curYM -and (Test-Path $cf)){
       try{
         $hit=@()
-        # PS5.1 gotcha: ConvertFrom-Json emits a JSON array as ONE Object[] pipeline item --
-        # assign first, then enumerate; wrapping the pipeline in @() would nest it instead
+        # assign first, then enumerate via @(): works whether ConvertFrom-Json enumerates the array
+        # (pwsh 7) or emits it as ONE Object[] pipeline item (Windows PS5.1); also handles 1-row files
         $cached=Get-Content $cf -Raw -Encoding UTF8 | ConvertFrom-Json
         foreach($row in @($cached)){
           if($null -eq $row){ continue }
@@ -397,7 +398,7 @@ Write-Host "[8/8] picks-log (20-day auto-close, dedupe) + output..."
 $logPath=Join-Path $root 'picks-log.json'
 $norm=@()
 if(Test-Path $logPath){
-  # OneDrive can transiently lock/garble reads; NEVER rebuild history from an unreadable file --
+  # a transient read failure must NEVER cause history to be rebuilt from an unreadable file --
   # retry, then hard-abort BEFORE any write so tracking history is never overwritten with empty
   $lg=$null
   for($try=0;$try -lt 3 -and $null -eq $lg;$try++){

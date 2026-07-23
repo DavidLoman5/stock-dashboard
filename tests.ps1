@@ -1,10 +1,10 @@
 # tests.ps1 - offline regression suite (no network, runs in seconds)
-# Run before committing engine/script changes:  powershell -ExecutionPolicy Bypass -File tests.ps1
+# Run before committing engine/script changes:  pwsh -File tests.ps1
 # Consolidates the smoke tests from the 2026-07-18 v9/v10/v11 health audits:
 #  1. syntax-parse all scripts   2. UTF-8 BOM convention   3. DivSumSince dividend cap
-#  4. GetDailySeries cache read path (guards the PS5.1 ConvertFrom-Json array-collapse regression)
+#  4. GetDailySeries cache read path (also guards the legacy ConvertFrom-Json array-collapse shape)
 #  5. CheckRevCols column-layout warning   6. history-wipe guards present
-# ASCII source only.
+# ASCII source only. Paths must stay cross-platform (no $env:TEMP - unset on Linux).
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $fails=@()
@@ -18,7 +18,7 @@ foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1',
   if($err.Count){ $err | ForEach-Object { Write-Host "    $($_.Message) @ line $($_.Extent.StartLineNumber)" } }
 }
 
-Write-Host "[2] UTF-8 BOM convention (PS5.1 needs BOM to read CJK literals)..."
+Write-Host "[2] UTF-8 BOM convention (pwsh 7 does not need it; kept so CJK literals survive a PS5.1/Windows run)..."
 foreach($f in @('screen.ps1','update-holdings.ps1','publish.ps1')){
   $b=[IO.File]::ReadAllBytes((Join-Path $root $f))
   Assert ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) "BOM $f"
@@ -53,8 +53,8 @@ Assert ([math]::Abs($s2-10.0) -lt 1e-9) "10 percent boundary counted (got $s2, w
 $s3=DivSumSince $rows '20260702'          # since-date filter: only day3 event, which is capped away
 Assert ([math]::Abs($s3) -lt 1e-9) "sinceDt filter (got $s3, want 0)"
 
-Write-Host "[5] GetDailySeries cache read path (PS5.1 array-collapse regression guard)..."
-$tmp=Join-Path $env:TEMP ("kline-cache-test-"+[guid]::NewGuid().ToString('N'))
+Write-Host "[5] GetDailySeries cache read path (cache-hit must never fetch; array-shape guard)..."
+$tmp=Join-Path ([IO.Path]::GetTempPath()) ("kline-cache-test-"+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $mkt=@{}
 $klineCache=$tmp
