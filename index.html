@@ -513,9 +513,11 @@ function fillTop(){
  const tv=window.__totVal; let dp=0; H.forEach(h=>dp+=h.chg*SHARES[h.code]);
  const hv=document.getElementById('heroVal'); if(hv) hv.textContent=fmt(Math.round(tv));
  const hd=document.getElementById('heroDay'),hp=document.getElementById('heroDayPct');
- if(hd){const pct=dp/(tv-dp)*100;
-  hd.textContent=fmtSignI(Math.round(dp)); hd.className='v2 num '+plColor(dp);
-  hp.textContent=fmtSign(pct,2)+'%'; hp.className='sub num '+plColor(dp);}
+ if(hd){const base=tv-dp;               /* 空投組（新帳號還沒加股票）時 0/0 會變 NaN% */
+  if(!H.length){hd.textContent='—'; hd.className='v2 num'; hp.textContent='尚未加入持股'; hp.className='sub';}
+  else{const pct=base>0?dp/base*100:0;
+   hd.textContent=fmtSignI(Math.round(dp)); hd.className='v2 num '+plColor(dp);
+   hp.textContent=fmtSign(pct,2)+'%'; hp.className='sub num '+plColor(dp);}}
  const tx=DASH.TAIEX,tl=tx[tx.length-1];
  const iv=document.getElementById('idxVal'),ic=document.getElementById('idxChg');
  if(iv){iv.textContent=fmt(tl.c,2); iv.className='idx-val num '+(tl.chg>=0?'up-txt':'down-txt');
@@ -548,6 +550,9 @@ function fillTop(){
    if(c3.down>c3.hold&&c3.down>c3.up)cls='down';else if(c3.up>c3.hold&&c3.up>c3.down)cls='up';
    hsEl.className='pill '+cls;
    hsEl.innerHTML=`<span class="dot"></span>整體傾向（規則引擎）：${txt}`;
+  }else{                                 /* 沒持股就不能沿用 HTML 裡那句「全數觸發防守」的 fallback */
+   hsEl.className='pill hold';
+   hsEl.innerHTML='<span class="dot"></span>尚未加入持股——用上方「編輯持股」新增';
   }
  }
 }

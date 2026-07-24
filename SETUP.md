@@ -107,9 +107,32 @@ python3 -m server.server         # 預設 http://127.0.0.1:8787
 
 伺服器**只監聽 `127.0.0.1`**，這是刻意的：外面唯一進得來的路是 tunnel。不要改成 `0.0.0.0` 然後在路由器開 port——那會直接把你家 IP 和這台機器暴露出去。
 
+安裝 cloudflared **不需要 root**（它是單一靜態執行檔）：
+
 ```bash
-# 安裝 cloudflared（見 Cloudflare 官方文件），然後：
-cloudflared tunnel login
+mkdir -p ~/.local/bin
+curl -sL -o ~/.local/bin/cloudflared \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+chmod +x ~/.local/bin/cloudflared
+```
+
+### 方式 A：quick tunnel（不用 Cloudflare 帳號，最快）
+
+```bash
+cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8787
+```
+
+它會印出一個 `https://<隨機字串>.trycloudflare.com` 網址，馬上就能用。
+**代價：每次重啟網址就換一組**，不適合長期分享給別人。查目前網址：
+
+```bash
+journalctl --user -u cloudflared | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1
+```
+
+### 方式 B：具名 tunnel（要 Cloudflare 帳號＋自己的網域，網址固定）
+
+```bash
+cloudflared tunnel login          # 會開瀏覽器要你登入並選網域
 cloudflared tunnel create stock-dashboard
 cloudflared tunnel route dns stock-dashboard stock.你的網域
 ```
@@ -125,7 +148,11 @@ ingress:
   - service: http_status:404
 ```
 
-這樣就有 HTTPS、不用開防火牆埠、不會曝光家用 IP。設定好之後記得把 `config.json` 的 `allowedOrigins` 改成 `["https://stock.你的網域"]`、`secureCookie` 設回 `true`。
+兩種方式都有 HTTPS、都不用開防火牆埠、都不會曝光家用 IP。
+
+設定好之後把 `config.json` 的 `secureCookie` 設成 `true`（tunnel 之後瀏覽器端一律是 HTTPS）。
+`allowedOrigins` **可以留空**：CSRF 檢查會拿請求自己的 `Host` header 當同源基準，所以隨機的
+trycloudflare 網址也能正常登入；只有在你要允許「別的網域」跨站呼叫時才需要填。
 
 ### 開機自動啟動
 
@@ -140,6 +167,12 @@ After=network-online.target
 WorkingDirectory=/path/to/stock-dashboard
 ExecStart=/usr/bin/python3 -m server.server
 Restart=on-failure
+RestartSec=5
+UMask=0077                 # DB 裡是別人的持股，別讓同機其他帳號讀得到
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/path/to/stock-dashboard
 
 [Install]
 WantedBy=default.target
@@ -147,10 +180,10 @@ WantedBy=default.target
 
 ```bash
 systemctl --user enable --now stock-dashboard
-sudo loginctl enable-linger $USER      # 沒登入也要跑
+loginctl enable-linger $USER      # 沒登入也要跑（多數系統不需要 sudo）
 ```
 
-cloudflared 同理做一份。
+cloudflared 同理做一份（`ExecStart=%h/.local/bin/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8787`，加 `Wants=stock-dashboard.service`）。
 
 ⚠️ **如果這是筆電**：闔上蓋子就等於網站掛掉。要嘛設定 `HandleLidSwitch=ignore`（`/etc/systemd/logind.conf`），要嘛接受它只在你開著的時候能用。自架站的可用性就是這台機器的可用性。
 

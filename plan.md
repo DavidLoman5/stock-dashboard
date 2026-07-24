@@ -27,16 +27,21 @@
 可隨時 `suspend`，因為每個請求都重查 `users.status`，**下一次請求即失效**，不必等 session 過期。
 
 **參數**（`config.json`，範本見 `config.example.json`）：sessionDays 14／idleDays 3／
-maxLoginFailures 10／lockoutMinutes 15／maxCodesPerUser 30／maxDistinctCodes 200／
-maxRegistrationsPerIpPerDay 3／pendingExpiryDays 30。
+maxLoginFailures 5／lockoutMinutes 60（2026-07-24 對外開放時收緊，原 10／15）／
+maxCodesPerUser 30／maxDistinctCodes 200／maxRegistrationsPerIpPerDay 3／pendingExpiryDays 30。
 
-- [ ] **改 SKILL.md 改用 `run-daily.sh` 兩段式**（`--phase fetch` → AI 寫 notes → `--phase publish`）。
-      在改好之前 `export-owner`／`export-codes` 不會跑：`update-holdings.ps1` 會自動沿用上次匯出
-      所以不會壞，但新使用者的股票不會被抓、owner 在網頁上改的持股當天不生效。**這是唯一還沒接上的環節。**
-- [ ] 首次對外開放前：裝 cloudflared、`secureCookie` 設回 `true`、`allowedOrigins` 填實際網址
-- [ ] 前端 JS 尚未在真實瀏覽器驗證過（本機無 JS runtime／無瀏覽器工具）：
-      帳號列、持股編輯 dialog、登入頁要人工開一次確認 console 無錯、CSP 無違規
-- [ ] 考慮把 `felix` 帳號密碼換掉（建置時由 Claude 設定，見交付說明）
+**營運狀態（2026-07-24 起）**：兩個 systemd user service（`stock-dashboard`、`cloudflared`）
+＋`loginctl enable-linger`，開機自動起。cloudflared 裝在 `~/.local/bin`（單一執行檔、免 root），
+目前跑 **quick tunnel**，網址每次重啟就換一組，查法見 `SETUP.md`。要固定網址得走具名 tunnel，
+需要 Cloudflare 帳號＋自有網域（`cloudflared tunnel login` 要人工開瀏覽器）。
+
+- [x] ~~改 SKILL.md 改用 `run-daily.sh` 兩段式~~（2026-07-23 完成，該檔在 repo 外）
+- [x] ~~首次對外開放前：裝 cloudflared、`secureCookie` 設回 `true`~~（2026-07-24 完成。
+      `allowedOrigins` 確認**不必填**：CSRF 檢查拿請求自己的 `Host` 當同源基準）
+- [x] ~~前端 JS 尚未在真實瀏覽器驗證~~（2026-07-24 以 jsdom 驗過 owner／guest 兩種頁面：
+      10 個 script 區塊零語法錯誤、boot 後 console 零錯誤、accountMode() 有跑（帳號列解除 hidden）、
+      圖表 2810 次 canvas 繪製呼叫。**仍未在真實瀏覽器確認 CSP 與觸控互動**——jsdom 不做 CSP）
+- [ ] 把 `felix` 密碼從 `0304` 換掉：4 位數字＝10,000 組，站已對外
 - [ ] **根因修掉「AI 文字帶出其他持股」**：每日 notes 是在「看得到整個投組」的情境下寫的，
       所以 `_market.wind` 會寫「投組今日明顯分化：00990A(+0.96%)與00981A…」、個股 `fund` 會寫
       「成分股與0050/00947/00981A高度重疊」——都會洩漏 owner 的真實部位。
@@ -117,6 +122,20 @@ maxRegistrationsPerIpPerDay 3／pendingExpiryDays 30。
 
 ## ✅ 已完成
 
+- 2026-07-24 **v17 站台上線＋前端首次實證驗證**：
+  1. **站沒起來的原因是根本沒常駐**：伺服器一直是手動前景跑，關掉就沒了。改成 systemd user
+     service（`Restart=on-failure`、`UMask=0077`、`ProtectHome=read-only`）＋`enable-linger`，
+     另一支 service 跑 cloudflared quick tunnel，現在開機自動有公開 HTTPS 網址
+  2. **前端首次真正跑起來驗證**（先前只有 curl 看 HTML，等於沒驗證 JS）：本機裝 Node＋jsdom，
+     把伺服器實際吐的頁面 boot 起來。發現 jsdom 缺 `matchMedia` 會讓腳本停在 1115 行、
+     其後的 `accountMode()` 整段不執行——shim 掉之後 owner/guest 兩種頁面 console 全零錯誤
+  3. **修兩個空投組 bug**（新 guest 第一次登入必踩，curl 測不出來）：`最近交易日損益` 0/0
+     算出 `NaN%`；`heroStance` 的 `if(tot>0)` 沒有 else，空投組會沿用 HTML fallback 那句
+     「全數觸發防守 · 系統性重挫」——對還沒加股票的人是全錯的訊息
+  4. 對外開放的加固：`maxLoginFailures` 10→5、`lockoutMinutes` 15→60、`secureCookie` 開
+  5. git 歷史：34 個 commit 的作者 email 改寫成 noreply（`--mailmap`＋force push，改寫前留
+     bundle 備份）。**舊持股仍在歷史的 index.html 裡**（00990A 9 個 commit、00981A 8 個、
+     00947 5 個）——要清得砍掉整個 38 commit 歷史，經評估後決定保留歷史
 - 2026-07-23 **v15 遷移 Ubuntu 後的文件與腳本對齊**（Windows→Linux 遷移於 07-22 完成，本輪補齊漂移）：
   1. **修復 `tests.ps1` 在 Linux 全滅**：第 57 行用 `$env:TEMP`（Linux 為空）→ Join-Path 綁定失敗，
      測項 [5] 拋錯中止整個檔案，[5]~[7] 從未執行、也不印摘要（exit 1）。改 `[IO.Path]::GetTempPath()`，
