@@ -64,10 +64,11 @@ def user_trades(conn, user_id):
     ).fetchall()
 
 
-def holdings_meta(conn, user_id, div_notes=None):
+def holdings_meta(conn, user_id, div_notes=None, prev_stance=None):
     """Same shape as window.HOLDINGS_META that update-holdings.ps1 splices into the static page,
     so the front-end needs no branch for where it came from."""
     div_notes = div_notes or {}
+    prev_stance = prev_stance or {}
     meta = {"_trades": [dict(t) for t in user_trades(conn, user_id)]}
     for h in user_holdings(conn, user_id):
         meta[h["code"]] = {
@@ -78,6 +79,9 @@ def holdings_meta(conn, user_id, div_notes=None):
             "color": h["color"],
             "techLike": bool(h["tech_like"]),
             "divNote": div_notes.get(h["code"]),
+            # yesterday's rule-engine stance (code-level, from the shared daily export);
+            # the page flags today-vs-yesterday transitions
+            "prevStance": prev_stance.get(h["code"]),
         }
     return meta
 
@@ -150,6 +154,11 @@ def bootstrap(conn, cfg, user):
         for c, v in shared_meta.items()
         if isinstance(v, dict) and v.get("divNote")
     }
+    # _prevStance is a union-code map (all users' codes), so guests get transition flags
+    # for codes the owner does not hold
+    prev_stance = shared_meta.get("_prevStance") or {}
+    if not isinstance(prev_stance, dict):
+        prev_stance = {}
 
     codes = [h["code"] for h in user_holdings(conn, user["id"])]
     dash = {"TAIEX": quotes.get("TAIEX", [])}
@@ -162,7 +171,7 @@ def bootstrap(conn, cfg, user):
             # on DASH[code].series, so drop it from meta rather than ship a broken payload.
             missing.append(code)
 
-    hmeta = holdings_meta(conn, user["id"], div_notes)
+    hmeta = holdings_meta(conn, user["id"], div_notes, prev_stance)
     for code in missing:
         hmeta.pop(code, None)
 

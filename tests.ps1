@@ -96,6 +96,9 @@ Assert (@($hj.trades).Count -eq 0) "holdings.json demo carries no trades (found 
 $bd = Get-Content (Join-Path $root 'build-demo.ps1') -Raw
 Assert ($bd -match "'sigFund','tech','chip','fund'") "build-demo publishes factual note fields only"
 Assert ($bd -notmatch "'rec'") "build-demo never publishes rec"
+# _prevStance's KEY SET is the union of every user's codes; per-demo-code values are fine,
+# publishing the map itself would leak which codes users hold
+Assert ($bd -notmatch "HOLDINGS_META\['_prevStance'\]") "build-demo never publishes the _prevStance union map"
 # tracked files must not include anything from data/ (belt and braces if .gitignore regressed)
 if(Get-Command git -ErrorAction SilentlyContinue){
   Push-Location $root

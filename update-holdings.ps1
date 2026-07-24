@@ -269,6 +269,25 @@ if(Test-Path $stancePath){
   if($null -eq $sj){ $slogOk=$false; Write-Host "  WARN: stance-log.json unreadable after retries - skipping today's append (history never overwritten)" }
   else{ $slog=@($sj.rows) }
 }
+# previous-trade-day stance per code (from history BEFORE today's append): the page compares
+# it against today's rule-engine stance and flags transitions - the transition day is the
+# actionable signal, not the standing level. Union codes so server mode can serve guests too.
+$prevStanceMap=@{}
+if($slogOk){
+  foreach($r in $slog){
+    $rc="$($r.code)"; $rd="$($r.date)"
+    if($rd -lt $lastDate -and ($null -ne $r.stance)){
+      if(-not $prevStanceMap.ContainsKey($rc) -or $rd -gt $prevStanceMap[$rc].d){ $prevStanceMap[$rc]=@{ d=$rd; s="$($r.stance)" } }
+    }
+  }
+}
+foreach($c in @($HOLDINGS_META.Keys)){
+  if($c -like '_*'){ continue }
+  $HOLDINGS_META[$c]['prevStance']=$(if($prevStanceMap.ContainsKey($c)){ $prevStanceMap[$c].s } else { $null })
+}
+$psAll=[ordered]@{}
+foreach($c in $codes){ if($prevStanceMap.ContainsKey($c)){ $psAll[$c]=$prevStanceMap[$c].s } }
+$HOLDINGS_META['_prevStance']=$psAll   # union-code map for server mode (page ignores _ keys)
 $already=@($slog | Where-Object { $_.date -eq $lastDate }).Count -gt 0
 if($slogOk -and -not $already){
   foreach($c in $codes){

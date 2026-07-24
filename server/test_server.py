@@ -100,6 +100,33 @@ class TestSessions(Base):
             auth.login(self.conn, self.cfg, "dave", "correct-horse-1", "9.9.9.9", "ua")
         self.assertEqual(ctx.exception.status, 429)   # correct password still locked out
 
+    def test_username_failures_from_other_ips_cannot_lock_the_real_user_out(self):
+        # 5 wrong passwords against someone's username used to lock the account for
+        # everyone - a one-line denial-of-service on the real user. Only the (much higher)
+        # per-username threshold may lock by name; the per-IP one must not transfer.
+        self.cfg["maxLoginFailures"] = 3
+        self.cfg["maxLoginFailuresPerUser"] = 10
+        self.mkuser("frank")
+        for i in range(9):   # 9 failures spread over distinct attacker IPs
+            auth.record_attempt(self.conn, "6.6.6.%d" % i, "frank", False)
+        self.conn.commit()
+        self.assertFalse(auth.is_locked_out(self.conn, self.cfg, "1.2.3.4", "frank"))
+        token, _ = auth.login(self.conn, self.cfg, "frank", "correct-horse-1", "1.2.3.4", "ua")
+        self.assertIsNotNone(auth.resolve_session(self.conn, self.cfg, token))
+        # ...but the distributed-brute-force bound still exists
+        auth.record_attempt(self.conn, "6.6.6.99", "frank", False)
+        self.conn.commit()
+        self.assertTrue(auth.is_locked_out(self.conn, self.cfg, "1.2.3.4", "frank"))
+
+    def test_ip_failures_lock_regardless_of_username(self):
+        self.cfg["maxLoginFailures"] = 3
+        self.cfg["maxLoginFailuresPerUser"] = 10
+        for i in range(3):   # one IP hammering different usernames
+            auth.record_attempt(self.conn, "7.7.7.7", "guess-%d" % i, False)
+        self.conn.commit()
+        self.assertTrue(auth.is_locked_out(self.conn, self.cfg, "7.7.7.7", "anything"))
+        self.assertFalse(auth.is_locked_out(self.conn, self.cfg, "8.8.8.8", "anything"))
+
     def test_password_change_invalidates_sessions(self):
         uid = self.mkuser("erin")
         token, _ = auth.login(self.conn, self.cfg, "erin", "correct-horse-1", "1.1.1.1", "ua")
@@ -395,6 +422,24 @@ class TestHoldingsApi(Base):
         self.assertIn("0050", out["holdingsMeta"])
         self.assertNotIn("2330", out["holdingsMeta"])  # would crash DASH[code].series
         self.assertEqual(out["pendingCodes"], ["2330"])
+
+    def test_bootstrap_carries_prev_stance_from_shared_meta(self):
+        # _prevStance is a union-code map in the shared daily export, so a guest holding a
+        # code the owner does not hold still gets yesterday's stance for the transition flag
+        uid = self.mkuser("omar")
+        user = auth.find_user(self.conn, "omar")
+        with open(os.path.join(self.cfg["dataDir"], "quotes.json"), "w", encoding="utf-8") as fh:
+            json.dump({"TAIEX": [], "0050": {"series": []}, "2330": {"series": []}}, fh)
+        with open(os.path.join(self.cfg["dataDir"], "holdings-meta.json"), "w", encoding="utf-8") as fh:
+            json.dump({"0050": {"name": "x"}, "_prevStance": {"0050": "hold", "2330": "defend"}}, fh)
+        for code in ("0050", "2330"):
+            self.conn.execute(
+                "INSERT INTO holdings (user_id, code, name, lots) VALUES (?,?,?,?)",
+                (uid, code, "x", 1))
+        self.conn.commit()
+        _status, out = api.bootstrap(FakeCtx(self.conn, self.cfg, user))
+        self.assertEqual(out["holdingsMeta"]["0050"]["prevStance"], "hold")
+        self.assertEqual(out["holdingsMeta"]["2330"]["prevStance"], "defend")
 
 
 class TestShell(Base):

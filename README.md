@@ -37,7 +37,7 @@ screen.ps1           全市場篩選評分 → splice PICKS_KLINE/PICKS_DATA →
 evaluate.ps1         （週五）歸因分組勝率 → eval-report.json → splice evaldata → AI 更新 lessons.md
 build-demo.ps1       用 demo holdings.json + data/*.json 重建**公開** index.html（把 owner 真實部位換掉）
 publish.ps1          splice 兩份 notes → git add/commit/push（壞檔跳過該檔續行、>15h 舊檔不 splice）
-backtest.ps1         （每月手動）走前驗證網格 v2.1，已對齊生產選股 → splice backtest 卡
+backtest.ps1         （每月手動）走前驗證網格 v2.2，已對齊生產選股（含息回放） → splice backtest 卡
 run-daily.sh         上面這串的正確順序；cron 指到這裡（--phase fetch / publish 夾住 AI 步驟）
 tests.ps1            （改腳本後、commit 前必跑）離線迴歸測試，秒級
 server/test_server.py（改 server/ 後必跑）認證、權限、token 隔離
@@ -105,4 +105,4 @@ server/test_server.py（改 server/ 後必跑）認證、權限、token 隔離
 - 引擎：PowerShell 7.6（pwsh on Ubuntu；TWSE OpenAPI／rwd JSON＋TPEx API，月級磁碟快取）
 - 伺服器：Python 3 標準庫（`http.server` + `sqlite3` + `hashlib.scrypt`）——**無 pip、無 venv、無 lockfile**，與前端「零外部相依」的原則一致
 - 部署：GitHub Pages（`main` 分支根目錄，公開 demo）＋自架伺服器經 tunnel（多人模式，目前 Tailscale Funnel）
-- 品質：`tests.ps1` 離線迴歸＋`server/test_server.py` 認證與隔離＋每週歸因（evaluate）＋每月走前驗證（backtest v2.1）
+- 品質：`tests.ps1` 離線迴歸＋`server/test_server.py` 認證與隔離＋每週歸因（evaluate）＋每月走前驗證（backtest v2.2）

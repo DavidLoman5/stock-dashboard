@@ -24,7 +24,10 @@ DEFAULTS = {
     "maxCodesPerUser": 30,
     "maxDistinctCodes": 200,
     "maxRegistrationsPerIpPerDay": 3,
-    "maxLoginFailures": 10,
+    "maxLoginFailures": 10,       # per-IP; tight, an attacker's own cost
+    # per-username, deliberately loose: it only bounds a *distributed* brute force. Tight
+    # per-username locking hands anyone a one-line denial-of-service on the real user.
+    "maxLoginFailuresPerUser": 20,
     "lockoutMinutes": 15,
     "pendingExpiryDays": 30,
     "secureCookie": True,         # set False only for plain-http local testing

@@ -222,6 +222,7 @@ WantedBy=default.target
 ```bash
 systemctl --user enable --now stock-dashboard
 loginctl enable-linger $USER      # 沒登入也要跑（多數系統不需要 sudo）
+chmod 700 data                    # 每日管線寫出的共用 JSON 含 owner 持股；UMask 只管伺服器自己寫的檔
 ```
 
 cloudflared 同理做一份（`ExecStart=%h/.local/bin/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8787`，加 `Wants=stock-dashboard.service`）。

@@ -325,7 +325,8 @@ foreach($p in $allPicks){ $isTop=@($top5 | Where-Object { $_.code -eq $p.code })
 # ----- ETF momentum screening (chips + tech only; ETF has no EPS/PE) -----
 Write-Host "[7b] ETF screening..."
 $hold=@{}
-try{ $hj=Get-Content (Join-Path $root 'holdings.json') -Raw -Encoding UTF8 | ConvertFrom-Json; foreach($h in $hj.holdings){ $hold["$($h.code)"]=$true } }catch{}
+try{ $hj=Get-Content (Join-Path $root 'holdings.json') -Raw -Encoding UTF8 | ConvertFrom-Json; foreach($h in $hj.holdings){ $hold["$($h.code)"]=$true } }
+catch{ Write-Host "  WARN: holdings.json unreadable ($($_.Exception.Message)) - ETF owned flags will all be false today" }
 $ecand=@()
 foreach($c in $chip.Keys){
   if($c -notmatch '^00[0-9A-Z]+$'){ continue }

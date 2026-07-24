@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 if __package__ in (None, ""):  # allow `python3 server/server.py` as well as `-m server.server`
@@ -32,6 +33,21 @@ DATA_BLOCK_IDS = (
 )
 _shell_cache = {"mtime": None, "html": None}
 _shell_lock = threading.Lock()
+# prune used to run only at startup, which under systemd means "once per boot, ever" -
+# login_attempts/expired sessions/stale pending accounts then grow for months. Re-run it
+# lazily, at most once a day, from whatever request happens to come in first.
+PRUNE_INTERVAL = 86400
+_prune_state = {"last": 0.0}
+_prune_lock = threading.Lock()
+
+
+def prune_if_due(conn, cfg):
+    now = time.monotonic()
+    with _prune_lock:
+        if now - _prune_state["last"] < PRUNE_INTERVAL and _prune_state["last"] != 0.0:
+            return
+        _prune_state["last"] = now
+    auth.prune(conn, cfg)
 
 
 def _splice(html, block_id, payload):
@@ -289,6 +305,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/healthz":
             return self.respond(200, {"ok": True})
+
+        try:
+            prune_if_due(db.get(self.cfg["dbPath"]), self.cfg)
+        except Exception:                      # noqa: BLE001 - housekeeping must never 500 a request
+            self.log_error("prune failed")
 
         handler = ROUTES.get((method, path))
         if handler is not None:

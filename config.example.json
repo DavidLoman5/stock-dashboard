@@ -16,7 +16,9 @@
 
   "sessionDays": 14,
   "idleDays": 3,
+  "_comment_lockout": "maxLoginFailures is per-IP (tight). maxLoginFailuresPerUser is per-username and deliberately looser: it only bounds a distributed brute force, and setting it low lets anyone lock the real user out with a handful of wrong passwords.",
   "maxLoginFailures": 10,
+  "maxLoginFailuresPerUser": 20,
   "lockoutMinutes": 15,
 
   "_comment_caps": "Bound the daily fetch: it scales with distinct codes, not user count.",

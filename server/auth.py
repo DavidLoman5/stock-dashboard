@@ -74,13 +74,21 @@ def record_attempt(conn, ip, username_, ok):
 
 
 def is_locked_out(conn, cfg, ip, username_):
+    """IP and username are counted separately, with a much higher username threshold.
+
+    A single OR-ed threshold would let anyone lock an account they don't own out for
+    lockoutMinutes with maxLoginFailures wrong passwords (a denial-of-service on the real
+    user). The per-username limit exists only to bound a distributed brute force, so it can
+    afford to be loose; the per-IP limit stays tight."""
     since = _iso_ago(minutes=cfg["lockoutMinutes"])
     row = conn.execute(
-        "SELECT COUNT(*) AS n FROM login_attempts "
-        "WHERE ok = 0 AND ts >= ? AND (ip = ? OR username = ?)",
-        (since, ip, username_),
+        "SELECT COUNT(CASE WHEN ip = ? THEN 1 END) AS by_ip, "
+        "       COUNT(CASE WHEN username = ? THEN 1 END) AS by_user "
+        "FROM login_attempts WHERE ok = 0 AND ts >= ?",
+        (ip, username_, since),
     ).fetchone()
-    return row["n"] >= cfg["maxLoginFailures"]
+    return (row["by_ip"] >= cfg["maxLoginFailures"]
+            or row["by_user"] >= cfg["maxLoginFailuresPerUser"])
 
 
 def registrations_today(conn, ip):

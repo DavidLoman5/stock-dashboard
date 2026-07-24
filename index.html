@@ -362,8 +362,10 @@
         <b>⑤ ETF 動能榜（70 分制）</b><br>
         籌碼閘門較寬（投信 ≥3 日且 &gt;20 萬股，或外資 ≥4 日且 &gt;100 萬股；成交值 ≥5000 萬）；只計籌碼 40＋技術 30（ETF 無 EPS/PE）；排除槓桿／反向／債券／期貨型（代碼尾碼 L/R/B/U）。<br><br>
         <b>⑥ 持股判級（規則引擎，同數據永遠同結論）</b><br>
-        四訊號各 ±1：<b>技術</b>（站上上揚月線 +1／跌破季線 −1）、<b>籌碼</b>（外資 5 日淨買且最新日買 +1／淨賣且最新日賣 −1）、<b>融資×法人</b>（融資增 &gt;3% 且法人賣 −1／融資減 &gt;2% 且法人買 +1）、<b>量價</b>（高檔爆量收弱 −1／量增價揚 +1）。總分 ≥2 加碼觀察、≥0 續抱、−1 減碼觀察、≤−2 防守。<br><br>
-        <span style="color:var(--ink-faint);font-size:11.5px">版本 2026-07-18。規則以 screen.ps1 為準；任何規則改動會同步更新本卡與 plan.md。權重調整鐵律：backtest 走前驗證樣本外顯著優於現行＋空頭區不劣化才動手，每月最多一次。以上為資訊整理與研究參考，非投資建議。</span>
+        四訊號各 ±1：<b>技術</b>（站上上揚月線 +1／跌破季線 −1）、<b>籌碼</b>（外資 5 日淨買且最新日買 +1／淨賣且最新日賣 −1）、<b>融資×法人</b>（融資增 &gt;3% 且法人賣 −1／融資減 &gt;2% 且法人買 +1）、<b>量價</b>（高檔爆量收弱 −1／量增價揚 +1）。總分 ≥2 加碼觀察、≥0 續抱、−1 減碼觀察、≤−2 防守。<br>
+        <b>判級轉變提醒</b>：每日比對前一交易日判級（stance-log），不同即在持股卡與 Hero 標示（例：續抱→防守）——轉變當天是檢視進退場的時點，判級本身的分數規則不變。<br>
+        <b>持股移動停利訊號</b>：已知成本價（輸入成本或交易均價）且獲利 ≥15%、收盤跌破 10 日線 → 顯示 🔔 訊號，與 ④ 選股引擎移動停利同一套規則；僅提示、不改判級。<br><br>
+        <span style="color:var(--ink-faint);font-size:11.5px">版本 2026-07-24（新增判級轉變提醒與持股移動停利訊號）。規則以 screen.ps1 為準；任何規則改動會同步更新本卡與 plan.md。權重調整鐵律：backtest 走前驗證樣本外顯著優於現行＋空頭區不劣化才動手，每月最多一次。以上為資訊整理與研究參考，非投資建議。</span>
       </div>
     </details>
   </div>
@@ -371,7 +373,7 @@
   <div class="disc">
     <b>免責聲明：</b>本報告由 AI 自動彙整公開新聞與證交所行情資料生成，屬<b>資訊整理與決策輔助</b>，<b>不構成投資建議、買賣要約或個股推介</b>。文中三面分析之「多方／空方／整理訊號」與操作傾向僅為情境說明，非下單指令；作者非持牌投資顧問。行情為最近交易日收盤（見頁首行情基準）；法人買賣超與融資融券單位為「張」，來源證交所（T86／MI_MARGN）；ETF 本身無 EPS／本益比，基本面以成分題材與產業景氣替代。實際交易前請以券商即時報價為準，自行評估風險並為自身決策負責。投資有風險，過往績效不代表未來表現。
   </div>
-  <footer>台股投資報告　|　每個交易日（週一至五）08:30 自動更新</footer>
+  <footer>台股投資報告　|　每個交易日（週一至五）收盤後 20:00 自動更新</footer>
 </div>
 
 <div class="ov" id="ov" role="dialog" aria-modal="true" aria-labelledby="mTitle">
@@ -443,7 +445,7 @@ HCODES.forEach(c=>{SHARES[c]=(HOLDINGS_META[c].lots||1)*1000;});
 const PALETTE=['#e8590c','#1971c2','#7048e8','#0ca678','#e64980','#f08c00','#3bc9db'];
 const H=HCODES.map((code,pi)=>{
  const m=HOLDINGS_META[code],n=(window.HOLDINGS_NOTES||{})[code]||{};
- return {code,name:m.name,type:m.type,theme:m.theme,lots:m.lots,color:m.color||PALETTE[pi%PALETTE.length],divNote:m.divNote,
+ return {code,name:m.name,type:m.type,theme:m.theme,lots:m.lots,color:m.color||PALETTE[pi%PALETTE.length],divNote:m.divNote,prevStance:m.prevStance||null,
   sig:{fund:n.sigFund||['neu','中性']},
   tech:n.tech||'（尚無分析，等待下次更新）',chip:n.chip||'（尚無分析，等待下次更新）',fund:n.fund||'（尚無分析，等待下次更新）',
   stance:'hold',stanceTxt:'續抱',
@@ -453,6 +455,9 @@ const H=HCODES.map((code,pi)=>{
 const HByCode={};H.forEach(h=>HByCode[h.code]=h);
 
 /* ---------- single source of truth: derive all numbers from official DASH data ---------- */
+/* 判級四級的顯示名與嚴重度排序（stance-log 同一套 key）；rank 小=更防禦 */
+const STANCE_NM={down:'防守',defend:'防守',trim:'減碼觀察',hold:'續抱',up:'加碼觀察'};
+const STANCE_RANK={defend:0,down:0,trim:1,hold:2,up:3};
 window.META={generated:'2026/07/23',lastTrade:'2026-07-23'};
 (function hydrate(){
  let tv=0;
@@ -469,7 +474,13 @@ window.META={generated:'2026/07/23',lastTrade:'2026-07-23'};
   if(h.auto){h.sig=h.sig||{};
    const t=h.auto.parts.tech[0],cA=h.auto.parts.chip[0]+h.auto.parts.extra[0];
    h.sig.tech=t>0?['bull','多方']:t<0?['bear','空方']:['neu','整理'];
-   h.sig.chip=cA>0?['bull','多方']:cA<0?['bear','空方']:['neu','中性'];}
+   h.sig.chip=cA>0?['bull','多方']:cA<0?['bear','空方']:['neu','中性'];
+   /* 判級轉變：與 stance-log 同一套四級 key（up/hold/trim/defend）。轉變當天才是
+      行動訊號——prevStance 由每日流程從 stance-log 前一交易日帶入（第一天為 null 不顯示） */
+   const sc=h.auto.score;
+   h.stanceKey=sc>=2?'up':sc>=0?'hold':sc===-1?'trim':'defend';
+   if(h.prevStance&&STANCE_NM[h.prevStance]&&h.prevStance!==h.stanceKey){
+    h.stanceChanged={from:h.prevStance,to:h.stanceKey,worse:STANCE_RANK[h.stanceKey]<STANCE_RANK[h.prevStance]};}}
  });
  window.__totVal=tv;
 })();
@@ -549,7 +560,10 @@ function fillTop(){
    let cls='hold';
    if(c3.down>c3.hold&&c3.down>c3.up)cls='down';else if(c3.up>c3.hold&&c3.up>c3.down)cls='up';
    hsEl.className='pill '+cls;
-   hsEl.innerHTML=`<span class="dot"></span>整體傾向（規則引擎）：${txt}`;
+   /* 判級轉變摘要：轉變當天才是行動時點，直接在 Hero 點名是哪幾檔 */
+   const chgs=H.filter(h=>h.stanceChanged);
+   const chgTxt=chgs.length?`　⚠ 今日判級轉變：${chgs.map(h=>`${esc(h.name)} ${STANCE_NM[h.stanceChanged.from]}→${STANCE_NM[h.stanceChanged.to]}`).join('、')}`:'';
+   hsEl.innerHTML=`<span class="dot"></span>整體傾向（規則引擎）：${txt}${chgTxt}`;
   }else{                                 /* 沒持股就不能沿用 HTML 裡那句「全數觸發防守」的 fallback */
    hsEl.className='pill hold';
    hsEl.innerHTML='<span class="dot"></span>尚未加入持股——用上方「編輯持股」新增';
@@ -734,6 +748,8 @@ function plColor(v){return v>0?'up-txt':v<0?'down-txt':'';}
       <span class="sig ${h.sig.chip[0]}">籌 ${h.sig.chip[1]}</span>
       <span class="sig ${h.sig.tech[0]}">技 ${h.sig.tech[1]}</span>
       <span class="sig ${h.sig.fund[0]}">基 ${h.sig.fund[1]}</span>
+      ${h.stanceChanged?`<span class="sig ${h.stanceChanged.worse?'bear':'bull'}">⚠ 判級轉變 ${STANCE_NM[h.stanceChanged.from]}→${STANCE_NM[h.stanceChanged.to]}</span>`:''}
+      <span class="sig bear" data-trailchip="${h.code}" hidden>🔔 移動停利訊號</span>
     </div>
     <div class="h-foot"><span class="dd">距高 <b class="down-txt num">${fmtSign(h.dd,1)}%</b> · <span class="pl num" data-plcard="${h.code}" style="color:var(--ink-faint)">未設成本</span></span>
     <span class="h-more">三面分析 ›</span></div></div>`;
@@ -801,8 +817,16 @@ function tradeAvgCost(code){
 function updatePL(){
   const costs=getCosts();let totCost=0,totVal=0,haveAny=false;
   H.forEach(h=>{const sh=SHARES[h.code];const cLS=costs[h.code];const av=cLS>0?null:tradeAvgCost(h.code);const c=cLS>0?cLS:av;const el=document.querySelector(`[data-plcard="${h.code}"]`);
-   if(c>0){haveAny=true;totVal+=h.price*sh;totCost+=c*sh;const pl=(h.price-c)*sh;const pct=(h.price-c)/c*100;if(el){el.textContent=`損益 ${fmtSignI(Math.round(pl))} (${fmtSign(pct,1)}%)${av?'·依交易均價':''}`;el.className='pl num '+plColor(pl);}}
-   else if(el){el.textContent='未設成本';el.className='pl num';el.style.color='var(--ink-faint)';}});
+   /* 移動停利訊號：與選股引擎出場規則同款（獲利≥15% 且收盤跌破 10 日線）。
+      需要成本價才算得出獲利，所以掛在這裡而非 adviseHolding；沒成本就不猜、不顯示 */
+   h.trailSignal=null;
+   if(c>0){haveAny=true;totVal+=h.price*sh;totCost+=c*sh;const pl=(h.price-c)*sh;const pct=(h.price-c)/c*100;if(el){el.textContent=`損益 ${fmtSignI(Math.round(pl))} (${fmtSign(pct,1)}%)${av?'·依交易均價':''}`;el.className='pl num '+plColor(pl);}
+    const ser=(DASH[h.code]||{}).series;
+    if(pct>=15&&ser&&ser.length>=10){
+     const cl=ser.map(x=>x.c);let t10=0;for(let k=cl.length-10;k<cl.length;k++)t10+=cl[k];const ma10=t10/10;
+     if(h.price<ma10)h.trailSignal={gain:pct,ma10};}}
+   else if(el){el.textContent='未設成本';el.className='pl num';el.style.color='var(--ink-faint)';}
+   const tc=document.querySelector(`[data-trailchip="${h.code}"]`);if(tc)tc.hidden=!h.trailSignal;});
   const out=document.getElementById('pfPL'),outp=document.getElementById('pfPLpct');
   if(haveAny){const pl=totVal-totCost;const pct=totCost>0?pl/totCost*100:0;out.textContent=fmtSignI(Math.round(pl));out.className='v2 num '+plColor(pl);outp.textContent=fmtSign(pct,2)+'%（部分依已輸入成本）';outp.className='sub num '+plColor(pl);}
   else{out.textContent='—';out.className='v2 num';outp.textContent='點個股輸入成本價';outp.style.color='var(--ink-faint)';}
@@ -884,7 +908,9 @@ function openModal(i){
 
     ${(()=>{const A=h.auto;if(!A)return `<div class="logicline"><b>綜合邏輯：</b>籌碼「${h.sig.chip[1]}」＋技術「${h.sig.tech[1]}」＋基本「${h.sig.fund[1]}」→ ${h.stanceTxt}</div>`;
       const parts=[A.parts.tech[1],A.parts.chip[1],A.parts.extra[1],A.parts.vp[1]].filter(Boolean).join('＋');
-      return `<div class="logicline"><b>🤖 規則引擎判定：</b>${parts} → <b>${A.lv[1]}</b>${A.trig.length?`<br><b>價位檢核：</b>${A.trig.join('；')}`:''}</div>`;})()}
+      const chg=h.stanceChanged?`<br><b class="${h.stanceChanged.worse?'down-txt':'up-txt'}">⚠ 判級轉變：</b>前一交易日「${STANCE_NM[h.stanceChanged.from]}」→ 今日「${STANCE_NM[h.stanceChanged.to]}」——轉變當天是檢視進退場的時點`:'';
+      const tr=h.trailSignal?`<br><b class="down-txt">🔔 移動停利訊號：</b>獲利 ${h.trailSignal.gain.toFixed(1)}%、收盤已回檔跌破 10 日線 ${h.trailSignal.ma10.toFixed(2)}（與選股引擎出場規則同步；非下單指令）`:'';
+      return `<div class="logicline"><b>🤖 規則引擎判定：</b>${parts} → <b>${A.lv[1]}</b>${chg}${tr}${A.trig.length?`<br><b>價位檢核：</b>${A.trig.join('；')}`:''}</div>`;})()}
     <div class="rec" style="margin-top:8px"><span class="pill ${h.auto?h.auto.lv[0]:h.stance}"><span class="dot"></span>${h.auto?h.auto.lv[1]:h.stanceTxt}</span><span class="rtxt"><b>AI 觀點：</b>${esc(h.rec)}</span></div>
 
     <div class="subhd" style="margin-top:18px">近 24 小時新聞 · 國內外 · 附來源</div>

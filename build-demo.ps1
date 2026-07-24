@@ -49,9 +49,14 @@ foreach($h in $demo.holdings){
   $c="$($h.code)"
   $divNote = $null
   if($sharedMeta -and $sharedMeta.PSObject.Properties[$c]){ $divNote = $sharedMeta.$c.divNote }
+  # prevStance per DEMO code only (rule-engine output on public quotes - not personal).
+  # The union `_prevStance` map must NEVER be copied here: its key set is the union of every
+  # user's holdings, and publishing it would leak which codes users hold.
+  $prevStance = $null
+  if($sharedMeta -and $sharedMeta.PSObject.Properties['_prevStance'] -and $sharedMeta._prevStance.PSObject.Properties[$c]){ $prevStance = $sharedMeta._prevStance.$c }
   $HOLDINGS_META[$c]=[ordered]@{
     name=$h.name; type=$h.type; theme=$h.theme; lots=$h.lots; color=$h.color
-    techLike=$(if($h.PSObject.Properties['techLike']){[bool]$h.techLike}else{$false}); divNote=$divNote
+    techLike=$(if($h.PSObject.Properties['techLike']){[bool]$h.techLike}else{$false}); divNote=$divNote; prevStance=$prevStance
   }
 }
 

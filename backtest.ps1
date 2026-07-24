@@ -1,13 +1,24 @@
-# backtest.ps1 v2.1 - walk-forward grid backtest (research tool; run manually, ~monthly)
-# Grid: 6 ranking weights (chip vs tech mix) x 3 exit rules (hold20 / ma20 stop / production exits).
+# backtest.ps1 v2.2 - walk-forward grid backtest (research tool; run manually, ~monthly)
+# Grid: 6 ranking weights (chip vs tech mix) x 4 exit rules (hold20 / ma20 stop / production
+# exits / stopTrail = production without the foreign-2-day-sell rule).
 # Walk-forward: first 60% of eval days = in-sample (optimize), last 40% = out-of-sample (validate).
 # Only adopt parameter changes that hold up out-of-sample; log every change in plan.md.
-# v2.1 aligned to production screening: T86 gate >=4/5 days, below-MA60 drop, techS includes
-# MA60 +8 (max 27/30), 40-day high, ma20p window ending 5 bars back, evalLo=60.
-# v2.1 results are NOT comparable to the 2026-07-18 v2 first run - re-run supersedes it.
-# Notes: TWSE-only replay (no OTC daily panels); fund factor and volume/candle factors not
-# replayable (panel cache stores close+value only); overlapping windows.
-# Daily panels are cached under backtest-cache/ (gitignored) so re-runs only fetch new dates.
+# v2.2 (2026-07-24) upgrades - results NOT comparable to v2.1 or earlier runs:
+#   * panel cache v2 stores O/H/L/C/volume/value/signed-change per code-day (same MI_INDEX
+#     response, no extra API calls). v1 cache files are treated as a cache miss and refetched
+#     once (~200 days, 30-60 min); after that only new dates are fetched as before.
+#   * dividend-adjusted (total-return) exit replay, same formula and 10% cap as production
+#     DivSumSince: an ex-div gap-down no longer fakes a MA20/MA10 breach, returns include payouts.
+#   * volume/candle factors replayed in techS (distribution-candle reject, volume-backed
+#     advance +4/+2, high upper wick -5, hammer +2) - aligned to production scoring.
+#   * stopTrail exit isolates the foreign-2-day-sell rule's contribution. (The plan.md
+#     candidate "foreign sell only counts below MA20" is equivalent to removing the foreign
+#     rule at daily granularity, because below-MA20 already exits via the stop.)
+#   * Agg adds avgAlphaNet (round-trip cost 0.585% = 2x0.1425% fee + 0.3% tax, no discount),
+#     medAlpha, and nDistinct (same code re-entered within 20 trade days counted once -
+#     overlapping windows inflate n, nDistinct is the honest sample size).
+# Still NOT replayable: fund factor (no revenue/PE history), regime-green momentum +3 (needs
+# daily instNet/breadth), ETF board; TWSE-only (no OTC daily panels).
 # ASCII source only.
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -63,19 +74,34 @@ foreach($d in $dates){
   if(Test-Path $cf){
     try{
       $j=Get-Content $cf -Raw -Encoding UTF8 | ConvertFrom-Json
-      foreach($pr in $j.px.PSObject.Properties){ $pm[$pr.Name]=@{ c=[double]$pr.Value[0]; val=[double]$pr.Value[1] } }
-      foreach($pr in $j.t86.PSObject.Properties){ $tm[$pr.Name]=@{ f=[double]$pr.Value[0]; t=[double]$pr.Value[1] } }
+      foreach($pr in $j.px.PSObject.Properties){
+        $a=@($pr.Value)
+        # cache v2 = 7-element arrays (o,h,l,c,v,val,chg); shorter arrays are the old v1
+        # close+value format -> leave $pm empty so the whole day refetches once
+        if($a.Count -ge 7){ $pm[$pr.Name]=@{ o=$a[0]; h=$a[1]; l=$a[2]; c=[double]$a[3]; v=$a[4]; val=$a[5]; chg=[double]$a[6] } }
+      }
+      if($pm.Count -gt 0){
+        foreach($pr in $j.t86.PSObject.Properties){ $tm[$pr.Name]=@{ f=[double]$pr.Value[0]; t=[double]$pr.Value[1] } }
+      }
     }catch{ $pm=@{}; $tm=@{} }
   }
   if($pm.Count -eq 0){
+    $tm=@{}
     $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=$d&type=ALLBUT0999&response=json"
     if($r -and $r.tables){
       $tbl=$r.tables | Where-Object { $_.data -and $_.data.Count -gt 500 } | Select-Object -First 1
       if($tbl){ foreach($row in $tbl.data){
         $c="$($row[0])".Trim()
         if($c -match '^[1-9][0-9]{3}$'){
-          $cl=Num $row[8]; $val=Num $row[4]
-          if($cl -ne $null){ $pm[$c]=@{ c=$cl; val=$val } }
+          $cl=Num $row[8]
+          if($cl -ne $null){
+            # col9 is the +/- direction (may arrive as an HTML fragment), col10 the unsigned
+            # change vs the (dividend-adjusted) reference price - same convention STOCK_DAY
+            # uses, which is exactly what makes the DivSumSince-style add-back possible
+            $chgV=Num $row[10]; if($chgV -eq $null){ $chgV=0.0 }
+            if("$($row[9])" -like '*-*'){ $chgV=-$chgV }
+            $pm[$c]=@{ o=(Num $row[5]); h=(Num $row[6]); l=(Num $row[7]); c=$cl; v=(Num $row[2]); val=(Num $row[4]); chg=$chgV }
+          }
         }
       } }
     }
@@ -86,8 +112,8 @@ foreach($d in $dates){
       if($c -match '^[1-9][0-9]{3}$'){ $tm[$c]=@{ f=[double](Num $row[4]); t=[double](Num $row[10]) } }
     } }
     Start-Sleep -Milliseconds 700
-    # save cache (compact arrays)
-    $pxO=@{}; foreach($k in $pm.Keys){ $pxO[$k]=@($pm[$k].c,$pm[$k].val) }
+    # save cache v2 (compact arrays)
+    $pxO=@{}; foreach($k in $pm.Keys){ $b=$pm[$k]; $pxO[$k]=@($b.o,$b.h,$b.l,$b.c,$b.v,$b.val,$b.chg) }
     $t8O=@{}; foreach($k in $tm.Keys){ $t8O[$k]=@($tm[$k].f,$tm[$k].t) }
     @{ px=$pxO; t86=$t8O } | ConvertTo-Json -Depth 3 -Compress | Out-File $cf -Encoding UTF8
     $fetched++
@@ -107,7 +133,7 @@ $rankCfgs=@(
   @{ key='chip+4t';   wC=1.0; wT=4.0 },
   @{ key='tech';      wC=0.0; wT=1.0 }
 )
-$exitKeys=@('hold20','stop','prod')
+$exitKeys=@('hold20','stop','prod','stopTrail')
 $results=@{}
 foreach($rc in $rankCfgs){ foreach($ek in $exitKeys){ $results["$($rc.key)|$ek"]=New-Object System.Collections.ArrayList } }
 $evalLo=60; $evalHi=$N-21   # 60-day lookback so every eval day has full MA60 history (consistency with prod)
@@ -148,11 +174,30 @@ for($i=$evalLo; $i -le $evalHi; $i++){
     $ma60=$(if($hist.Count -ge 60){ ($hist[($hist.Count-60)..($hist.Count-1)]|Measure-Object -Average).Average } else { $null })
     if($ma60 -ne $null -and $cl -lt $ma60){ continue }   # prod filter: below MA60 -> drop
     $n40=[math]::Min(40,$hist.Count); $hi=($hist[($hist.Count-$n40)..($hist.Count-1)]|Measure-Object -Maximum).Maximum   # prod: 40-day high
+    $dist=$cl/$hi-1
     $techS=0
     if($cl -gt $ma20){ $techS+=10 }
     if($ma60 -ne $null -and $cl -gt $ma60){ $techS+=8 }   # prod: above MA60 +8 (was missing)
     if($ma20 -gt $ma20p){ $techS+=5 }
-    if($cl/$hi-1 -ge -0.08){ $techS+=4 }
+    if($dist -ge -0.08){ $techS+=4 }
+    # --- v2.2: volume/candle factors, same order and thresholds as production screen.ps1 ---
+    $bar=$pxm[$code]
+    $vs=@()
+    for($k=$i-20;$k -le $i-1;$k++){ $m2=$pxDay[$dates[$k]]; if($m2.ContainsKey($code) -and $m2[$code].v -ne $null){ $vs+=[double]$m2[$code].v } }
+    $vAvg= if($vs.Count -ge 15){ ($vs|Measure-Object -Average).Average } else { $null }
+    $vr= if($vAvg -and $vAvg -gt 0 -and $bar.v -ne $null){ [double]$bar.v/$vAvg } else { $null }
+    $rng= if($bar.h -ne $null -and $bar.l -ne $null){ [double]$bar.h-[double]$bar.l } else { 0 }
+    $upW= if($rng -gt 0 -and $bar.o -ne $null){ ([double]$bar.h-[math]::Max([double]$bar.o,$cl))/$rng } else { 0 }
+    $loW= if($rng -gt 0 -and $bar.o -ne $null){ ([math]::Min([double]$bar.o,$cl)-[double]$bar.l)/$rng } else { 0 }
+    $cp= if($rng -gt 0){ ($cl-[double]$bar.l)/$rng } else { 0.5 }
+    # distribution day at highs -> reject outright (prod does the same)
+    if($dist -ge -0.03 -and $vr -ne $null -and $vr -ge 2 -and ($cp -lt 0.35 -or $upW -gt 0.6)){ continue }
+    if($bar.chg -gt 0 -and $vr -ne $null -and $vr -ge 1.5){ $techS+=4 }
+    elseif($bar.chg -gt 0 -and $bar.val -ne $null -and [double]$bar.val -gt 3e8){ $techS+=2 }
+    if($dist -ge -0.03 -and $upW -gt 0.6 -and $vr -ne $null -and $vr -ge 1.2){ $techS-=5 }
+    if($dist -le -0.10 -and $loW -gt 0.6){ $techS+=2 }
+    if($techS -lt 0){ $techS=0 }
+    if($techS -gt 30){ $techS=30 }
     $scored += [pscustomobject]@{ code=$code; chip=$chipS; tech=$techS; tSum=$tSum }
   }
   if($scored.Count -eq 0){ continue }
@@ -172,11 +217,28 @@ for($i=$evalLo; $i -le $evalHi; $i++){
   $idx0=$idxMapBT[$d]
   $exitRes=@{}   # code -> @{hold20=@(j,ret,alpha); ...}
   foreach($code in @($union.Keys)){
-    $path=@(); $bad=$false
-    for($k=$i-19;$k -le $i+20;$k++){ $v=CloseAt $code $k; $path+=$v; if($k -ge $i -and $v -eq $null){ $bad=$true } }
+    $path=@(); $chgP=@(); $bad=$false
+    for($k=$i-19;$k -le $i+20;$k++){
+      $m2=$pxDay[$dates[$k]]
+      $b= if($m2 -and $m2.ContainsKey($code)){ $m2[$code] } else { $null }
+      $v= if($b){ $b.c } else { $null }
+      $path+=$v; $chgP+=$(if($b){ $b.chg } else { $null })
+      if($k -ge $i -and $v -eq $null){ $bad=$true }
+    }
     if($bad){ continue }
     $c0=$path[19]   # close at day i
     if($c0 -le 0){ continue }
+    # v2.2: cumulative dividend add-back over the path (same formula + 10% cap as prod
+    # DivSumSince). All MA and return math below runs on total-return closes, so an ex-div
+    # gap-down is not mistaken for a technical break.
+    $cum=@(); $cumV=0.0
+    for($p=0;$p -lt $path.Count;$p++){
+      if($p -gt 0 -and $chgP[$p] -ne $null -and $path[$p] -ne $null -and $path[$p-1] -ne $null){
+        $dvv=[double]$chgP[$p]-([double]$path[$p]-[double]$path[$p-1])
+        if($dvv -gt 0.005 -and $path[$p-1] -gt 0 -and ($dvv/$path[$p-1]) -le 0.10){ $cumV+=$dvv }
+      }
+      $cum+=$cumV
+    }
     # rolling MA over path: index p corresponds to day i-19+p
     $er=@{}
     foreach($ek in $exitKeys){
@@ -186,37 +248,40 @@ for($i=$evalLo; $i -le $evalHi; $i++){
         $cj=$path[$p2]
         if($cj -eq $null){ continue }
         if($ek -eq 'hold20'){ break }
+        $cjTr=[double]$cj+$cum[$p2]
         # MA20 needs path p2-19..p2 (all >= 0 since p2 >= 21 when j >= i+2... j=i+1 -> p2=20, p2-19=1 ok)
         $s20=0.0; $n20=0
-        for($q=$p2-19;$q -le $p2;$q++){ if($path[$q] -ne $null){ $s20+=$path[$q]; $n20++ } }
+        for($q=$p2-19;$q -le $p2;$q++){ if($path[$q] -ne $null){ $s20+=([double]$path[$q]+$cum[$q]); $n20++ } }
         $m20=$(if($n20 -ge 15){ $s20/$n20 } else { $null })
-        $hitStop = ($m20 -ne $null -and $cj -lt $m20)
+        $hitStop = ($m20 -ne $null -and $cjTr -lt $m20)
         $hit=$false
         if($ek -eq 'stop'){ $hit=$hitStop }
-        elseif($ek -eq 'prod'){
+        elseif($ek -eq 'prod' -or $ek -eq 'stopTrail'){
           $hit=$hitStop
-          if(-not $hit){
-            # foreign net sell 2 consecutive days
+          if(-not $hit -and $ek -eq 'prod'){
+            # foreign net sell 2 consecutive days (stopTrail = prod without this rule)
             $tmJ=$t86Day[$dates[$j]]; $tmJ1=$t86Day[$dates[$j-1]]
             if($tmJ -and $tmJ1 -and $tmJ.ContainsKey($code) -and $tmJ1.ContainsKey($code)){
               if($tmJ[$code].f -lt 0 -and $tmJ1[$code].f -lt 0){ $hit=$true }
             }
           }
           if(-not $hit){
-            # trailing take-profit: ret >= 15% and close below MA10
-            $retJ=($cj/$c0-1)*100
+            # trailing take-profit: total-return >= 15% and TR close below TR MA10
+            $retJ=(($cjTr-$cum[19])/$c0-1)*100
             if($retJ -ge 15){
               $s10=0.0; $n10=0
-              for($q=$p2-9;$q -le $p2;$q++){ if($path[$q] -ne $null){ $s10+=$path[$q]; $n10++ } }
-              if($n10 -ge 8 -and $cj -lt ($s10/$n10)){ $hit=$true }
+              for($q=$p2-9;$q -le $p2;$q++){ if($path[$q] -ne $null){ $s10+=([double]$path[$q]+$cum[$q]); $n10++ } }
+              if($n10 -ge 8 -and $cjTr -lt ($s10/$n10)){ $hit=$true }
             }
           }
         }
         if($hit){ $exitJ=$j; break }
       }
-      $ce=CloseAt $code $exitJ
-      if($ce -eq $null){ $ce=$c0; $exitJ=$i }
-      $ret=($ce/$c0-1)*100
+      $pE=$exitJ-($i-19)
+      $ce=$path[$pE]
+      if($ce -eq $null){ $ce=$c0; $pE=19; $exitJ=$i }
+      # total return incl. dividends between entry and exit, entry price unadjusted (prod formula)
+      $ret=((([double]$ce+($cum[$pE]-$cum[19]))/$c0)-1)*100
       $idx1=$idxMapBT[$dates[$exitJ]]
       $alpha=$ret-(($idx1/$idx0-1)*100)
       $er[$ek]=@([int]($exitJ-$i),[math]::Round($ret,2),[math]::Round($alpha,2))
@@ -228,7 +293,7 @@ for($i=$evalLo; $i -le $evalHi; $i++){
       if(-not $exitRes.ContainsKey($p.code)){ continue }
       foreach($ek in $exitKeys){
         $e=$exitRes[$p.code][$ek]
-        [void]$results["$($rc.key)|$ek"].Add([pscustomobject]@{ days=$e[0]; ret=$e[1]; alpha=$e[2]; regime=$reg; phase=$phase })
+        [void]$results["$($rc.key)|$ek"].Add([pscustomobject]@{ code=$p.code; ei=$i; days=$e[0]; ret=$e[1]; alpha=$e[2]; regime=$reg; phase=$phase })
       }
     }
   }
@@ -236,13 +301,26 @@ for($i=$evalLo; $i -le $evalHi; $i++){
 }
 
 Write-Host "[4/4] summaries + walk-forward ranking..."
+$COST=0.585   # % per round trip: 2 x 0.1425% fee (no discount) + 0.3% tax - conservative
 function Agg($rows){
   $a=@($rows)
   if($a.Count -eq 0){ return $null }
   $w=@($a | Where-Object {$_.alpha -gt 0}).Count
+  $avgA=[math]::Round(($a|Measure-Object -Property alpha -Average).Average,2)
+  $sorted=@($a | ForEach-Object { $_.alpha } | Sort-Object)
+  $med=$sorted[[int][math]::Floor(($sorted.Count-1)/2)]
+  # distinct entries: the same code re-picked within 20 trade days is one overlapping
+  # position, not a fresh sample - nDistinct is the honest n for significance eyeballing
+  $nd=0; $lastEi=@{}
+  foreach($r in ($a | Sort-Object -Property code,ei)){
+    if(-not $lastEi.ContainsKey($r.code) -or ($r.ei-$lastEi[$r.code]) -ge 20){ $nd++; $lastEi[$r.code]=$r.ei }
+  }
   return @{ n=$a.Count
+            nDistinct=$nd
             winRate=[math]::Round($w/$a.Count*100,1)
-            avgAlpha=[math]::Round(($a|Measure-Object -Property alpha -Average).Average,2)
+            avgAlpha=$avgA
+            avgAlphaNet=[math]::Round($avgA-$COST,2)
+            medAlpha=[math]::Round($med,2)
             avgRet=[math]::Round(($a|Measure-Object -Property ret -Average).Average,2)
             avgDays=[math]::Round(($a|Measure-Object -Property days -Average).Average,1) }
 }
@@ -269,7 +347,7 @@ $fmtP="{0}/{1}/{2}-{3}/{4}" -f $dates[0].Substring(0,4),$dates[0].Substring(4,2)
 $out=@{
   generated=(Get-Date -Format 'yyyy-MM-dd HH:mm')
   period=$fmtP; panelDays=$N; splitDate=$splitDate
-  note='walk-forward: IS=first 60% (optimize), OOS=last 40% (validate); TWSE-only; fund factor not replayable; overlapping windows'
+  note='v2.2 walk-forward: IS=first 60% (optimize), OOS=last 40% (validate); dividend-adjusted exits+returns; volume/candle factors replayed; stopTrail=prod minus foreign-2-day rule; avgAlphaNet=alpha-0.585% round-trip cost; nDistinct=non-overlapping entries; TWSE-only; fund factor + regime-green bonus not replayable; NOT comparable to v2.1'
   grid=$grid
   current=$cur
   bestOOS=$best
@@ -292,6 +370,7 @@ foreach($g in $sel){
     best=($best -and $g.rank -eq $best.rank -and $g.exit -eq $best.exit)
     isWin=$(if($g.is){$g.is.winRate}else{$null});   isAlpha=$(if($g.is){$g.is.avgAlpha}else{$null})
     oosWin=$(if($g.oos){$g.oos.winRate}else{$null}); oosAlpha=$(if($g.oos){$g.oos.avgAlpha}else{$null}); oosN=$(if($g.oos){$g.oos.n}else{$null})
+    oosAlphaNet=$(if($g.oos){$g.oos.avgAlphaNet}else{$null}); oosNd=$(if($g.oos){$g.oos.nDistinct}else{$null})
     bearWin=$(if($g.bear){$g.bear.winRate}else{$null}); bearN=$(if($g.bear){$g.bear.n}else{$null})
   }
 }

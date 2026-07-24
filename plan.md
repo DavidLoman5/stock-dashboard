@@ -28,6 +28,7 @@
 
 **參數**（`config.json`，範本見 `config.example.json`）：sessionDays 14／idleDays 3／
 maxLoginFailures 5／lockoutMinutes 60（2026-07-24 對外開放時收緊，原 10／15）／
+maxLoginFailuresPerUser 20（2026-07-24 新增：IP 與帳號分開計，擋掉「5 次錯密碼把 owner 鎖在門外」的反向 DoS）／
 maxCodesPerUser 30／maxDistinctCodes 200／maxRegistrationsPerIpPerDay 3／pendingExpiryDays 30。
 
 **營運狀態（2026-07-24 起）**：`stock-dashboard` systemd user service＋`loginctl enable-linger`，
@@ -66,14 +67,23 @@ maxCodesPerUser 30／maxDistinctCodes 200／maxRegistrationsPerIpPerDay 3／pend
 - [ ] 首次歸因週報：2026-07-24（五）
 - [ ] 累積 ~30 筆帶因子快照的結案樣本後，第一次認真解讀分組差異（預估 2026-09 初）
 
-### 每月參數檢視儀式（backtest v2.1 走前驗證）
-`backtest.ps1` v2.1（2026-07-19）：200 面板日（~120 評估日）、6 排序權重 × 3 出場規則共 18 組合、
-前 60% 樣本內找最優／後 40% 樣本外驗證、空頭區分組；面板逐日快取（backtest-cache/，gitignored），
-月跑只補新日期、幾十秒完成。**v2.1 已對齊生產選股**（T86 ≥4/5 天、跌破季線剔除、技術分含季線
-+8＝27/30、40 日高、ma20p 窗口對齊、evalLo=60）；量價/出貨 K 與基本面因子仍不可回放。
-- [ ] 每月第一個週末手動跑一次 `backtest.ps1`（需人在場、電腦勿休眠）
+### 每月參數檢視儀式（backtest v2.2 走前驗證）
+`backtest.ps1` v2.2（2026-07-24）：200 面板日（~120 評估日）、6 排序權重 × **4 出場規則共 24 組合**、
+前 60% 樣本內找最優／後 40% 樣本外驗證、空頭區分組；面板逐日快取（backtest-cache/，gitignored）。
+v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
+1. **面板快取 v2**：改存 O/H/L/C/量/值/帶號漲跌（同一 MI_INDEX 回應、不多打 API）。
+   舊 v1 快取視為 miss，**下次跑會一次性重抓 200 天（約 30-60 分鐘，之後照舊只補新日期）**
+2. **含息回放**：出場模擬與報酬全用含息序列（同生產 DivSumSince 公式＋10% 上限）——
+   除息跳空不再誤觸停損（smoke 實測 3 天面板就有 24 檔除息特徵日）
+3. **量價因子回放**：出貨 K 剔除、量增價揚 +4/+2、高檔長上影 −5、低檔長下影 +2，對齊生產 techS
+4. **新增 stopTrail 出場**＝prod 拿掉外資連 2 賣（候選規則「外資連2賣僅在跌破月線時生效」
+   在日頻下等價於拿掉該規則——跌破月線本來就會觸發停損），8/18 重跑直接對比 prod vs stopTrail
+5. **統計**：avgAlphaNet（扣 0.585% 來回成本）、medAlpha（中位數）、nDistinct（同代號 20 日內
+   重複進場只計一次＝真實樣本數，回應 overlapping windows 灌水 n 的舊註記）
+仍不可回放：基本面因子、綠燈動能 +3（需逐日 instNet/漲跌家數）、ETF 榜；僅上市。
+- [ ] 每月第一個週末手動跑一次 `backtest.ps1`（需人在場、電腦勿休眠；**首次 v2.2 跑要留 1 小時**）
 - [ ] 調權重門檻：樣本外顯著優於現行組合＋空頭區不劣化 → 才改 screen.ps1，改動記錄於此
-- [ ] 下次檢視：2026-08-18 前後（空頭樣本累積滿月），**以 v2.1 重跑為準**
+- [ ] 下次檢視：2026-08-18 前後（空頭樣本累積滿月），**以 v2.2 重跑為準**（v2.1 結論作廢）
 
 **首跑結論（2026-07-18，v2 舊版，⚠ 已被 v2.1 取代、數字不可直接比較）**
 **（IS 2025/09–2026/03、OOS 2026/03–07、每組 OOS n=310）**：
@@ -86,6 +96,7 @@ maxCodesPerUser 30／maxDistinctCodes 200／maxRegistrationsPerIpPerDay 3／pend
 **候選規則（待 8/18 複驗後才考慮上線）**：
 - [ ] 外資連2日轉賣出場改附加條件（例：僅當價格已跌破月線時才生效），
   降低多頭中被雜訊洗出場的頻率——需在空頭樣本中確認不犧牲回撤保護
+  （2026-07-24：已以 `stopTrail` 出場規則進 v2.2 網格，8/18 重跑即得樣本外對比）
 
 ## ⏳ 待驗證（需要時間累積數據，不用寫程式）
 
@@ -99,11 +110,6 @@ maxCodesPerUser 30／maxDistinctCodes 200／maxRegistrationsPerIpPerDay 3／pend
 
 ## 🤔 待決策（需要使用者拍板）
 
-- [ ] **「今日已跑過就跳過」的判斷要不要改用 lastTrade**：2026-07-23 出現實例——上午 11:06 手動跑
-  （盤中，用 07/22 收盤），20:00 排程觸發後以「今天已執行過」為由跳過，結果當日頁面 lastTrade
-  停在 2026-07-22、07/23 收盤沒進頁面。建議把 wrapper／SKILL.md 的跳過條件改成
-  「`window.META.lastTrade` 已等於最新交易日才跳過」，而非「今天有沒有 commit 過」。
-  （屬本機 wrapper／SKILL.md 改動，不在此 repo）
 - [ ] **picks-log 去重鍵是「序列基準日」，同日跑兩次會讓後跑的 Top5 追蹤不到**：2026-07-23 實例——
   上午 11:06 盤中跑一次，基準日 20260722、當時快照為盤中價，記錄的新標的是 2801／1590；
   晚上 20:00 收盤後重跑，基準日仍是 20260722（月度端點落後一天）但快照已是 7/23 收盤，
@@ -123,10 +129,36 @@ maxCodesPerUser 30／maxDistinctCodes 200／maxRegistrationsPerIpPerDay 3／pend
 - [ ] 大盤紅綠燈納入前夜美股/費半因子（目前僅由 AI 在文字面提及）
 - [ ] 上櫃大盤指數（櫃買指數）納入行情基準（屬策略變更，走月度回測儀式）
 - [ ] v14 稽核發現、尚未處理：screen.ps1 `splice()` 找不到 marker 時只警告不阻擋寫檔；
-  holdings.json 讀取失敗靜默吞掉（空 catch）；degenerate candle fallback 選錯 curMode（cosmetic）
+  degenerate candle fallback 選錯 curMode（cosmetic）。~~holdings.json 讀取失敗靜默吞掉~~（2026-07-24 已改為警告）
 
 ## ✅ 已完成
 
+- 2026-07-24 **v18 安全檢查＋進退場訊號＋backtest v2.2**（本輪安全稽核結論：架構面乾淨——
+  loopback+tunnel、scrypt、token 雜湊、SameSite+Origin、CSP、SQL 參數化、guest fail-closed 過濾；
+  修掉兩個實質問題，owner 弱密碼仍待使用者動作）：
+  1. **帳號鎖定反向 DoS 修復**：`is_locked_out` 原為 `(ip OR username)` 共用 5 次門檻，任何人
+     5 次錯密碼即可把任意帳號（含 owner）鎖 60 分鐘。改 IP 與帳號分開計數，帳號名單獨門檻
+     `maxLoginFailuresPerUser`=20——暴力破解仍被擋，鎖死真使用者的成本 ×4（test_server 兩測項守著）
+  2. **prune 改每日執行**：原本只在伺服器啟動時跑一次，systemd 常駐後 login_attempts／過期
+     session／逾期 pending 帳號永不清理。改為請求入口每 24h 懶執行一次（threading lock 防重複）
+  3. **判級轉變提醒**（進退場的「時點」訊號）：update-holdings.ps1 從 stance-log 取每檔前一
+     交易日判級寫進 HOLDINGS_META（`prevStance`＋union 版 `_prevStance` 供 server 模式 guest），
+     頁面比對今日規則引擎判級，不同即在持股卡顯示轉變徽章（惡化紅／好轉bull色）、Hero 整體
+     傾向列出「今日判級轉變：XX 續抱→防守」。判級分數規則不動（stance-log 歷史一致性不受影響）
+  4. **持股移動停利訊號**：已知成本（輸入成本或 trades 均價）且獲利 ≥15%、收盤跌破 10 日線 →
+     持股卡亮 🔔 chip＋modal 顯示細節，與選股引擎出場規則同一套；無成本不猜不顯示。
+     驗證：jsdom（node-canvas）十項斷言全過——static/trans/empty 三種頁 boot 零錯誤、轉變徽章
+     與 Hero 摘要渲染、強制觸發移動停利、撤成本後訊號清除（**修正 v17 驗法：當時 jsdom 用
+     `outside-only` 其實沒執行任何頁內 JS，「零錯誤」是假的；本輪改 `dangerously`＋真 canvas）
+  5. **backtest v2.2**：見「每月參數檢視儀式」段（面板快取 v2／含息回放／量價因子／stopTrail／
+     成本與穩健統計）。smoke 驗證：3 天面板抓取＋v2 快取寫讀、v1 舊檔視為 miss 重抓一次、
+     chg 帶號解析與跨日收盤差 1052/1080 完全一致（24 檔為除息特徵日，正是含息還原的目標）
+  6. 文件對齊：CLAUDE.md 移除「SKILL.md 尚未兩段式」過時警告（實況已兩段式＋lastTrade 跳過條件，
+     原「待決策」第一項一併結案）；index.html 頁尾 08:30→20:00；SETUP.md 補 `chmod 700 data`
+     （管線寫出的共用 JSON 含 owner 持股，同機其他帳號原本讀得到）；screen.ps1 holdings.json
+     讀取失敗改警告（v14 backlog 之一）
+  - ⏳ 使用者動作（站已對外，越快越好）：**換掉 felix 的 4 位數密碼**（網頁「修改密碼」即可，
+    新密碼需 ≥10 字元）；在 repo 目錄跑一次 `chmod 700 data`
 - 2026-07-24 **v17 站台上線＋前端首次實證驗證**：
   1. **站沒起來的原因是根本沒常駐**：伺服器一直是手動前景跑，關掉就沒了。改成 systemd user
      service（`Restart=on-failure`、`UMask=0077`、`ProtectHome=read-only`）＋`enable-linger`，
