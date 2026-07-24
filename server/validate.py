@@ -20,7 +20,7 @@ MIN_PASSWORD = 10
 MAX_PASSWORD = 128
 MAX_NAME = 30
 MAX_NOTE = 200
-MAX_LOTS = 100000
+MAX_SHARES = 100000000
 MAX_PRICE = 1000000.0
 
 
@@ -62,14 +62,15 @@ def text(value, limit, field="欄位"):
     return value
 
 
-def lots(value, allow_zero=False):
+def shares(value, allow_zero=False):
+    """Shares, not lots - odd lots are legal, so 1500 is a valid position."""
     try:
         n = int(value)
     except (TypeError, ValueError):
-        raise Invalid("張數需為整數")
+        raise Invalid("股數需為整數")
     low = 0 if allow_zero else 1
-    if not (low <= n <= MAX_LOTS):
-        raise Invalid("張數需介於 %d-%d" % (low, MAX_LOTS))
+    if not (low <= n <= MAX_SHARES):
+        raise Invalid("股數需介於 %d-%d" % (low, MAX_SHARES))
     return n
 
 

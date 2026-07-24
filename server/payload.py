@@ -4,8 +4,8 @@ holdings.
 The split that makes multi-user affordable:
   shared  - quotes/TAIEX (data/quotes.json), picks, eval, backtest, market mood. Fetched once
             per day for the union of everyone's codes; identical bytes for every user.
-  personal- lots and trades (DB only). P/L, weights and concentration are derived client-side
-            from shared quotes x personal lots, so nothing per-user is precomputed.
+  personal- shares and trades (DB only). P/L, weights and concentration are derived client-side
+            from shared quotes x personal shares, so nothing per-user is precomputed.
 
 TOKEN ISOLATION (hard rule): nothing in this module can trigger an AI call. Guests read the
 by-code analysis that the owner's daily run already produced as a by-product; a code nobody
@@ -41,6 +41,31 @@ def _root(*parts):
     return os.path.join(config.ROOT, *parts)
 
 
+# data/names.json (whole market, written by screen.ps1) is read on nearly every holdings write,
+# so keep it in memory and only re-read when the daily run replaces the file.
+_NAMES_CACHE = {"mtime": None, "map": {}}
+
+
+def official_names(cfg):
+    """code -> official Chinese name. Exchange data, never user input, so it is safe both to
+    display and to auto-fill with; a missing file just means 'no name known yet'."""
+    path = os.path.join(cfg["dataDir"], "names.json")
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return {}
+    if _NAMES_CACHE["mtime"] != mtime:
+        data = _read_json(path, {})
+        _NAMES_CACHE["map"] = data if isinstance(data, dict) else {}
+        _NAMES_CACHE["mtime"] = mtime
+    return _NAMES_CACHE["map"]
+
+
+def official_name(cfg, code, fallback=""):
+    name = official_names(cfg).get(code)
+    return name if isinstance(name, str) and name.strip() else fallback
+
+
 def _display_name(user):
     """sqlite3.Row raises on an unknown key, and a row can predate the display_name
     migration, so ask the row what it has rather than assuming."""
@@ -51,7 +76,7 @@ def _display_name(user):
 
 def user_holdings(conn, user_id):
     return conn.execute(
-        "SELECT code, name, lots, type, theme, tech_like, color FROM holdings "
+        "SELECT code, name, shares, type, theme, tech_like, color FROM holdings "
         "WHERE user_id = ? ORDER BY code",
         (user_id,),
     ).fetchall()
@@ -59,7 +84,7 @@ def user_holdings(conn, user_id):
 
 def user_trades(conn, user_id):
     return conn.execute(
-        "SELECT d, side, code, lots, price FROM trades WHERE user_id = ? ORDER BY d, id",
+        "SELECT d, side, code, shares, price FROM trades WHERE user_id = ? ORDER BY d, id",
         (user_id,),
     ).fetchall()
 
@@ -75,7 +100,7 @@ def holdings_meta(conn, user_id, div_notes=None, prev_stance=None):
             "name": h["name"],
             "type": h["type"],
             "theme": h["theme"],
-            "lots": h["lots"],
+            "shares": h["shares"],
             "color": h["color"],
             "techLike": bool(h["tech_like"]),
             "divNote": div_notes.get(h["code"]),
@@ -144,7 +169,12 @@ def bootstrap(conn, cfg, user):
     picks_notes = _read_json(_root("picks-notes.json"), {}) or {}
     all_notes = _read_json(_root("holdings-notes.json"), {}) or {}
     eval_report = _read_json(_root("eval-report.json"), None)
-    backtest = _read_json(_root("backtest-result.json"), None)
+    # backtest-card.json is the page-card shape ({rows:[...]}) that backtest.ps1 splices into the
+    # static page. backtest-result.json is the raw research output (grid/current/bestOOS) and has
+    # no `rows`, so buildBacktest() silently rendered nothing from it - hence the fallback order.
+    backtest = _read_json(_root("backtest-card.json"), None)
+    if not isinstance(backtest, dict) or not backtest.get("rows"):
+        backtest = None
 
     # divNote lives in the daily meta export; reuse the owner run's values (they are per-code
     # ex-dividend facts, not personal)
@@ -229,7 +259,7 @@ def owner_portfolio(conn):
             {
                 "code": h["code"],
                 "name": h["name"],
-                "lots": h["lots"],
+                "shares": h["shares"],
                 "type": h["type"],
                 "theme": h["theme"],
                 "techLike": bool(h["tech_like"]),

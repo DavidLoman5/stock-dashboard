@@ -21,6 +21,13 @@ function ReadJson($path){
   if(-not (Test-Path $path)){ return $null }
   try{ return (Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json) }catch{ return $null }
 }
+# Quantities are shares. A `lots` key means the file predates that change (or came from an older
+# clone) - convert instead of rejecting, 1 lot = 1000 shares.
+function SharesOf($h){
+  if($h.PSObject.Properties['shares'] -and $null -ne $h.shares){ return [int]$h.shares }
+  if($h.PSObject.Properties['lots'] -and $null -ne $h.lots){ return [int]([double]$h.lots * 1000) }
+  return 0
+}
 
 $quotes = ReadJson (Join-Path $dataDir 'quotes.json')
 if($null -eq $quotes){ Write-Host "FATAL: data/quotes.json missing or unreadable - run update-holdings.ps1 first"; exit 1 }
@@ -46,7 +53,7 @@ foreach($c in $demoCodes){ $DASH[$c] = $quotes.$c }
 # HOLDINGS_META from the demo file; no trades are published
 $sharedMeta = ReadJson (Join-Path $dataDir 'holdings-meta.json')
 $HOLDINGS_META=[ordered]@{}
-$HOLDINGS_META['_trades']=@($demo.trades)
+$HOLDINGS_META['_trades']=@($demo.trades | ForEach-Object { [ordered]@{ d=$_.d; side=$_.side; code="$($_.code)"; shares=(SharesOf $_); price=$_.price } })
 foreach($h in $demo.holdings){
   $c="$($h.code)"
   $divNote = $null
@@ -57,7 +64,7 @@ foreach($h in $demo.holdings){
   $prevStance = $null
   if($sharedMeta -and $sharedMeta.PSObject.Properties['_prevStance'] -and $sharedMeta._prevStance.PSObject.Properties[$c]){ $prevStance = $sharedMeta._prevStance.$c }
   $HOLDINGS_META[$c]=[ordered]@{
-    name=$h.name; type=$h.type; theme=$h.theme; lots=$h.lots; color=$h.color
+    name=$h.name; type=$h.type; theme=$h.theme; shares=(SharesOf $h); color=$h.color
     techLike=$(if($h.PSObject.Properties['techLike']){[bool]$h.techLike}else{$false}); divNote=$divNote; prevStance=$prevStance
   }
 }

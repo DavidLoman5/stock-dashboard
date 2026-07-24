@@ -14,6 +14,7 @@ no browser handy, plus the two exports the daily pipeline consumes.
   python3 -m server.admin import-holdings <holdings.json> <user>
   python3 -m server.admin export-codes         -> data/active-codes.json   (for screen/update)
   python3 -m server.admin export-owner         -> data/owner-holdings.json (owner only)
+  python3 -m server.admin backfill-names       用 data/names.json 補上只有代號的持股中文名
 """
 
 import getpass
@@ -164,6 +165,16 @@ def cmd_invite(cfg, conn, args):
     print("邀請碼（%d 天內有效，只能用一次）: %s" % (cfg["inviteDays"], code))
 
 
+def _shares_of(row):
+    """Quantities are shares now. A `lots` key means the file predates the change (or came from
+    someone else's clone), so convert rather than reject - 1 lot = 1000 shares."""
+    if row.get("shares") is not None:
+        return validate.shares(row["shares"])
+    if row.get("lots") is not None:
+        return validate.shares(int(float(row["lots"]) * 1000))
+    raise validate.Invalid("持股缺少 shares 欄位")
+
+
 def cmd_import_holdings(cfg, conn, args):
     """Seed an account from a holdings.json - how the owner moves off the in-repo file."""
     if len(args) < 2:
@@ -175,12 +186,12 @@ def cmd_import_holdings(cfg, conn, args):
     n_h = n_t = 0
     for h in data.get("holdings", []):
         conn.execute(
-            "INSERT INTO holdings (user_id, code, name, lots, type, theme, tech_like, color) "
+            "INSERT INTO holdings (user_id, code, name, shares, type, theme, tech_like, color) "
             "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(user_id, code) DO UPDATE SET "
-            "lots = excluded.lots, name = excluded.name",
+            "shares = excluded.shares, name = excluded.name",
             (user["id"], validate.code(h["code"]),
              validate.text(h.get("name"), validate.MAX_NAME, "名稱"),
-             validate.lots(h.get("lots", 1)),
+             _shares_of(h),
              validate.text(h.get("type"), validate.MAX_NAME, "類型"),
              validate.text(h.get("theme"), validate.MAX_NAME, "主題"),
              1 if h.get("techLike") else 0, h.get("color")),
@@ -188,9 +199,9 @@ def cmd_import_holdings(cfg, conn, args):
         n_h += 1
     for t in data.get("trades", []):
         conn.execute(
-            "INSERT INTO trades (user_id, d, side, code, lots, price) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO trades (user_id, d, side, code, shares, price) VALUES (?,?,?,?,?,?)",
             (user["id"], validate.date(t["d"]), validate.side(t["side"]),
-             validate.code(t["code"]), validate.lots(t["lots"]), validate.price(t["price"])),
+             validate.code(t["code"]), _shares_of(t), validate.price(t["price"])),
         )
         n_t += 1
     conn.commit()
@@ -226,6 +237,27 @@ def cmd_export_owner(cfg, conn, args):
     print("  %d holdings, %d trades" % (len(data["holdings"]), len(data["trades"])))
 
 
+def cmd_backfill_names(cfg, conn, args):
+    """Fill in official names for holdings that only ever got a code. Rows where the user typed
+    a real name are left alone - this only touches name = '' or name = code."""
+    names = payload.official_names(cfg)
+    if not names:
+        print("  data/names.json 不存在或是空的（先跑 screen.ps1）")
+        return
+    n = 0
+    for row in conn.execute("SELECT user_id, code, name FROM holdings").fetchall():
+        if row["name"] and row["name"] != row["code"]:
+            continue
+        official = names.get(row["code"])
+        if not official or official == row["name"]:
+            continue
+        conn.execute("UPDATE holdings SET name = ? WHERE user_id = ? AND code = ?",
+                     (official, row["user_id"], row["code"]))
+        n += 1
+    conn.commit()
+    print("  補上 %d 筆中文名" % n)
+
+
 COMMANDS = {
     "init": cmd_init,
     "users": cmd_users,
@@ -240,6 +272,7 @@ COMMANDS = {
     "import-holdings": cmd_import_holdings,
     "export-codes": cmd_export_codes,
     "export-owner": cmd_export_owner,
+    "backfill-names": cmd_backfill_names,
 }
 
 

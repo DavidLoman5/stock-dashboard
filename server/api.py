@@ -102,15 +102,25 @@ def get_holdings(ctx):
     }
 
 
+def _holding_name(ctx, code):
+    """What the page shows for this holding. Someone adding a stock usually only knows the code,
+    and a portfolio of bare codes is unreadable - so fall back to the exchange's own name rather
+    than repeating the code. A name the user did type always wins."""
+    typed = validate.text(ctx.body.get("name"), validate.MAX_NAME, "名稱")
+    if typed and typed != code:
+        return typed
+    return payload.official_name(ctx.cfg, code, code)
+
+
 def post_holdings(ctx):
-    """Actions: upsert (add/change lots), remove, trade (append a fill), untrade."""
+    """Actions: upsert (add/change shares), remove, trade (append a fill), untrade."""
     user = ctx.require_user()
     action = (ctx.body.get("action") or "").strip()
     conn = ctx.conn
 
     if action == "upsert":
         code = validate.code(ctx.body.get("code"))
-        lots = validate.lots(ctx.body.get("lots"))
+        shares = validate.shares(ctx.body.get("shares"))
         existing = conn.execute(
             "SELECT 1 FROM holdings WHERE user_id = ? AND code = ?", (user["id"], code)
         ).fetchone()
@@ -121,22 +131,22 @@ def post_holdings(ctx):
             if count >= ctx.cfg["maxCodesPerUser"]:
                 raise ApiError("持股檔數已達上限（%d）" % ctx.cfg["maxCodesPerUser"], 409)
         conn.execute(
-            "INSERT INTO holdings (user_id, code, name, lots, type, theme, tech_like, color) "
+            "INSERT INTO holdings (user_id, code, name, shares, type, theme, tech_like, color) "
             "VALUES (?,?,?,?,?,?,?,?) "
             "ON CONFLICT(user_id, code) DO UPDATE SET "
-            "  lots = excluded.lots, name = excluded.name, type = excluded.type, "
+            "  shares = excluded.shares, name = excluded.name, type = excluded.type, "
             "  theme = excluded.theme, tech_like = excluded.tech_like",
             (
                 user["id"], code,
-                validate.text(ctx.body.get("name"), validate.MAX_NAME, "名稱") or code,
-                lots,
+                _holding_name(ctx, code),
+                shares,
                 validate.text(ctx.body.get("type"), validate.MAX_NAME, "類型"),
                 validate.text(ctx.body.get("theme"), validate.MAX_NAME, "主題"),
                 1 if ctx.body.get("techLike") else 0,
                 None,
             ),
         )
-        db.audit(conn, user["id"], "holding_upsert", "%s x%d" % (code, lots))
+        db.audit(conn, user["id"], "holding_upsert", "%s %d股" % (code, shares))
         conn.commit()
         return 200, {"ok": True}
 
@@ -150,13 +160,13 @@ def post_holdings(ctx):
     if action == "trade":
         code = validate.code(ctx.body.get("code"))
         cur = conn.execute(
-            "INSERT INTO trades (user_id, d, side, code, lots, price) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO trades (user_id, d, side, code, shares, price) VALUES (?,?,?,?,?,?)",
             (
                 user["id"],
                 validate.date(ctx.body.get("d")),
                 validate.side(ctx.body.get("side")),
                 code,
-                validate.lots(ctx.body.get("lots")),
+                validate.shares(ctx.body.get("shares")),
                 validate.price(ctx.body.get("price")),
             ),
         )

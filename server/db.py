@@ -55,14 +55,36 @@ MIGRATIONS = [
 ]
 
 
+def _columns(conn, table):
+    return {r["name"] for r in conn.execute("PRAGMA table_info(%s)" % table)}
+
+
+def lots_to_shares(conn):
+    """Quantities used to be lots (1 lot = 1000 shares); they are now shares, so odd-lot
+    positions are representable. CREATE TABLE IF NOT EXISTS does nothing to an existing DB and
+    the MIGRATIONS table above only adds columns, so this one has to move the data itself.
+
+    Idempotent: it keys off `lots` still existing, and drops it once the values are carried over,
+    which leaves migrated and freshly-created DBs with the identical shape.
+    """
+    for table in ("holdings", "trades"):
+        cols = _columns(conn, table)
+        if "lots" not in cols:
+            continue
+        if "shares" not in cols:
+            conn.execute("ALTER TABLE %s ADD COLUMN shares INTEGER NOT NULL DEFAULT 0" % table)
+        conn.execute("UPDATE %s SET shares = CAST(lots * 1000 AS INTEGER)" % table)
+        conn.execute("ALTER TABLE %s DROP COLUMN lots" % table)
+
+
 def init_schema(db_path):
     conn = get(db_path)
     with open(SCHEMA_PATH, "r", encoding="utf-8") as fh:
         conn.executescript(fh.read())
     for table, column, decl in MIGRATIONS:
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(%s)" % table)}
-        if column not in cols:
+        if column not in _columns(conn, table):
             conn.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, column, decl))
+    lots_to_shares(conn)
     conn.commit()
     # the DB holds other people's portfolios - keep it owner-readable only
     try:

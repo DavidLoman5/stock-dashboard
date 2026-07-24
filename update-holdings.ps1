@@ -26,6 +26,13 @@ function GetJson($url){
   return $null
 }
 function SMAlast($a,$n){ if($a.Count -lt $n){return $null}; ($a[($a.Count-$n)..($a.Count-1)] | Measure-Object -Average).Average }
+# Quantities are shares. A `lots` key means the file predates that change (or came from an older
+# clone) - convert instead of rejecting, 1 lot = 1000 shares.
+function SharesOf($h){
+  if($h.PSObject.Properties['shares'] -and $null -ne $h.shares){ return [int]$h.shares }
+  if($h.PSObject.Properties['lots'] -and $null -ne $h.lots){ return [int]([double]$h.lots * 1000) }
+  return 0
+}
 # local reads can transiently fail (lock/partial write) - retry before giving up (caller decides how to fail)
 function ReadJsonRetry($path){
   for($i=0;$i -lt 3;$i++){
@@ -233,11 +240,11 @@ Write-Host "  div notes: $($divMap.Count) upcoming"
 Write-Host "[5/6] compute holdings-context.json (small, for AI to read) + HOLDINGS_META..."
 $HOLDINGS_META=[ordered]@{}
 # trades ride along as a special _-prefixed key (like _market in notes); page filters _ keys out of H
-$HOLDINGS_META['_trades']=@($hj.trades)
+$HOLDINGS_META['_trades']=@($hj.trades | ForEach-Object { [ordered]@{ d=$_.d; side=$_.side; code="$($_.code)"; shares=(SharesOf $_); price=$_.price } })
 $context=@()
 foreach($h in $hj.holdings){
   $c="$($h.code)"
-  $HOLDINGS_META[$c]=[ordered]@{ name=$h.name; type=$h.type; theme=$h.theme; lots=$h.lots; color=$h.color; techLike=$(if($h.PSObject.Properties['techLike']){[bool]$h.techLike}else{$false}); divNote=$(if($divMap.ContainsKey($c)){$divMap[$c]}else{$null}) }
+  $HOLDINGS_META[$c]=[ordered]@{ name=$h.name; type=$h.type; theme=$h.theme; shares=(SharesOf $h); color=$h.color; techLike=$(if($h.PSObject.Properties['techLike']){[bool]$h.techLike}else{$false}); divNote=$(if($divMap.ContainsKey($c)){$divMap[$c]}else{$null}) }
   $ser=@($DASH[$c].series | ForEach-Object { $_.c })
   if($ser.Count -lt 1){ continue }
   $last=$DASH[$c].series[$DASH[$c].series.Count-1]

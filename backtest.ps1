@@ -375,6 +375,11 @@ foreach($g in $sel){
   }
 }
 $bt=@{ period=$fmtP; generated=(Get-Date -Format 'yyyy-MM-dd'); splitDate=$splitDate; rows=$rows }
+# Same object the page card gets, as a file: the server (payload.py) has no way to read what we
+# splice below, and backtest-result.json has a different shape (grid/current/bestOOS, no rows) -
+# feeding that to buildBacktest() left an empty card on every logged-in user's page.
+$bt | ConvertTo-Json -Depth 4 | Out-File (Join-Path $root 'backtest-card.json') -Encoding UTF8
+Write-Host "saved backtest-card.json (page card shape, read by server/payload.py)"
 $idxPath=Join-Path $root 'index.html'
 if(Test-Path $idxPath){
   $enc=New-Object System.Text.UTF8Encoding($false)

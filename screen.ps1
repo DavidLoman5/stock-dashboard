@@ -114,6 +114,20 @@ if($otc){
   }
 } else { Write-Host "  WARNING: TPEx quotes failed - screening TWSE only today" }
 Write-Host "  otc rows=$otcN (total px=$($px.Count))"
+
+# code -> official Chinese name for the WHOLE market (listed + OTC). The server uses this to fill
+# in the name when someone adds a holding without typing one, so their page stops showing bare
+# codes. It is exchange data, not user input, so nothing here weakens the "user text never
+# reaches an AI prompt" rule. Only rewritten when the fetch actually produced names, so a failed
+# TPEx call cannot blank the file.
+if($px.Count -gt 0){
+  $nameDir=Join-Path $root 'data'
+  if(-not (Test-Path $nameDir)){ New-Item -ItemType Directory -Path $nameDir | Out-Null }
+  $nameMap=[ordered]@{}
+  foreach($k in ($px.Keys | Sort-Object)){ $n="$($px[$k].name)".Trim(); if($n){ $nameMap[$k]=$n } }
+  $nameMap | ConvertTo-Json -Depth 2 -Compress | Out-File (Join-Path $nameDir 'names.json') -Encoding UTF8
+  Write-Host "  wrote data/names.json ($($nameMap.Count) codes)"
+}
 $upN=0;$dnN=0
 foreach($k in $px.Keys){ $g=$px[$k].chg; if($g -gt 0){$upN++} elseif($g -lt 0){$dnN++} }
 

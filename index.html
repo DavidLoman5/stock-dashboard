@@ -47,7 +47,10 @@
     padding:18px 20px 12px;border-bottom:1px solid var(--line)}
   .editor h3{margin:0;font-size:15px}
   .editor .ebody{padding:14px 20px 20px;overflow:auto;max-height:64vh}
-  .editor table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  .editor .tblwrap{overflow-x:auto;margin-bottom:16px}
+  .editor table{width:100%;border-collapse:collapse;font-size:13px}
+  .editor td.nm{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .editor th{text-align:left;font-size:11.5px;color:var(--ink-faint);padding:0 6px 6px;border-bottom:1px solid var(--line)}
   .editor td{padding:7px 6px;border-bottom:1px solid var(--line)}
   .editor input{width:100%;padding:7px 9px;font:inherit;font-size:13px;color:var(--ink);
@@ -73,6 +76,8 @@
   .hero .sub{font-size:12.5px;font-weight:700;margin-top:2px}
   .hero .stance-wrap{grid-column:1/-1;border-top:1px solid var(--line);padding-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
   .hero .note{font-size:12px;color:var(--ink-faint)}
+  /* heroStance 是一整句話（「整體傾向：… · …」），套用 .pill 預設的 nowrap 會在窄螢幕撐爆版面 */
+  .hero .stance-wrap .pill{white-space:normal;text-align:left;max-width:100%}
   @media(max-width:560px){.hero{grid-template-columns:repeat(2,1fr)}}
 
   .pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
@@ -324,7 +329,7 @@
     <div class="legend" id="legend"></div>
     <button id="costBtn" class="machip" style="margin-top:12px">⚙ 一次設定全部成本價</button>
     <div class="costpanel" id="costPanel" hidden></div>
-    <div class="eqhead" id="eqHead">近三個月績效：投組（含息還原）vs 加權指數（以現行張數回推，起點＝100）</div>
+    <div class="eqhead" id="eqHead">近三個月績效：投組（含息還原）vs 加權指數（以現行股數回推，起點＝100）</div>
     <canvas id="eqChart"></canvas>
     <div class="riskrow" id="riskRow"></div>
     <div class="riskcontrib" id="riskContrib"></div>
@@ -391,17 +396,19 @@
     <button type="button" id="hEditClose">關閉</button>
   </div>
   <div class="ebody">
-    <table>
-      <thead><tr><th>代號</th><th>名稱</th><th style="width:88px">張數</th><th></th></tr></thead>
-      <tbody id="hEditRows"></tbody>
-    </table>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>代號</th><th>名稱</th><th style="width:104px">股數</th><th><span class="sr-only">操作</span></th></tr></thead>
+        <tbody id="hEditRows"></tbody>
+      </table>
+    </div>
     <div class="lab">新增持股</div>
     <div class="row">
       <input id="hAddCode" placeholder="代號（例 2330）" autocapitalize="characters" spellcheck="false">
       <input id="hAddName" placeholder="名稱（可留空）">
     </div>
     <div class="row">
-      <input id="hAddLots" type="number" min="1" step="1" placeholder="張數">
+      <input id="hAddShares" type="number" min="1" step="1" inputmode="numeric" placeholder="股數（1張=1000股）">
       <button type="button" class="primary" id="hAddGo">新增</button>
     </div>
     <p class="emsg" id="hEditMsg" role="status" aria-live="polite"></p>
@@ -417,7 +424,7 @@
 <script id="evaldata">window.EVAL={"generated":"2026-07-24","closedN":8,"overall":{"avgRet":-1.92,"n":8,"avgAlpha":0.51,"winRate":75.0},"byReason":{"外資連2日轉賣":{"avgRet":0.82,"n":6,"avgAlpha":2.08,"winRate":83.0},"跌破月線":{"avgRet":-10.1,"n":2,"avgAlpha":-4.19,"winRate":50.0}},"byLight":{"red":{"avgRet":2.93,"n":1,"avgAlpha":-2.18,"winRate":0.0},"yellow":{"avgRet":-0.02,"n":2,"avgAlpha":0.62,"winRate":100.0}},"byInd":{},"byAiTag":{"one-off":{"avgRet":2.26,"n":2,"avgAlpha":-0.97,"winRate":50.0},"sustainable":{"avgRet":0.31,"n":3,"avgAlpha":3.02,"winRate":100.0}},"byChip":{"chip30-37":{"avgRet":-0.02,"n":2,"avgAlpha":0.62,"winRate":100.0}},"byTech":{"tech25+":{"avgRet":-0.02,"n":2,"avgAlpha":0.62,"winRate":100.0}},"byFund":{"fund10-19":{"avgRet":-1.62,"n":1,"avgAlpha":0.99,"winRate":100.0},"fund20+":{"avgRet":1.59,"n":1,"avgAlpha":0.25,"winRate":100.0}},"byYoy":{"yoy0-30":{"avgRet":-0.02,"n":2,"avgAlpha":0.62,"winRate":100.0}}};</script>
 <script id="backtest">window.BACKTEST={"rows":[{"rank":"chip+t","exit":"prod","cur":true,"best":false,"isWin":43.3,"isAlpha":0.39,"oosWin":37.9,"oosAlpha":-0.39,"oosN":240,"bearWin":60,"bearN":5},{"rank":"tech","exit":"hold20","cur":false,"best":true,"isWin":40.3,"isAlpha":1.89,"oosWin":55.4,"oosAlpha":9.06,"oosN":240,"bearWin":80,"bearN":5},{"rank":"tech","exit":"stop","cur":false,"best":false,"isWin":39.4,"isAlpha":1.75,"oosWin":51.7,"oosAlpha":8.68,"oosN":240,"bearWin":60,"bearN":5},{"rank":"chip","exit":"hold20","cur":false,"best":false,"isWin":48.6,"isAlpha":2.99,"oosWin":55.4,"oosAlpha":7.29,"oosN":240,"bearWin":80,"bearN":5},{"rank":"chip+0.5t","exit":"hold20","cur":false,"best":false,"isWin":51.7,"isAlpha":4.04,"oosWin":55,"oosAlpha":7.19,"oosN":240,"bearWin":80,"bearN":5}],"splitDate":"20260409","generated":"2026-07-19","period":"2025/09/16-07/17"};</script>
 <script id="pknotes">window.PICKS_NOTES={"2615":"評分99居榜首，外資連5日買超合計30,142張、融資同步減碼192張，是全榜最乾淨的籌碼組合；6月合併營收161.66億元年增32.7%、上半年累計765.41億元年增6.39%，本益比僅7.8倍。但推升股價的核心是荷莫茲與曼德海峽封鎖造成的運價急漲，屬地緣事件驅動、可隨局勢緩和逆轉，而油價衝破每桶100美元同步墊高燃油成本——題材與成本同源的雙面刃，運價回落時成本增幅卻會留下來。股價已在40日高點(dist 0.0)、5日漲9.4%，不宜追高。註：評分基準為7/23收盤，尚未反映今日大盤-2.67%的重挫。","2637":"散裝航運，年增57.9%、殖利率4.31%為榜上最高，BDI於7月初由2,797點升至2,910點提供運價支撐；133艘船隊規模居台灣之首，2026年8艘節能新船投入且多數已簽長約，營收波動小於BDI，屬具現金流能見度的結構性題材，與純運價投機不同。風險有二：長約鎖定運價使上行彈性同步受限，而油價破百的燃油成本會立即反映；另外它是今日五檔個股中唯一融資增加者(+91張)，槓桿追價使籌碼品質略遜於同榜。評分基準為7/23收盤，未反映今日大盤重挫。","3706":"AI伺服器與液冷散熱，Q1營收318.64億元年增35%、EPS 1.10元，子公司神雲科技已佔營收90.1%，越南河內廠Q2量產、美國兩座新廠Q3投產，管理層定調下半年優於上半年——年增80.9%來自產能與訂單同步放大，屬結構性而非一次性業外。外資與投信同步連5日買超，且距40日高點還有8.7%，是榜上少數未追高者。但最大變數正落在題材本身：7/23美股Google與特斯拉財報後分別重挫逾7%與約14%，市場疑慮已由「AI需求」轉向「資本支出誰負擔」，若雲端客戶下修capex，伺服器代工的訂單能見度會最先受影響；台灣被課10%關稅對硬體出口亦屬直接衝擊。評分基準為7/23收盤。","6669":"ASIC AI伺服器放量帶動，年增29.8%、券商目標價區間5,400-5,715元(樂觀情境上看7,147元)，題材屬結構性放量無疑。但5日已上漲24%並收在40日高點，現價5,730元實際上已站上多數券商目標價上緣，等於利多大致反映完畢；加上緯創子公司公告處分緯穎持股、金額不低於10億元，大股東調節形成籌碼面壓力。這是本期榜單追高風險最高的一檔——評分反映的是7/23收盤前的動能，尚未計入今日大盤-2.67%，短線宜等回檔驗證支撐而非追價。","2884":"上半年自結稅後純益214.34億元、EPS 1.32元、年增28%創同期新高，外資買超54,982張為全榜最大，2026年定調「玉山金2.0元年」、Q3將完成三商美邦人壽併購，獲利成長屬結構性而非單季跳動。但現價35.95元已貼齊FactSet九位分析師的共識目標價36元，上檔空間有限；且公司自估下半年將降息2至3碼——降息利於壽險與債券評價，卻直接壓縮銀行淨利差，而銀行仍是主要獲利來源，這個利率情境對金控是兩面刃而非單純利多。系統性急跌時金融股相對抗跌，惟評分基準為7/23收盤。","00646":"追蹤標普500的原型ETF，評分43/70在ETF榜居首靠的是外資與投信同步連3日買超，而非價格動能——5日報酬為-0.7%。但最近一盤(7/23)標普500跌1.21%、那斯達克跌2.15%，特斯拉與Google財報後重挫、AI資本支出疑慮升溫，這份評分完全未反映；加上距40日高點僅1.8%，等於在美股相對高檔且敘事轉弱時進場。持有美股原型ETF另需承擔台幣兌美元的匯率變動，這部分不在評分模型內。","00918":"高股息ETF，投信連5日買超26,184張、外資未參與，5日上漲4.8%且距40日高點僅0.5%，是大盤急跌時資金轉進防禦部位的典型走勢，短線動能可解釋，但屬避險輪動而非基本面改善。本期配息1.26元已於6/18除息、7/13發放，短期內無下一次配息可期待。要注意這類ETF的「高填息」紀錄建立在多頭年度，2026上半年台股大漲50%的環境已在7月轉向；買在除息後、距高點僅0.5%的位置，承接到的是評價風險而非息收。評分基準為7/23收盤。"};</script>
-<script id="holdingsmeta">window.HOLDINGS_META={"_trades":[],"0050":{"name":"元大台灣50","type":"被動","theme":"台灣50大權值股","lots":1,"color":null,"techLike":true,"divNote":null,"prevStance":"trim"},"00935":{"name":"野村臺灣新科技50","type":"被動","theme":"台灣科技50","lots":1,"color":null,"techLike":true,"divNote":null,"prevStance":"trim"}};</script>
+<script id="holdingsmeta">window.HOLDINGS_META={"_trades":[],"0050":{"name":"元大台灣50","type":"被動","theme":"台灣50大權值股","color":null,"techLike":true,"divNote":null,"prevStance":"trim","shares":1000},"00935":{"name":"野村臺灣新科技50","type":"被動","theme":"台灣科技50","color":null,"techLike":true,"divNote":null,"prevStance":"trim","shares":1000}};</script>
 <script id="holdingsnotes">window.HOLDINGS_NOTES={"_market":{"windLead":"台股24日重挫1,195.97點收43,654.84，史上第9大跌點，關稅、油價、融資追繳三重利空同日引爆","sox":"+6.2%","mood":"關稅油價雙殺","moodK":"bear"},"0050":{"sigFund":["bear","跌破季線＋外資連二賣且力道放大"],"tech":"重挫2.12%收101.7元，今日正式跌破季線102.05（昨日尚守在101.88之上），月線105.13與季線同步下彎、斜率未翻正，形成月季線雙破的空頭排列；波段回檔由-6.5%擴大至-8.5%。同日大盤重挫1,195.97點(-2.67%)收43,654.84，指數本身亦同步跌破月線45,171.31與季線43,964.31，屬系統性下跌而非個股獨弱。","chip":"外資連二日賣超且力道大幅放大——前日13,975張、今日37,394張，近5日合計淨賣12.9萬張。融資餘額48,790張、日減103張（此為7/23數字，7/24融資資料尚未公布），去槓桿速度自7/22單日大減8,737張後明顯收斂。昨日的「外資觀望、融資停滯」已惡化為「外資加速賣、融資未同步退場」，籌碼面轉為明確偏空。","fund":"台積電24日跌55元收2,350元，為指數重挫主因之一。今日三項殺盤因子同時出現：美國威脅升級對伊朗的打擊、布蘭特原油衝破每桶100美元；川普新關稅美東時間週五(24日)生效、台灣被課10%關稅；以及近日反彈期間融資餘額增加後的追繳賣壓。官方三大法人合計仍淨買185億元，與外資在集中市場的賣超並存，差額來自投信與自營商(含避險)部位，不宜解讀為買盤回流。10%關稅對以出口權值股為主體的市值型ETF屬直接、可量化的獲利面利空。"},"00935":{"sigFund":["bear","外資連三買後反手賣、回檔擴大至-14.1%"],"tech":"重挫3.08%收55.15元，月線58.38與季線57.92持續下彎且股價位於兩者之下逾4.7%，昨日「距季線僅1.6%」的收斂進度完全回吐；波段回檔由-11.4%擴大至-14.1%。連兩日反彈後的停滯已轉為續跌，空頭排列未見改善。","chip":"外資連三日買超後今日反手賣超2,506張（前日買1,616張），昨日「買盤力道回升」的正面訊號僅維持一日即中斷；近5日外資合計轉為小幅淨賣967張，等於本波反彈期間累積的買超被今日一日抹平。融資餘額5,637張、日增37張（7/23數字，7/24尚未公布），槓桿未主動退場，在指數跌破季線後屬潛在賣壓來源。","fund":"成分為台股科技權值股，直接暴露於今日兩項外生利空：川普新關稅24日生效、台灣被課10%關稅，出口導向的科技製造業首當其衝；布蘭特原油衝破100美元同步推升製造與運輸成本。最近一盤美股(7/23)那斯達克重挫2.15%收25,137.69，Google與特斯拉財報後分別重挫逾7%與約14%，市場對AI資本支出可持續性的疑慮升溫，科技題材的外部順風同步轉弱。惟費半當日低開高走收紅、SK海力士漲逾6%、美光漲逾2.7%，記憶體次族群逆勢抗跌，是成分股中目前唯一的正面線索。"}};</script>
 <script>
 const fmt=(n,d=0)=>n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -436,16 +443,17 @@ const setCost=(c,v)=>{const o=getCosts();if(v>0)o[c]=v;else delete o[c];localSto
    H[] is derived at runtime; numeric fields (price/chg/pct/dd/weight) come from hydrate() below. */
 /* HOLDINGS_META 內 _ 開頭為特殊 key（_trades=交易紀錄），不是持股 */
 const HCODES=Object.keys(window.HOLDINGS_META||{}).filter(c=>!c.startsWith('_'));
-const TRADES=((window.HOLDINGS_META||{})._trades||[]).filter(t=>t&&t.code&&t.d&&t.lots>0&&t.price>0);
+const TRADES=((window.HOLDINGS_META||{})._trades||[]).filter(t=>t&&t.code&&t.d&&t.shares>0&&t.price>0);
 const SHARES={};
-HCODES.forEach(c=>{SHARES[c]=(HOLDINGS_META[c].lots||1)*1000;});
+/* 數量單位是「股」（可為零股），不再是張——別再乘 1000 */
+HCODES.forEach(c=>{SHARES[c]=HOLDINGS_META[c].shares||0;});
 
 /* holdings.json 沒有 color 欄位時給預設色盤——color:null 會讓 canvas 漸層丟例外、
    中斷 renderAll（此前「riskContrib 首次載入空白」的根因） */
 const PALETTE=['#e8590c','#1971c2','#7048e8','#0ca678','#e64980','#f08c00','#3bc9db'];
 const H=HCODES.map((code,pi)=>{
  const m=HOLDINGS_META[code],n=(window.HOLDINGS_NOTES||{})[code]||{};
- return {code,name:m.name,type:m.type,theme:m.theme,lots:m.lots,color:m.color||PALETTE[pi%PALETTE.length],divNote:m.divNote,prevStance:m.prevStance||null,
+ return {code,name:m.name,type:m.type,theme:m.theme,shares:m.shares,color:m.color||PALETTE[pi%PALETTE.length],divNote:m.divNote,prevStance:m.prevStance||null,
   sig:{fund:n.sigFund||['neu','中性']},
   tech:n.tech||'（尚無分析，等待下次更新）',chip:n.chip||'（尚無分析，等待下次更新）',fund:n.fund||'（尚無分析，等待下次更新）',
   stance:'hold',stanceTxt:'續抱',
@@ -607,7 +615,7 @@ function buildEquity(){
   const tn=(+p[0])*10000+(+p[1])*100+(+p[2]);
   if(tn<=isoD[0]||tn>isoD[isoD.length-1])return;      /* 窗前=已含在期初股數；窗後=未來，忽略 */
   let i=isoD.findIndex(x=>x>=tn);if(i<0)return;
-  const sh=(t.side==='sell'?-1:1)*t.lots*1000;
+  const sh=(t.side==='sell'?-1:1)*t.shares;
   (shDelta[i]=shDelta[i]||{})[t.code]=(shDelta[i][t.code]||0)+sh;
   flowsAt[i]+=sh*t.price;
   hasWinTrades=true;});
@@ -740,7 +748,7 @@ function plColor(v){return v>0?'up-txt':v<0?'down-txt':'';}
   el.className='h-card';el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',h.name+' 詳細分析');
   el.innerHTML=`<div class="h-accent" style="background:${h.color}"></div><div class="h-body">
     <div class="h-head"><div><div class="h-name">${esc(h.name)} <span class="code">${h.code}</span></div>
-    <div class="h-tag">${esc(h.type)} · ${esc(h.theme)} · ${h.lots} 張${h.divNote?` · <span class="divchip">💰${esc(h.divNote)}</span>`:''}</div></div>
+    <div class="h-tag">${esc(h.type)} · ${esc(h.theme)} · ${fmt(h.shares)} 股${h.divNote?` · <span class="divchip">💰${esc(h.divNote)}</span>`:''}</div></div>
     <div class="h-price"><div class="p num ${up?'up-txt':'down-txt'}">${h.price.toFixed(2)}</div>
     <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(h.chg).toFixed(2)}　${fmtSign(h.pct)}%</div></div></div>
     <canvas class="spark" data-i="${i}"></canvas>
@@ -811,7 +819,7 @@ function drawMarket(){const cv=document.getElementById('mchart');if(cv)priceChar
 function tradeAvgCost(code){
   const b=TRADES.filter(t=>t.code===code&&t.side!=='sell');
   if(!b.length)return null;
-  let sh=0,amt=0;b.forEach(t=>{sh+=t.lots*1000;amt+=t.lots*1000*t.price;});
+  let sh=0,amt=0;b.forEach(t=>{sh+=t.shares;amt+=t.shares*t.price;});
   return sh>0?amt/sh:null;
 }
 function updatePL(){
@@ -871,7 +879,7 @@ function openModal(i){
   document.getElementById('mAccent').style.background=h.color;
   document.getElementById('mContent').innerHTML=`
     <div class="m-head"><div><div class="m-title" id="mTitle">${esc(h.name)} <span class="code">${h.code}</span></div>
-    <div class="m-tag">${esc(h.type)} · ${esc(h.theme)} · 持有 ${h.lots} 張 · 權重 ${h.weight}%${h.divNote?` · <span class="divchip">💰${esc(h.divNote)}</span>`:''}</div></div>
+    <div class="m-tag">${esc(h.type)} · ${esc(h.theme)} · 持有 ${fmt(h.shares)} 股 · 權重 ${h.weight}%${h.divNote?` · <span class="divchip">💰${esc(h.divNote)}</span>`:''}</div></div>
     <div class="m-price"><div class="p num ${up?'up-txt':'down-txt'}">${h.price.toFixed(2)}</div>
     <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(h.chg).toFixed(2)}　${fmtSign(h.pct)}% · 距高 ${fmtSign(h.dd,1)}%</div></div></div>
 
@@ -898,9 +906,9 @@ function openModal(i){
 
     <div class="an-block"><div class="an-head"><span class="an-head t">🏦 籌碼面</span>${sig('chip','')}</div>
       <div class="subhd">三大法人買賣超（張）· 近 ${d.inst.length} 日</div>
-      <table class="tbl"><thead><tr><th>日期</th><th>外資</th><th>投信</th><th>自營</th><th>合計</th></tr></thead><tbody>${instRows}</tbody></table>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>日期</th><th>外資</th><th>投信</th><th>自營</th><th>合計</th></tr></thead><tbody>${instRows}</tbody></table></div>
       <div class="subhd">融資 / 融券餘額（張）· 近 ${d.margin.length} 日</div>
-      <table class="tbl"><thead><tr><th>日期</th><th>融資餘額</th><th>資增減</th><th>融券餘額</th><th>券增減</th></tr></thead><tbody>${marginRows}</tbody></table>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>日期</th><th>融資餘額</th><th>資增減</th><th>融券餘額</th><th>券增減</th></tr></thead><tbody>${marginRows}</tbody></table></div>
       <div class="an-text" style="margin-top:9px">${esc(h.chip)}</div></div>
 
     <div class="an-block"><div class="an-head"><span class="an-head t">🏭 基本面</span><span class="an-head n">（ETF 無 EPS，以題材/產業替代）</span>${sig('fund','')}</div>
@@ -1108,11 +1116,14 @@ function openCatModal(ind){
 /* ---------- render ---------- */
 function renderAll(){drawSparks();drawMarket();buildEquity();if(window.drawPickSparks)drawPickSparks();if(curSeries)renderBigChart();}
 function buildBacktest(){
- const box=document.getElementById('backtestBox');const B=window.BACKTEST;if(!box||!B)return;
+ /* 沒有可用資料就整張卡藏起來（同 buildEval()）——留一張空白 card 在頁面上比沒有這張卡更難懂 */
+ const box=document.getElementById('backtestBox');const B=window.BACKTEST;
+ if(!box)return;
+ if(!B||!B.rows||!B.rows.length){box.style.display='none';return;}
+ box.style.display='';
  const RN={'chip':'只看籌碼','chip+0.5t':'籌碼+0.5技','chip+t':'籌碼+技術','chip+2t':'籌碼+2技','chip+4t':'籌碼+4技','tech':'只看技術'};
  const EN={'hold20':'抱滿20日','stop':'破月線停損','prod':'現行出場'};
- if(B.rows){ /* v2 走前驗證格式 */
-  const tr=B.rows.map(r=>{
+ const tr=B.rows.map(r=>{
    const tag=r.cur?'<span class="star">現行</span>':(r.best?'<span class="star">★最佳</span>':'');
    return `<tr${r.best?' style="font-weight:700"':''}><td>${RN[r.rank]||r.rank}·${EN[r.exit]||r.exit} ${tag}</td>
     <td class="num">${r.isWin==null?'—':r.isWin+'%'}</td>
@@ -1123,7 +1134,6 @@ function buildBacktest(){
   box.innerHTML=`🔬 <b>選股模型回測 v2.1·走前驗證·已對齊生產選股</b>（${B.period}，樣本內/外以 ${String(B.splitDate).replace(/^(\d{4})(\d{2})(\d{2})$/,'$1/$2/$3')} 切分）：樣本內找最優、樣本外驗真假——<b>只信樣本外</b>。
    <div style="overflow-x:auto;margin-top:8px"><table class="tbl"><thead><tr><th style="text-align:left">組合</th><th>樣本內勝率</th><th>樣本外勝率</th><th>樣本外超額</th><th>空頭勝率(n)</th><th>n</th></tr></thead><tbody>${tr}</tbody></table></div>
    <div style="margin-top:7px;font-size:11.5px">注意：出場規則間的超額<b>不能直接比</b>——提早出場者持有天數短、且未計資金再利用（持有期偏誤），比較以勝率為主。權重調整鐵律：樣本外顯著優於現行＋空頭區不劣化才動手；每月最多調一次並記錄於 plan.md。重疊窗口、僅上市樣本、未含基本面與量價因子。研究參考、非投資建議。</div>`;
- }
 }
 /* 歸因週報卡（evaluate.ps1 每週五產出；結案 <5 筆時自動隱藏） */
 function buildEval(){
@@ -1178,7 +1188,7 @@ new MutationObserver(renderAll).observe(document.documentElement,{attributes:tru
  const say=(t,bad)=>{msg.textContent=t||'';msg.className='emsg'+(bad?' err':'');};
 
  /* 列表資料一律向 /api/holdings 取，不從 HOLDINGS_META 推導——頁面上的 META 已濾掉
-    「還沒有行情的新代號」，用它會把剛新增的張數顯示成錯的 */
+    「還沒有行情的新代號」，用它會把剛新增的股數顯示成錯的 */
  const pendingSet=()=>new Set(U.pendingCodes||[]);
  /* 名稱是使用者自填的字串 → 一律 textContent，不用 innerHTML 拼接 */
  function draw(list){
@@ -1188,11 +1198,11 @@ new MutationObserver(renderAll).observe(document.documentElement,{attributes:tru
    const tdC=document.createElement('td');tdC.textContent=code;
    if(pending.has(code)){const s=document.createElement('div');
     s.className='lab';s.textContent='等待行情';tdC.appendChild(s);}
-   const tdN=document.createElement('td');tdN.textContent=h.name||'—';
+   const tdN=document.createElement('td');tdN.className='nm';tdN.textContent=h.name||'—';tdN.title=h.name||'';
    const tdL=document.createElement('td'),inp=document.createElement('input');
-   inp.type='number';inp.min='1';inp.step='1';inp.value=h.lots;
+   inp.type='number';inp.min='1';inp.step='1';inp.inputMode='numeric';inp.value=h.shares;
    inp.onchange=async()=>{
-    try{await call({action:'upsert',code,name:h.name||code,lots:Number(inp.value)});
+    try{await call({action:'upsert',code,name:h.name||code,shares:Number(inp.value)});
         say('已更新 '+code+'，重新整理頁面後生效');}
     catch(e){say(e.message,true);load();}
    };
@@ -1219,12 +1229,12 @@ new MutationObserver(renderAll).observe(document.documentElement,{attributes:tru
  document.getElementById('hAddGo').onclick=async()=>{
   const code=document.getElementById('hAddCode').value.trim().toUpperCase();
   const name=document.getElementById('hAddName').value.trim();
-  const lots=Number(document.getElementById('hAddLots').value);
+  const shares=Number(document.getElementById('hAddShares').value);
   try{
-   await call({action:'upsert',code,name:name||code,lots});
+   await call({action:'upsert',code,name:name||code,shares});
    document.getElementById('hAddCode').value='';
    document.getElementById('hAddName').value='';
-   document.getElementById('hAddLots').value='';
+   document.getElementById('hAddShares').value='';
    if(!(U.pendingCodes||[]).includes(code))U.pendingCodes=(U.pendingCodes||[]).concat([code]);
    say('已新增 '+code+'（下次每日更新抓到行情後才會顯示分析）');
    load();

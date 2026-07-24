@@ -18,7 +18,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from server import api, auth, config, db, payload, server, validate  # noqa: E402
+from server import admin, api, auth, config, db, payload, server, validate  # noqa: E402
 
 
 def make_cfg(tmp):
@@ -48,6 +48,39 @@ class Base(unittest.TestCase):
 
     def mkuser(self, name, tier="guest", status="active", password="correct-horse-1"):
         return auth.create_user(self.conn, name, password, tier=tier, status=status)
+
+
+class TestSchemaMigration(Base):
+    def test_lots_become_shares_and_the_old_column_goes_away(self):
+        """A DB created before the shares change still holds lots. init_schema() has to carry the
+        values over (x1000) and drop `lots`, or every quantity on the page silently reads 0."""
+        path = os.path.join(self.tmp, "legacy.db")
+        conn = db.connect(path)
+        conn.executescript(
+            "CREATE TABLE holdings (user_id INTEGER, code TEXT, name TEXT DEFAULT '',"
+            " lots INTEGER NOT NULL DEFAULT 1, type TEXT DEFAULT '', theme TEXT DEFAULT '',"
+            " tech_like INTEGER DEFAULT 0, color TEXT, PRIMARY KEY (user_id, code));"
+            "CREATE TABLE trades (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,"
+            " d TEXT, side TEXT, code TEXT, lots REAL NOT NULL, price REAL);"
+        )
+        conn.execute("INSERT INTO holdings (user_id, code, lots) VALUES (1,'0050',3)")
+        conn.execute(
+            "INSERT INTO trades (user_id, d, side, code, lots, price) VALUES (1,'2026-07-01','buy','0050',2,100.0)")
+        conn.commit()
+        conn.close()
+        db.close_all()
+
+        conn = db.init_schema(path)
+        self.assertEqual(
+            conn.execute("SELECT shares FROM holdings").fetchone()["shares"], 3000)
+        self.assertEqual(
+            conn.execute("SELECT shares FROM trades").fetchone()["shares"], 2000)
+        for table in ("holdings", "trades"):
+            self.assertNotIn("lots", db._columns(conn, table))
+
+        db.lots_to_shares(conn)   # idempotent: a second run must not re-multiply
+        self.assertEqual(
+            conn.execute("SELECT shares FROM holdings").fetchone()["shares"], 3000)
 
 
 class TestPasswords(Base):
@@ -180,7 +213,7 @@ class TestApproval(Base):
     def test_deleting_user_removes_their_holdings(self):
         uid = self.mkuser("ivan")
         self.conn.execute(
-            "INSERT INTO holdings (user_id, code, name, lots) VALUES (?,?,?,?)",
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
             (uid, "2330", "台積電", 1))
         self.conn.commit()
         auth.delete_user(self.conn, uid)
@@ -253,10 +286,10 @@ class TestTokenIsolation(Base):
         owner_id = self.mkuser("owner1", tier="owner")
         guest_id = self.mkuser("guest1")
         self.conn.execute(
-            "INSERT INTO holdings (user_id, code, name, lots) VALUES (?,?,?,?)",
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
             (owner_id, "0050", "元大台灣50", 1))
         self.conn.execute(
-            "INSERT INTO holdings (user_id, code, name, lots) VALUES (?,?,?,?)",
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
             (guest_id, "2330", "台積電", 5))
         self.conn.commit()
 
@@ -270,7 +303,7 @@ class TestTokenIsolation(Base):
         guest_id = self.mkuser("guest1")
         for uid, code in ((owner_id, "0050"), (guest_id, "2330")):
             self.conn.execute(
-                "INSERT INTO holdings (user_id, code, name, lots) VALUES (?,?,?,?)",
+                "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
                 (uid, code, "x", 1))
         self.conn.commit()
         codes = payload.active_codes(self.conn, self.cfg)
@@ -281,7 +314,7 @@ class TestTokenIsolation(Base):
     def test_suspended_users_drop_out_of_the_daily_fetch(self):
         guest_id = self.mkuser("guest1")
         self.conn.execute(
-            "INSERT INTO holdings (user_id, code, name, lots) VALUES (?,?,?,?)",
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
             (guest_id, "2330", "台積電", 1))
         self.conn.commit()
         auth.set_status(self.conn, guest_id, "suspended")
@@ -292,7 +325,7 @@ class TestTokenIsolation(Base):
         uid = self.mkuser("guest1")
         for code in ("1101", "1102", "1103", "1104"):
             self.conn.execute(
-                "INSERT INTO holdings (user_id, code, name, lots) VALUES (?,?,?,?)",
+                "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
                 (uid, code, "x", 1))
         self.conn.commit()
         self.assertEqual(len(payload.active_codes(self.conn, self.cfg)), 2)
@@ -311,11 +344,12 @@ class TestValidation(Base):
         with self.assertRaises(validate.Invalid):
             validate.text("x" * 31, 30)
 
-    def test_lots_and_prices(self):
-        self.assertEqual(validate.lots("3"), 3)
-        for bad in ("0", "-1", "abc", None):
+    def test_shares_and_prices(self):
+        self.assertEqual(validate.shares("3"), 3)
+        self.assertEqual(validate.shares("1500"), 1500)   # odd lots are the point of shares
+        for bad in ("0", "-1", "abc", None, str(validate.MAX_SHARES + 1)):
             with self.assertRaises(validate.Invalid):
-                validate.lots(bad)
+                validate.shares(bad)
         self.assertAlmostEqual(validate.price("100.55"), 100.55)
         for bad in ("0", "-5", "nope"):
             with self.assertRaises(validate.Invalid):
@@ -372,23 +406,64 @@ class TestValidation(Base):
         self.assertEqual(still_there, 1)
 
 
+class TestOfficialNames(Base):
+    def _write_names(self, mapping):
+        with open(os.path.join(self.cfg["dataDir"], "names.json"), "w", encoding="utf-8") as fh:
+            json.dump(mapping, fh, ensure_ascii=False)
+        payload._NAMES_CACHE["mtime"] = None   # same-second rewrites in tests
+
+    def test_upsert_fills_in_the_official_name_but_never_overrides_a_typed_one(self):
+        self._write_names({"2330": "台積電", "1101": "台泥"})
+        user = auth.find_user(self.conn, self.mkuser("nora") and "nora")
+        # no name typed -> exchange name, not a bare code
+        api.post_holdings(FakeCtx(self.conn, self.cfg, user,
+                                  {"action": "upsert", "code": "2330", "shares": 1000}))
+        # the front-end sends name=code when the field is left blank; that is not a real name
+        api.post_holdings(FakeCtx(self.conn, self.cfg, user,
+                                  {"action": "upsert", "code": "1101", "name": "1101", "shares": 1000}))
+        # a genuinely typed name wins
+        api.post_holdings(FakeCtx(self.conn, self.cfg, user,
+                                  {"action": "upsert", "code": "1102", "name": "我的亞泥", "shares": 1000}))
+        got = {r["code"]: r["name"] for r in payload.user_holdings(self.conn, user["id"])}
+        self.assertEqual(got, {"2330": "台積電", "1101": "台泥", "1102": "我的亞泥"})
+
+    def test_missing_names_file_is_not_an_error(self):
+        user = auth.find_user(self.conn, self.mkuser("olga") and "olga")
+        api.post_holdings(FakeCtx(self.conn, self.cfg, user,
+                                  {"action": "upsert", "code": "2330", "shares": 1000}))
+        got = {r["code"]: r["name"] for r in payload.user_holdings(self.conn, user["id"])}
+        self.assertEqual(got, {"2330": "2330"})   # falls back to the code, no crash
+
+    def test_backfill_only_touches_rows_that_never_got_a_name(self):
+        uid = self.mkuser("pete")
+        for code, name in (("2330", "2330"), ("1101", ""), ("1102", "我的亞泥")):
+            self.conn.execute(
+                "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
+                (uid, code, name, 1000))
+        self.conn.commit()
+        self._write_names({"2330": "台積電", "1101": "台泥", "1102": "亞泥"})
+        admin.cmd_backfill_names(self.cfg, self.conn, [])
+        got = {r["code"]: r["name"] for r in payload.user_holdings(self.conn, uid)}
+        self.assertEqual(got, {"2330": "台積電", "1101": "台泥", "1102": "我的亞泥"})
+
+
 class TestHoldingsApi(Base):
     def test_upsert_remove_and_cap(self):
         uid = self.mkuser("kate")
         user = auth.find_user(self.conn, "kate")
         for code in ("1101", "1102", "1103"):
             api.post_holdings(FakeCtx(self.conn, self.cfg, user,
-                                      {"action": "upsert", "code": code, "lots": 1}))
+                                      {"action": "upsert", "code": code, "shares": 1000}))
         with self.assertRaises(api.ApiError) as exc:
             api.post_holdings(FakeCtx(self.conn, self.cfg, user,
-                                      {"action": "upsert", "code": "1104", "lots": 1}))
+                                      {"action": "upsert", "code": "1104", "shares": 1000}))
         self.assertEqual(exc.exception.status, 409)   # maxCodesPerUser = 3 in test cfg
 
         api.post_holdings(FakeCtx(self.conn, self.cfg, user,
-                                  {"action": "upsert", "code": "1101", "lots": 7}))
+                                  {"action": "upsert", "code": "1101", "shares": 7500}))
         row = self.conn.execute(
-            "SELECT lots FROM holdings WHERE user_id = ? AND code = '1101'", (uid,)).fetchone()
-        self.assertEqual(row["lots"], 7)              # upsert updates, not duplicates
+            "SELECT shares FROM holdings WHERE user_id = ? AND code = '1101'", (uid,)).fetchone()
+        self.assertEqual(row["shares"], 7500)         # upsert updates, not duplicates
 
         api.post_holdings(FakeCtx(self.conn, self.cfg, user,
                                   {"action": "remove", "code": "1101"}))
@@ -398,7 +473,7 @@ class TestHoldingsApi(Base):
         victim = self.mkuser("liam")
         attacker = self.mkuser("mallory")
         cur = self.conn.execute(
-            "INSERT INTO trades (user_id, d, side, code, lots, price) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO trades (user_id, d, side, code, shares, price) VALUES (?,?,?,?,?,?)",
             (victim, "2026-07-01", "buy", "2330", 1, 1000.0))
         self.conn.commit()
         trade_id = cur.lastrowid
@@ -415,7 +490,7 @@ class TestHoldingsApi(Base):
             json.dump({"TAIEX": [{"d": "7/1", "c": 1.0}], "0050": {"series": []}}, fh)
         for code in ("0050", "2330"):
             self.conn.execute(
-                "INSERT INTO holdings (user_id, code, name, lots) VALUES (?,?,?,?)",
+                "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
                 (uid, code, "x", 1))
         self.conn.commit()
         _status, out = api.bootstrap(FakeCtx(self.conn, self.cfg, user))
@@ -434,7 +509,7 @@ class TestHoldingsApi(Base):
             json.dump({"0050": {"name": "x"}, "_prevStance": {"0050": "hold", "2330": "defend"}}, fh)
         for code in ("0050", "2330"):
             self.conn.execute(
-                "INSERT INTO holdings (user_id, code, name, lots) VALUES (?,?,?,?)",
+                "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
                 (uid, code, "x", 1))
         self.conn.commit()
         _status, out = api.bootstrap(FakeCtx(self.conn, self.cfg, user))
@@ -467,13 +542,13 @@ class TestShell(Base):
         )
         html = server.render_page(template, {
             "dash": {"TAIEX": [1]},
-            "holdingsMeta": {"2330": {"lots": 4}},
+            "holdingsMeta": {"2330": {"shares": 4000}},
             "meta": {"generated": "2026/07/23", "lastTrade": "2026-07-23"},
             "user": {"username": "nina", "tier": "guest"},
             "pendingCodes": [],
         })
         self.assertIn('window.DASH={"TAIEX":[1]}', html)
-        self.assertIn('"lots":4', html)
+        self.assertIn('"shares":4000', html)
         self.assertIn('"username":"nina"', html)
         self.assertIn('"lastTrade":"2026-07-23"', html)
         self.assertIn("報告日期：<b>2026/07/23</b>", html)
@@ -613,8 +688,8 @@ class TestHttp(Base):
     def test_active_user_gets_their_own_data_spliced_in(self):
         uid = self.mkuser("quinn")
         self.conn.execute(
-            "INSERT INTO holdings (user_id, code, name, lots) VALUES (?,?,?,?)",
-            (uid, "0050", "元大台灣50", 3))
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
+            (uid, "0050", "元大台灣50", 3000))
         self.conn.commit()
         with open(os.path.join(self.cfg["dataDir"], "quotes.json"), "w", encoding="utf-8") as fh:
             json.dump({"TAIEX": [{"d": "7/1", "c": 1.0}], "0050": {"series": []}}, fh)
@@ -624,7 +699,7 @@ class TestHttp(Base):
         with urllib.request.urlopen(req) as resp:
             html = resp.read().decode()
         self.assertIn('window.HOLDINGS_META=', html)
-        self.assertIn('"lots":3', html)
+        self.assertIn('"shares":3000', html)
         self.assertIn('"username":"quinn"', html)
         self.assertIn("頁面", html)             # the template's own markup survived
 

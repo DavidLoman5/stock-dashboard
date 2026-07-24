@@ -38,7 +38,13 @@ fetch() {
   pwsh -File update-holdings.ps1
 
   # 3. market-wide screening -> data/picks.json (shared by every user)
+  #    also refreshes data/names.json (whole-market code -> official Chinese name)
   pwsh -File screen.ps1
+
+  # 3b. holdings someone added by code only get their official name from that table
+  if [ -f data/app.db ]; then
+    python3 -m server.admin backfill-names
+  fi
 
   # 4. Friday attribution
   [ "$(date +%u)" = "5" ] && pwsh -File evaluate.ps1 || true

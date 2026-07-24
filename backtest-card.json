@@ -1,0 +1,72 @@
+{
+  "rows": [
+    {
+      "rank": "chip+t",
+      "exit": "prod",
+      "cur": true,
+      "best": false,
+      "isWin": 43.3,
+      "isAlpha": 0.39,
+      "oosWin": 37.9,
+      "oosAlpha": -0.39,
+      "oosN": 240,
+      "bearWin": 60,
+      "bearN": 5
+    },
+    {
+      "rank": "tech",
+      "exit": "hold20",
+      "cur": false,
+      "best": true,
+      "isWin": 40.3,
+      "isAlpha": 1.89,
+      "oosWin": 55.4,
+      "oosAlpha": 9.06,
+      "oosN": 240,
+      "bearWin": 80,
+      "bearN": 5
+    },
+    {
+      "rank": "tech",
+      "exit": "stop",
+      "cur": false,
+      "best": false,
+      "isWin": 39.4,
+      "isAlpha": 1.75,
+      "oosWin": 51.7,
+      "oosAlpha": 8.68,
+      "oosN": 240,
+      "bearWin": 60,
+      "bearN": 5
+    },
+    {
+      "rank": "chip",
+      "exit": "hold20",
+      "cur": false,
+      "best": false,
+      "isWin": 48.6,
+      "isAlpha": 2.99,
+      "oosWin": 55.4,
+      "oosAlpha": 7.29,
+      "oosN": 240,
+      "bearWin": 80,
+      "bearN": 5
+    },
+    {
+      "rank": "chip+0.5t",
+      "exit": "hold20",
+      "cur": false,
+      "best": false,
+      "isWin": 51.7,
+      "isAlpha": 4.04,
+      "oosWin": 55,
+      "oosAlpha": 7.19,
+      "oosN": 240,
+      "bearWin": 80,
+      "bearN": 5
+    }
+  ],
+  "splitDate": "20260409",
+  "generated": "2026-07-19",
+  "period": "2025/09/16-07/17"
+}

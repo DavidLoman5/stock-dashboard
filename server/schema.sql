@@ -46,13 +46,15 @@ CREATE TABLE IF NOT EXISTS invites (
   used_at     TEXT
 );
 
--- 1 lot = 1000 shares, matching holdings.json. lots is the personal part; quotes for `code`
--- are shared across all users and live in data/quotes.json.
+-- Quantities are SHARES, not lots (a Taiwanese 張 = 1000 shares). Storing shares is what makes
+-- odd-lot positions (1,500 shares) representable at all; db.py migrates older lots-based DBs by
+-- multiplying by 1000. shares is the personal part; quotes for `code` are shared across all
+-- users and live in data/quotes.json.
 CREATE TABLE IF NOT EXISTS holdings (
   user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   code      TEXT NOT NULL,
   name      TEXT NOT NULL DEFAULT '',
-  lots      INTEGER NOT NULL DEFAULT 1,
+  shares    INTEGER NOT NULL DEFAULT 0,
   type      TEXT NOT NULL DEFAULT '',
   theme     TEXT NOT NULL DEFAULT '',
   tech_like INTEGER NOT NULL DEFAULT 0,
@@ -66,7 +68,7 @@ CREATE TABLE IF NOT EXISTS trades (
   d       TEXT NOT NULL,
   side    TEXT NOT NULL CHECK (side IN ('buy','sell')),
   code    TEXT NOT NULL,
-  lots    REAL NOT NULL,
+  shares  INTEGER NOT NULL,
   price   REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_trades_user ON trades(user_id, d);

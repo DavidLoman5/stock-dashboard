@@ -14,8 +14,9 @@
 | 頁面產生 | 腳本 splice 進 `index.html` | `server.py` 逐使用者即時 splice 同樣的 `window.*` 區塊 |
 | `holdings.json` 的角色 | 真實持股 | **公開 demo 假資料**，只給 GitHub Pages 與新 clone 用 |
 
-- `holdings.json` 已**不再是真實持股**（1張=1000股的格式不變）。真實部位在 DB，用網頁「編輯持股」或 `python3 -m server.admin import-holdings` 維護
-- 使用者回報交易時仍**同步改 lots 並 append trades**，但目標是 DB，不是 `holdings.json`；localStorage 成本輸入仍可覆寫頁面損益
+- `holdings.json` 已**不再是真實持股**。真實部位在 DB，用網頁「編輯持股」或 `python3 -m server.admin import-holdings` 維護
+- **數量單位是「股」不是「張」**（2026-07-24 起，1 張＝1000 股，可填零股）：DB 欄位 `holdings.shares`／`trades.shares`，`holdings.json` 用 `shares`。舊的 `lots` 欄位讀得到、會自動 ×1000 轉換（`db.lots_to_shares()`／`SharesOf()`／`admin._shares_of()`）。**法人買賣超、融資融券、成交量仍是「張」**——那是證交所的單位，別跟著改
+- 使用者回報交易時仍**同步改 shares 並 append trades**，但目標是 DB，不是 `holdings.json`；localStorage 成本輸入仍可覆寫頁面損益
 
 ## 多使用者的兩條硬規則
 1. **token 只花在 owner 身上**：每日 AI 步驟的唯一輸入是 `holdings-context.json`，而它只由 owner 的持股產生。guest 新增股票只會多一次免費的 TWSE 抓取，**絕不可**因此觸發任何 Claude 呼叫。guest 的個股註解一律取自 owner 當日產出的共用快取（`payload.notes_for`）

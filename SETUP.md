@@ -27,7 +27,7 @@
 git clone https://github.com/DavidLoman5/stock-dashboard.git
 cd stock-dashboard
 
-# 1. 改成你自己的持股（1 張 = 1000 股）
+# 1. 改成你自己的持股（單位是「股」，1 張 = 1000 股，可填零股）
 $EDITOR holdings.json
 
 # 2. 抓行情、跑選股（第一次會比較久，之後有月級快取）
@@ -260,7 +260,7 @@ python3 -m unittest discover -s server -t . # 伺服器：認證、權限、隔�
 
 ## 給使用者的隱私承諾（請照做）
 
-- 本站**只**儲存使用者自行輸入的股票代號、張數與成交價。
+- 本站**只**儲存使用者自行輸入的股票代號、股數與成交價。
 - **絕不**蒐集券商帳號、密碼或 API 金鑰。任何要求這些資訊的頁面都不是本站。
 - 使用者要求刪除時，`python3 -m server.admin delete <帳號>` 會連同持股與交易紀錄一併刪除。
 - 資料庫備份如果要離開這台機器，**必須先加密**。
