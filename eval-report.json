@@ -1,45 +1,91 @@
-﻿{
-    "generated":  "2026-07-18",
-    "closedN":  3,
-    "overall":  {
-                    "winRate":  67,
-                    "avgAlpha":  -1.01,
-                    "avgRet":  -6.93,
-                    "n":  3
-                },
-    "byReason":  {
-                     "跌破月線":  {
-                                  "winRate":  50,
-                                  "avgAlpha":  -4.19,
-                                  "avgRet":  -10.1,
-                                  "n":  2
-                              },
-                     "外資連2日轉賣":  {
-                                     "winRate":  100,
-                                     "avgAlpha":  5.35,
-                                     "avgRet":  -0.57,
-                                     "n":  1
-                                 }
-                 },
-    "byLight":  {
-
-                },
-    "byInd":  {
-
-              },
-    "byAiTag":  {
-
-                },
-    "byChip":  {
-
-               },
-    "byTech":  {
-
-               },
-    "byFund":  {
-
-               },
-    "byYoy":  {
-
-              }
+{
+  "generated": "2026-07-24",
+  "closedN": 8,
+  "overall": {
+    "avgRet": -1.92,
+    "n": 8,
+    "avgAlpha": 0.51,
+    "winRate": 75.0
+  },
+  "byReason": {
+    "外資連2日轉賣": {
+      "avgRet": 0.82,
+      "n": 6,
+      "avgAlpha": 2.08,
+      "winRate": 83.0
+    },
+    "跌破月線": {
+      "avgRet": -10.1,
+      "n": 2,
+      "avgAlpha": -4.19,
+      "winRate": 50.0
+    }
+  },
+  "byLight": {
+    "red": {
+      "avgRet": 2.93,
+      "n": 1,
+      "avgAlpha": -2.18,
+      "winRate": 0.0
+    },
+    "yellow": {
+      "avgRet": -0.02,
+      "n": 2,
+      "avgAlpha": 0.62,
+      "winRate": 100.0
+    }
+  },
+  "byInd": {},
+  "byAiTag": {
+    "one-off": {
+      "avgRet": 2.26,
+      "n": 2,
+      "avgAlpha": -0.97,
+      "winRate": 50.0
+    },
+    "sustainable": {
+      "avgRet": 0.31,
+      "n": 3,
+      "avgAlpha": 3.02,
+      "winRate": 100.0
+    }
+  },
+  "byChip": {
+    "chip30-37": {
+      "avgRet": -0.02,
+      "n": 2,
+      "avgAlpha": 0.62,
+      "winRate": 100.0
+    }
+  },
+  "byTech": {
+    "tech25+": {
+      "avgRet": -0.02,
+      "n": 2,
+      "avgAlpha": 0.62,
+      "winRate": 100.0
+    }
+  },
+  "byFund": {
+    "fund10-19": {
+      "avgRet": -1.62,
+      "n": 1,
+      "avgAlpha": 0.99,
+      "winRate": 100.0
+    },
+    "fund20+": {
+      "avgRet": 1.59,
+      "n": 1,
+      "avgAlpha": 0.25,
+      "winRate": 100.0
+    }
+  },
+  "byYoy": {
+    "yoy0-30": {
+      "avgRet": -0.02,
+      "n": 2,
+      "avgAlpha": 0.62,
+      "winRate": 100.0
+    }
+  }
 }

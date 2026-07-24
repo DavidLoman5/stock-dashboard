@@ -174,6 +174,153 @@
       "close": 28.69,
       "score": 0,
       "code": "00981A"
+    },
+    {
+      "score": -2,
+      "close": 101.7,
+      "date": "20260724",
+      "code": "0050",
+      "stance": "defend"
+    },
+    {
+      "score": -2,
+      "close": 55.15,
+      "date": "20260724",
+      "code": "00935",
+      "stance": "defend"
+    },
+    {
+      "score": -1,
+      "close": 33.62,
+      "date": "20260724",
+      "code": "00947",
+      "stance": "trim"
+    },
+    {
+      "score": -1,
+      "close": 27.54,
+      "date": "20260724",
+      "code": "00981A",
+      "stance": "trim"
+    },
+    {
+      "score": -1,
+      "close": 16.36,
+      "date": "20260724",
+      "code": "00990A",
+      "stance": "trim"
+    },
+    {
+      "score": 0,
+      "close": 16.44,
+      "date": "20260724",
+      "code": "009805",
+      "stance": "hold"
+    },
+    {
+      "score": 0,
+      "close": 313.0,
+      "date": "20260724",
+      "code": "2049",
+      "stance": "hold"
+    },
+    {
+      "score": -2,
+      "close": 1785.0,
+      "date": "20260724",
+      "code": "2308",
+      "stance": "defend"
+    },
+    {
+      "score": -1,
+      "close": 642.0,
+      "date": "20260724",
+      "code": "2327",
+      "stance": "trim"
+    },
+    {
+      "score": -1,
+      "close": 2350.0,
+      "date": "20260724",
+      "code": "2330",
+      "stance": "trim"
+    },
+    {
+      "score": -1,
+      "close": 124.0,
+      "date": "20260724",
+      "code": "2337",
+      "stance": "trim"
+    },
+    {
+      "score": -1,
+      "close": 401.0,
+      "date": "20260724",
+      "code": "2408",
+      "stance": "trim"
+    },
+    {
+      "score": -1,
+      "close": 3750.0,
+      "date": "20260724",
+      "code": "2454",
+      "stance": "trim"
+    },
+    {
+      "score": 0,
+      "close": 620.0,
+      "date": "20260724",
+      "code": "3167",
+      "stance": "hold"
+    },
+    {
+      "score": -2,
+      "close": 382.0,
+      "date": "20260724",
+      "code": "3211",
+      "stance": "defend"
+    },
+    {
+      "score": -2,
+      "close": 3405.0,
+      "date": "20260724",
+      "code": "3661",
+      "stance": "defend"
+    },
+    {
+      "score": -1,
+      "close": 613.0,
+      "date": "20260724",
+      "code": "3711",
+      "stance": "trim"
+    },
+    {
+      "score": 0,
+      "close": 778.0,
+      "date": "20260724",
+      "code": "4749",
+      "stance": "hold"
+    },
+    {
+      "score": -3,
+      "close": 482.0,
+      "date": "20260724",
+      "code": "4958",
+      "stance": "defend"
+    },
+    {
+      "score": -1,
+      "close": 97.8,
+      "date": "20260724",
+      "code": "6919",
+      "stance": "trim"
+    },
+    {
+      "score": -2,
+      "close": 6055.0,
+      "date": "20260724",
+      "code": "7769",
+      "stance": "defend"
     }
   ]
 }
