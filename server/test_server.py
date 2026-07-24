@@ -294,6 +294,27 @@ class TestValidation(Base):
             with self.assertRaises(validate.Invalid):
                 validate.price(bad)
 
+    def test_display_name_allows_spaces_that_a_username_may_not(self):
+        # the whole reason display_name exists: "Felix Chen" is not a legal login id
+        with self.assertRaises(validate.Invalid):
+            validate.username("Felix Chen")
+        self.assertEqual(validate.display_name("Felix Chen"), "Felix Chen")
+        self.assertEqual(validate.display_name("陳\x00小明"), "陳小明")
+        with self.assertRaises(validate.Invalid):
+            validate.display_name("x" * 31)
+
+    def test_display_name_falls_back_to_username_and_is_migrated_in(self):
+        self.mkuser("felixc")
+        user = auth.find_user(self.conn, "felixc")
+        # column exists on an already-created DB (init_schema ran the migration) and is empty
+        self.assertIn("display_name", user.keys())
+        self.assertEqual(payload._display_name(user), "felixc")
+        self.conn.execute("UPDATE users SET display_name = ? WHERE id = ?",
+                          ("Felix Chen", user["id"]))
+        self.conn.commit()
+        self.assertEqual(payload._display_name(auth.find_user(self.conn, "felixc")),
+                         "Felix Chen")
+
     def test_sql_injection_in_username_lookup_is_inert(self):
         self.mkuser("jane")
         # parameterized query: this is looked up as a literal, not executed

@@ -47,10 +47,22 @@ def close_all():
     _local.conns = {}
 
 
+# Columns added to an existing table after first release. CREATE TABLE IF NOT EXISTS does
+# nothing to a DB that already exists, so new columns have to be applied by hand. Each entry
+# must be nullable or carry a default, and adding one twice is a no-op.
+MIGRATIONS = [
+    ("users", "display_name", "TEXT NOT NULL DEFAULT ''"),
+]
+
+
 def init_schema(db_path):
     conn = get(db_path)
     with open(SCHEMA_PATH, "r", encoding="utf-8") as fh:
         conn.executescript(fh.read())
+    for table, column, decl in MIGRATIONS:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(%s)" % table)}
+        if column not in cols:
+            conn.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, column, decl))
     conn.commit()
     # the DB holds other people's portfolios - keep it owner-readable only
     try:

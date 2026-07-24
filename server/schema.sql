@@ -11,6 +11,9 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   username      TEXT NOT NULL UNIQUE,
+  -- what the page greets you with. username stays the login id (no spaces, no case games);
+  -- this one is free text so it can be a real name. Empty = fall back to username.
+  display_name  TEXT NOT NULL DEFAULT '',
   pw_hash       TEXT NOT NULL,
   pw_salt       TEXT NOT NULL,
   tier          TEXT NOT NULL DEFAULT 'guest' CHECK (tier IN ('owner','guest')),

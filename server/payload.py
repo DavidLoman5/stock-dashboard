@@ -41,6 +41,14 @@ def _root(*parts):
     return os.path.join(config.ROOT, *parts)
 
 
+def _display_name(user):
+    """sqlite3.Row raises on an unknown key, and a row can predate the display_name
+    migration, so ask the row what it has rather than assuming."""
+    if "display_name" in user.keys():
+        return user["display_name"] or user["username"]
+    return user["username"]
+
+
 def user_holdings(conn, user_id):
     return conn.execute(
         "SELECT code, name, lots, type, theme, tech_like, color FROM holdings "
@@ -161,6 +169,7 @@ def bootstrap(conn, cfg, user):
     return {
         "user": {
             "username": user["username"],
+            "displayName": _display_name(user),
             "tier": user["tier"],
             "status": user["status"],
         },

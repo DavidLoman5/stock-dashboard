@@ -9,6 +9,7 @@ no browser handy, plus the two exports the daily pipeline consumes.
   python3 -m server.admin resume <user>
   python3 -m server.admin delete <user>
   python3 -m server.admin passwd <user>
+  python3 -m server.admin rename <user> "顯示名稱"   頁面上顯示的名字（登入帳號不變）
   python3 -m server.admin invite               one-time registration code
   python3 -m server.admin import-holdings <holdings.json> <user>
   python3 -m server.admin export-codes         -> data/active-codes.json   (for screen/update)
@@ -145,6 +146,19 @@ def cmd_passwd(cfg, conn, args):
     print("已更新密碼（該帳號所有登入階段已失效）")
 
 
+def cmd_rename(cfg, conn, args):
+    """Set the display name. The login username is deliberately left alone - changing a
+    login id breaks the account's own muscle memory for no gain."""
+    if len(args) < 2:
+        sys.exit('用法: rename <帳號> "顯示名稱"（用 "" 清掉，改回顯示帳號名）')
+    user = _resolve(conn, args[0])
+    name = validate.display_name(" ".join(args[1:]))
+    conn.execute("UPDATE users SET display_name = ? WHERE id = ?", (name, user["id"]))
+    db.audit(conn, user["id"], "rename", "display_name=%s" % (name or "(cleared)"))
+    conn.commit()
+    print("%s 的顯示名稱 -> %s" % (user["username"], name or "（改回顯示帳號名）"))
+
+
 def cmd_invite(cfg, conn, args):
     code = auth.create_invite(conn, cfg)
     print("邀請碼（%d 天內有效，只能用一次）: %s" % (cfg["inviteDays"], code))
@@ -221,6 +235,7 @@ COMMANDS = {
     "reject": cmd_reject,
     "delete": cmd_delete,
     "passwd": cmd_passwd,
+    "rename": cmd_rename,
     "invite": cmd_invite,
     "import-holdings": cmd_import_holdings,
     "export-codes": cmd_export_codes,

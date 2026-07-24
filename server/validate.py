@@ -35,6 +35,12 @@ def username(value):
     return value
 
 
+def display_name(value):
+    """Free text (spaces and CJK allowed) - it is only ever shown, never looked up.
+    Empty is legal and means "just use the username"."""
+    return text(value, MAX_NAME, "顯示名稱")
+
+
 def password(value):
     value = value or ""
     if not (MIN_PASSWORD <= len(value) <= MAX_PASSWORD):

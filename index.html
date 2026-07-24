@@ -1129,7 +1129,7 @@ new MutationObserver(renderAll).observe(document.documentElement,{attributes:tru
  bar.hidden=false;
  const TIER={owner:'完整分析',guest:'共用分析'};
  document.getElementById('acctWho').innerHTML=
-   `<b>${esc(U.username)}</b>　${esc(TIER[U.tier]||U.tier)}`;
+   `<b>${esc(U.displayName||U.username)}</b>　${esc(TIER[U.tier]||U.tier)}`;
  if(U.tier==='owner')document.getElementById('acctAdmin').hidden=false;
 
  async function call(body){
