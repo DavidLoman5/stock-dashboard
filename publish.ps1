@@ -50,6 +50,34 @@ if((Test-Path $pnPath) -and -not (IsFresh $pnPath)){
 
 [IO.File]::WriteAllText($idxPath, $html, $enc)
 
+# The splice above wrote the OWNER's full notes (incl. `rec` and `_market.wind`) into
+# index.html. That is correct for the local/server copy but must never be committed, so the
+# demo rebuild has to be the LAST thing that touches the file. It used to be called before
+# publish.ps1 from run-daily.sh, which meant the splice above silently clobbered it and the
+# owner's real holdings + advice went to GitHub on every day the notes were freshly written
+# (2026-07-23 and 2026-07-24 both shipped that way). Calling it from here makes the order
+# structural instead of a convention someone has to remember.
+# run as a child process, not `& script.ps1`: build-demo signals failure with `exit 1`, and only
+# a native command sets $LASTEXITCODE reliably (dot-called scripts leave it $null on a clean run,
+# which reads as a failure).
+pwsh -File (Join-Path $root 'build-demo.ps1')
+if($LASTEXITCODE -ne 0){ Write-Host "FATAL: build-demo.ps1 failed - refusing to commit an unfiltered page"; exit 1 }
+
+# fail-closed: whatever produced the file, it does not get pushed if it still carries
+# owner-only fields. Ordering bugs are silent; this is not.
+$pub = [IO.File]::ReadAllText($idxPath, $enc)
+$mk='<script id="holdingsnotes">'
+$i1=$pub.IndexOf($mk)
+if($i1 -lt 0){ Write-Host "FATAL: holdingsnotes marker missing - refusing to commit"; exit 1 }
+$block=$pub.Substring($i1+$mk.Length, $pub.IndexOf('</script>',$i1)-($i1+$mk.Length))
+foreach($bad in @('"rec"','"wind"','"news"')){
+  if($block.Contains($bad)){
+    Write-Host "FATAL: public index.html still contains owner-only field $bad - refusing to commit"
+    exit 1
+  }
+}
+Write-Host "privacy check passed: public notes carry factual fields only"
+
 # attach AI verdict tags (ai-tags.json: {code:{sust:bool,risk:string}}) to open picks-log
 # entries lacking them - lets evaluate.ps1 score whether AI topic judgment adds value
 $tagPath = Join-Path $root 'ai-tags.json'

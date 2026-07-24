@@ -4,7 +4,9 @@
 # Why this exists: in server mode update-holdings.ps1 analyses the OWNER's real portfolio
 # (data/owner-holdings.json) and splices it into index.html. Committing that would publish a
 # real person's holdings to GitHub Pages - exactly what moving to a server was meant to stop.
-# So this runs last, before publish.ps1, and overwrites the personal blocks with demo data.
+# So this must overwrite the personal blocks with demo data as the LAST step before the commit.
+# It is therefore invoked from inside publish.ps1, after that script splices the owner's notes -
+# do not call it before publish.ps1, or the splice will simply undo everything here.
 #
 # Costs nothing: it re-uses data/quotes.json that the daily fetch already produced (the demo
 # codes are part of the fetch union via admin.py export-codes), and makes no network calls.

@@ -99,6 +99,28 @@ Assert ($bd -notmatch "'rec'") "build-demo never publishes rec"
 # _prevStance's KEY SET is the union of every user's codes; per-demo-code values are fine,
 # publishing the map itself would leak which codes users hold
 Assert ($bd -notmatch "HOLDINGS_META\['_prevStance'\]") "build-demo never publishes the _prevStance union map"
+# The checks above only prove build-demo.ps1 *can* filter - they say nothing about whether its
+# output survives to the commit. On 2026-07-23/24 it did not: run-daily.sh called build-demo
+# first and publish.ps1's note splice then overwrote the filtered block with the owner's real
+# notes. These three assertions test the pipeline, not the intent.
+$pb = Get-Content (Join-Path $root 'publish.ps1') -Raw
+Assert ($pb -match "build-demo\.ps1") "publish.ps1 runs the demo rebuild itself (after its splice)"
+Assert ($pb -match "refusing to commit") "publish.ps1 has a fail-closed privacy check before git"
+$rd = Get-Content (Join-Path $root 'run-daily.sh') -Raw
+$bdCall = ([regex]::Matches($rd, '(?m)^\s*pwsh -File build-demo\.ps1')).Count
+Assert ($bdCall -eq 0) "run-daily.sh does not call build-demo.ps1 (publish.ps1 owns the ordering)"
+# end state: at rest, the committed index.html is the PUBLIC page. Per-user notes are injected
+# by server.py at request time, so owner-only fields have no business being in the file on disk.
+$idxTxt = [IO.File]::ReadAllText((Join-Path $root 'index.html'), (New-Object System.Text.UTF8Encoding($false)))
+$mkr='<script id="holdingsnotes">'
+$p1=$idxTxt.IndexOf($mkr)
+Assert ($p1 -ge 0) "index.html has a holdingsnotes marker"
+if($p1 -ge 0){
+  $noteBlock=$idxTxt.Substring($p1+$mkr.Length, $idxTxt.IndexOf('</script>',$p1)-($p1+$mkr.Length))
+  foreach($f in @('"rec"','"wind"','"news"')){
+    Assert (-not $noteBlock.Contains($f)) "index.html at rest carries no owner-only note field $f"
+  }
+}
 # tracked files must not include anything from data/ (belt and braces if .gitignore regressed)
 if(Get-Command git -ErrorAction SilentlyContinue){
   Push-Location $root

@@ -45,9 +45,11 @@ fetch() {
 }
 
 publish() {
-  # 5. rebuild the PUBLIC page from the demo portfolio, so the owner's real holdings never
-  #    reach GitHub Pages, then commit and push
-  pwsh -File build-demo.ps1
+  # 5. splice the AI notes, rebuild the PUBLIC page from the demo portfolio, then commit+push.
+  #    build-demo.ps1 is deliberately NOT called here any more: publish.ps1 splices the owner's
+  #    notes into index.html and so must run the demo rebuild itself, afterwards. Calling it
+  #    here first (as this did until 2026-07-24) let the splice overwrite the filtered page and
+  #    published the owner's real holdings + `rec` advice to GitHub.
   pwsh -File publish.ps1
 }
 
