@@ -562,11 +562,14 @@ $out | ConvertTo-Json -Depth 7 | Out-File (Join-Path $root 'screen-result.json')
 # it can be 500KB+; this file is what AI should Read for writing PICKS_NOTES (a few KB, not hundreds).
 function SlimPick($p){ [pscustomobject]@{ code=$p.code; name=$p.name; ind=$p.ind; close=$p.close; chgPct=$p.chgPct; score=$p.score; chip=$p.chip; tech=$p.tech; fund=$p.fund; top=$p.top; tPos=$p.tPos; fPos=$p.fPos; tSum=$p.tSum; fSum=$p.fSum; finDelta=$p.finDelta; yoy=$p.yoy; pe=$p.pe; dy=$p.dy; ret5=$p.ret5; dist=$p.dist } }
 function SlimEtf($p){ [pscustomobject]@{ code=$p.code; name=$p.name; close=$p.close; chgPct=$p.chgPct; score=$p.score; chip=$p.chip; tech=$p.tech; owned=$p.owned; tPos=$p.tPos; fPos=$p.fPos; tSum=$p.tSum; fSum=$p.fSum; finDelta=$p.finDelta; ret5=$p.ret5; dist=$p.dist } }
+# Only the codes the AI actually writes about: SKILL.md says short comments are for top:true
+# stocks plus the ETF board, and the non-top rows were ~60% of this file's bytes for nothing.
+# The page draws its picks from PICKS_DATA, not from here, so nothing visible is lost.
 $summaryOut=@{
   date=$lastDate
   regime=$regimeObj
-  picks=@($allPicks | ForEach-Object { SlimPick $_ })
-  etf=@($etfTop | ForEach-Object { SlimEtf $_ })
+  picks=@($allPicks | Where-Object { $_.top } | ForEach-Object { SlimPick $_ })
+  etf=@($etfTop | Select-Object -First 3 | ForEach-Object { SlimEtf $_ })
   perf=$perfSummary
   meta=$metaObj
 }

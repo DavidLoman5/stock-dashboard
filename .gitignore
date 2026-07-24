@@ -11,5 +11,12 @@ data/
 *.db-wal
 *.db-shm
 config.json
+# Gemini's per-code notes for guests. Not secret in itself (it is analysis of public market
+# data), but its key set is the union of every user's holdings - publishing it would disclose
+# which codes people here hold. The server reads it from disk; nothing needs it in the repo.
+guest-notes.json
+# derived each morning from holdings-notes.json purely so the AI step can read ~1KB instead of
+# the whole file; nothing reads it afterwards, so it is churn in every diff
+prev-recs.json
 __pycache__/
 *.pyc

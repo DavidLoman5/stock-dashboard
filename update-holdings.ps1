@@ -241,12 +241,11 @@ Write-Host "[5/6] compute holdings-context.json (small, for AI to read) + HOLDIN
 $HOLDINGS_META=[ordered]@{}
 # trades ride along as a special _-prefixed key (like _market in notes); page filters _ keys out of H
 $HOLDINGS_META['_trades']=@($hj.trades | ForEach-Object { [ordered]@{ d=$_.d; side=$_.side; code="$($_.code)"; shares=(SharesOf $_); price=$_.price } })
-$context=@()
-foreach($h in $hj.holdings){
-  $c="$($h.code)"
-  $HOLDINGS_META[$c]=[ordered]@{ name=$h.name; type=$h.type; theme=$h.theme; shares=(SharesOf $h); color=$h.color; techLike=$(if($h.PSObject.Properties['techLike']){[bool]$h.techLike}else{$false}); divNote=$(if($divMap.ContainsKey($c)){$divMap[$c]}else{$null}) }
+# One definition of "the numbers an analysis step needs", used for both files below, so the
+# owner's context and the all-codes context can never drift apart.
+function CodeContext($c,$nm){
   $ser=@($DASH[$c].series | ForEach-Object { $_.c })
-  if($ser.Count -lt 1){ continue }
+  if($ser.Count -lt 1){ return $null }
   $last=$DASH[$c].series[$DASH[$c].series.Count-1]
   $ma20=SMAlast $ser 20; $ma60=SMAlast $ser 60
   $ma20p = if($ser.Count -ge 25){ SMAlast ($ser[0..($ser.Count-6)]) 20 } else { $null }
@@ -254,8 +253,8 @@ foreach($h in $hj.holdings){
   $inst=$DASH[$c].inst; $fSum=($inst | ForEach-Object {$_.f} | Measure-Object -Sum).Sum; $fLast2 = if($inst.Count -ge 2){ @($inst[-2].f,$inst[-1].f) } else { @() }
   $mg = if($DASH[$c].margin.Count){ $DASH[$c].margin[$DASH[$c].margin.Count-1] } else { $null }
   $marginDelta = if($mg){ $mg.fin-$mg.finPrev } else { $null }
-  $context += [pscustomobject]@{
-    code=$c; name=$h.name
+  return [pscustomobject]@{
+    code=$c; name=$nm
     price=$last.c; chg=$last.chg; pct=[math]::Round($last.chg/($last.c-$last.chg)*100,2)
     ma20=$(if($ma20){[math]::Round($ma20,2)}else{$null}); ma60=$(if($ma60){[math]::Round($ma60,2)}else{$null})
     ma20SlopeUp=$(if($ma20 -and $ma20p){$ma20 -gt $ma20p}else{$null})
@@ -265,8 +264,33 @@ foreach($h in $hj.holdings){
     divNote=$(if($divMap.ContainsKey($c)){$divMap[$c]}else{$null})
   }
 }
+
+$context=@()
+foreach($h in $hj.holdings){
+  $c="$($h.code)"
+  $HOLDINGS_META[$c]=[ordered]@{ name=$h.name; type=$h.type; theme=$h.theme; shares=(SharesOf $h); color=$h.color; techLike=$(if($h.PSObject.Properties['techLike']){[bool]$h.techLike}else{$false}); divNote=$(if($divMap.ContainsKey($c)){$divMap[$c]}else{$null}) }
+  $cx=CodeContext $c $h.name
+  if($cx){ $context += $cx }
+}
 $context | ConvertTo-Json -Depth 5 | Out-File (Join-Path $root 'holdings-context.json') -Encoding UTF8
 Write-Host "  wrote holdings-context.json ($($context.Count) holdings)"
+
+# Same numbers for EVERY code in the fetch union - the input to the Gemini step that writes the
+# analysis guests see for codes the owner does not hold. Names come from the exchange table
+# (data/names.json), never from what a user typed: user text must not reach any AI prompt.
+$nameMap=@{}
+$namesPath=Join-Path $DataDir 'names.json'
+if(Test-Path $namesPath){
+  $nj=ReadJsonRetry $namesPath
+  if($nj){ foreach($pr in $nj.PSObject.Properties){ $nameMap[$pr.Name]="$($pr.Value)" } }
+}
+$allContext=@()
+foreach($c in $codes){
+  $cx=CodeContext $c $(if($nameMap.ContainsKey($c)){ $nameMap[$c] } else { $c })
+  if($cx){ $allContext += $cx }
+}
+$allContext | ConvertTo-Json -Depth 5 | Out-File (Join-Path $DataDir 'codes-context.json') -Encoding UTF8
+Write-Host "  wrote data/codes-context.json ($($allContext.Count) codes, union of all users)"
 
 Write-Host "[5b/6] stance-log.json (rule-engine stance per holding; mirrors page adviseHolding, for evaluate.ps1 validation)..."
 $stancePath=Join-Path $root 'stance-log.json'

@@ -43,6 +43,11 @@ DEFAULTS = {
     "proxyHeader": "CF-Connecting-IP",
     "dbPath": "data/app.db",
     "dataDir": "data",
+    # Gemini writes the per-code analysis guests read (see server/gnotes.py). It is deliberately
+    # a different provider from the owner's daily Claude run: guests must never cost Claude
+    # tokens. Empty key = the step skips itself and guests fall back to the owner's shared notes.
+    "geminiApiKey": "",
+    "geminiModel": "gemini-3.6-flash",
 }
 
 

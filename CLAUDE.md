@@ -19,8 +19,8 @@
 - 使用者回報交易時仍**同步改 shares 並 append trades**，但目標是 DB，不是 `holdings.json`；localStorage 成本輸入仍可覆寫頁面損益
 
 ## 多使用者的兩條硬規則
-1. **token 只花在 owner 身上**：每日 AI 步驟的唯一輸入是 `holdings-context.json`，而它只由 owner 的持股產生。guest 新增股票只會多一次免費的 TWSE 抓取，**絕不可**因此觸發任何 Claude 呼叫。guest 的個股註解一律取自 owner 當日產出的共用快取（`payload.notes_for`）
-2. **使用者輸入絕不進 AI prompt**：別人自填的股票名稱／備註是不可信輸入；AI 只讀腳本消化過的數值。這條同時擋掉 prompt injection 通往自動 `git push` 的路徑
+1. **Claude token 只花在 owner 身上**：每日 AI 步驟的唯一輸入是 `holdings-context.json`，而它只由 owner 的持股產生。guest 新增股票只會多一次免費的 TWSE 抓取，**絕不可**因此觸發任何 Claude 呼叫。guest 看到的內容有兩個來源，都不花 Claude token：owner 當日產出的共用欄位，＋ **Gemini**（`server/gnotes.py` → `guest-notes.json`，free tier）補上 `rec` 與 owner 沒持有的代號。合併規則在 `payload.notes_for()`：Claude 欄位優先、Gemini 補洞、`rec` 一律用 Gemini（owner 的 rec 是為 owner 投組寫的，永不外流）
+2. **使用者輸入絕不進 AI prompt**：別人自填的股票名稱／備註是不可信輸入；AI 只讀腳本消化過的數值。這條對 Gemini 一樣成立——`data/codes-context.json` 的 name 取自 `data/names.json`（證交所全市場對照表），不是 DB 裡使用者打的字。這條同時擋掉 prompt injection 通往自動 `git push` 的路徑
 
 ## 執行環境：Ubuntu + pwsh 7.6（2026-07-22 起，不再是 Windows PS5.1）
 - 一律 `pwsh -File xxx.ps1`；`-ExecutionPolicy` 在 Linux 無作用；路徑大小寫敏感；`$env:TEMP` 為空（用 `[IO.Path]::GetTempPath()`）
@@ -28,6 +28,7 @@
 - 排程：crontab `0 20 * * 1-5 /home/felix/run-stock-briefing.sh`（該 wrapper 以 `claude -p --permission-mode auto` 跑 SKILL.md，日誌 `~/stock-briefing-cron.log`）；20:00 已收盤，當日流程用的是**當日**收盤資料
 
 ## 別手改：每日流程會覆寫的部分
+- `guest-notes.json`（Gemini 每日產出，gitignore）；`prev-recs.json`（每日由 holdings-notes.json 抽出，gitignore）
 - splice 區塊全部：`<script id>` = `dashdata`、`holdingsmeta`、`holdingsnotes`（含 `_market` 市場風向）、`pkdata`、`pkline`、`pknotes`、`evaldata`（週五）、`backtest`（月跑）、`appuser`（伺服器逐使用者注入，committed 檔案內**必須留空**）
 - Hero 市值/損益/整體傾向（heroStance）、大盤數字、市場風向區（windBox/miSox/miMood）、權重、今日訊號、績效曲線 → 頁面 JS 自動算或 `_market` 覆寫，勿寫死；HTML 內殘留文字只是 JS 失敗時的 fallback
 

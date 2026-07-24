@@ -18,7 +18,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from server import admin, api, auth, config, db, payload, server, validate  # noqa: E402
+from server import admin, api, auth, config, db, gnotes, payload, server, validate  # noqa: E402
 
 
 def make_cfg(tmp):
@@ -272,6 +272,88 @@ class TestTiers(Base):
     def test_uncovered_code_yields_no_note_not_an_error(self):
         got = payload.notes_for("guest", ["9999"], self.NOTES)
         self.assertNotIn("9999", got)   # page falls back to '（尚無分析…）'
+
+
+class TestGuestNoteMerge(Base):
+    """Guests read Claude's factual fields where they exist and Gemini's everywhere else.
+    `rec` always comes from Gemini: the owner's is written against the owner's portfolio."""
+
+    CLAUDE = {"0050": {"sigFund": ["neu", "中性"], "tech": "Claude 技術", "chip": "Claude 籌碼",
+                       "fund": "Claude 基本", "rec": "owner 專屬建議", "news": [{"t": "x"}]}}
+    GEMINI = {
+        "0050": {"sigFund": ["bull", "偏多"], "tech": "Gemini 技術", "chip": "Gemini 籌碼",
+                 "fund": "Gemini 基本", "rec": "若跌破季線則減碼。非買賣指令。"},
+        "2330": {"sigFund": ["bear", "偏空"], "tech": "Gemini 技術", "chip": "Gemini 籌碼",
+                 "fund": "Gemini 基本", "rec": "若站回月線則加碼。非買賣指令。"},
+    }
+
+    def test_claude_wins_where_it_exists_and_rec_always_comes_from_gemini(self):
+        got = payload.notes_for("guest", ["0050"], self.CLAUDE, guest_notes=self.GEMINI)
+        self.assertEqual(got["0050"]["tech"], "Claude 技術")
+        self.assertEqual(got["0050"]["sigFund"], ["neu", "中性"])
+        self.assertEqual(got["0050"]["rec"], "若跌破季線則減碼。非買賣指令。")
+        self.assertNotIn("owner 專屬建議", json.dumps(got, ensure_ascii=False))
+        self.assertNotIn("news", got["0050"])
+
+    def test_code_the_owner_does_not_hold_is_fully_covered_by_gemini(self):
+        got = payload.notes_for("guest", ["2330"], self.CLAUDE, guest_notes=self.GEMINI)
+        self.assertEqual(got["2330"]["tech"], "Gemini 技術")
+        self.assertEqual(got["2330"]["rec"], "若站回月線則加碼。非買賣指令。")
+
+    def test_gemini_fills_a_field_that_the_privacy_filter_dropped(self):
+        claude = {"0050": {"tech": "站上月線", "fund": "成分股與 00947 高度重疊"}}
+        got = payload.notes_for("guest", ["0050"], claude,
+                                private_codes={"0050", "00947"}, guest_notes=self.GEMINI)
+        self.assertEqual(got["0050"]["tech"], "站上月線")       # clean Claude field kept
+        self.assertEqual(got["0050"]["fund"], "Gemini 基本")    # dropped one filled, not blank
+        self.assertNotIn("00947", json.dumps(got, ensure_ascii=False))
+
+    def test_owner_never_sees_gemini_notes(self):
+        got = payload.notes_for("owner", ["0050"], self.CLAUDE, guest_notes=self.GEMINI)
+        self.assertEqual(got["0050"]["tech"], "Claude 技術")
+        self.assertEqual(got["0050"]["rec"], "owner 專屬建議")
+
+
+class TestGeminiResponseParsing(Base):
+    """Model output is untrusted: only asked-for codes, only known fields, capped and cleaned."""
+
+    def _reply(self, notes):
+        return json.dumps({"notes": notes}, ensure_ascii=False)
+
+    def test_good_reply_is_accepted(self):
+        got = gnotes.parse_response(self._reply([{
+            "code": "2330", "sigFund": ["bull", "偏多"], "tech": "t", "chip": "c", "fund": "f",
+            "rec": "若跌破月線則減碼。非買賣指令。"}]), ["2330"])
+        self.assertEqual(got["2330"]["sigFund"], ["bull", "偏多"])
+        self.assertEqual(got["2330"]["rec"], "若跌破月線則減碼。非買賣指令。")
+
+    def test_a_code_we_did_not_ask_about_is_refused(self):
+        got = gnotes.parse_response(self._reply([{
+            "code": "9999", "sigFund": ["bull", "x"], "tech": "t", "chip": "c", "fund": "f",
+            "rec": "r"}]), ["2330"])
+        self.assertEqual(got, {})
+
+    def test_fields_are_cleaned_and_capped(self):
+        got = gnotes.parse_response(self._reply([{
+            "code": "2330", "sigFund": ["nonsense", "x"], "tech": "台積\x00電\x1f",
+            "chip": "c" * 999, "fund": "", "rec": "沒有結尾"}]), ["2330"])
+        note = got["2330"]
+        self.assertEqual(note["tech"], "台積電")                    # control chars stripped
+        self.assertEqual(len(note["chip"]), gnotes.MAX_FIELD)       # capped
+        self.assertNotIn("fund", note)                             # empty dropped
+        self.assertNotIn("sigFund", note)                          # bad direction dropped
+        self.assertTrue(note["rec"].endswith("非買賣指令。"))        # disclaimer enforced
+
+    def test_garbage_reply_yields_nothing_rather_than_throwing(self):
+        for bad in ("not json at all", "{}", '{"notes": "wrong type"}', '{"notes":[1,2]}'):
+            self.assertEqual(gnotes.parse_response(bad, ["2330"]), {})
+
+    def test_prompt_data_section_is_exactly_what_we_passed_in(self):
+        """The prompt's data half must be the exchange numbers and nothing else - no holder,
+        no portfolio, and above all nothing a user typed."""
+        rows = [{"code": "2330", "name": "台積電", "price": 1000.0}]
+        data = gnotes.build_prompt(rows).split("分析下列")[1]
+        self.assertEqual(json.loads(data[data.index("["):]), rows)
 
 
 class TestTokenIsolation(Base):

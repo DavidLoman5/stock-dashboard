@@ -33,6 +33,26 @@ fetch() {
     echo "no data/app.db - single-user mode, using holdings.json"
   fi
 
+  # 1b. yesterday's per-code advice, on its own, BEFORE anything overwrites holdings-notes.json.
+  #     The AI step needs it to check whether yesterday's triggers fired; reading the whole
+  #     ~10KB notes file to get at ~1KB of `rec` was most of that step's input budget.
+  python3 - <<'PY' || true
+import json, os
+try:
+    with open("holdings-notes.json", encoding="utf-8-sig") as fh:
+        notes = json.load(fh)
+except (OSError, ValueError):
+    raise SystemExit(0)
+recs = {c: n["rec"] for c, n in notes.items()
+        if not c.startswith("_") and isinstance(n, dict) and n.get("rec")}
+if not recs:
+    raise SystemExit(0)
+out = {"writtenAt": os.path.getmtime("holdings-notes.json"), "recs": recs}
+with open("prev-recs.json", "w", encoding="utf-8") as fh:
+    json.dump(out, fh, ensure_ascii=False, indent=1)
+print("  prev-recs.json: %d 檔昨日建議" % len(recs))
+PY
+
   # 2. quotes for that union -> data/quotes.json (shared) + holdings-context.json (owner only,
   #    and the ONLY thing the AI step ever reads)
   pwsh -File update-holdings.ps1
@@ -45,6 +65,11 @@ fetch() {
   if [ -f data/app.db ]; then
     python3 -m server.admin backfill-names
   fi
+
+  # 3c. per-code analysis for guests, written by Gemini (never Claude - guests must not cost
+  #     Claude tokens). Best-effort by design: no key, no network or a bad reply all leave the
+  #     previous guest-notes.json in place and the daily run carries on.
+  python3 -m server.gnotes || true
 
   # 4. Friday attribution
   [ "$(date +%u)" = "5" ] && pwsh -File evaluate.ps1 || true

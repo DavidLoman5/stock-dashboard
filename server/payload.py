@@ -130,10 +130,23 @@ def _mentions_other_holding(text, own_code, private_codes):
     return any(c != own_code and c in text for c in private_codes)
 
 
-def notes_for(tier, codes, all_notes, private_codes=()):
-    """Owner sees their full daily analysis. Guests see only the code-level factual fields -
-    `rec` is action advice written for the owner's portfolio and does not transfer."""
+def notes_for(tier, codes, all_notes, private_codes=(), guest_notes=None):
+    """Owner sees their own full daily analysis, untouched.
+
+    A guest's page is assembled from two sources:
+      * the owner's Claude notes, code-level factual fields only, and only where the text does
+        not name another owner holding (that check is fail-closed - the field is dropped)
+      * Gemini's per-code notes (guest-notes.json), which cover every code anyone holds
+
+    Claude's fields win where both exist: they are the better analysis and were paid for anyway.
+    Gemini fills the gaps - which is the whole point, since a code the owner does not hold has
+    no Claude note at all and used to render as '（尚無分析）'.
+
+    `rec` is the exception and always comes from Gemini: the owner's rec is advice written
+    against the owner's portfolio, so it neither transfers nor may be disclosed.
+    """
     all_notes = all_notes or {}
+    guest_notes = guest_notes or {}
     out = {}
     market = all_notes.get("_market")
     if isinstance(market, dict):
@@ -145,17 +158,23 @@ def notes_for(tier, codes, all_notes, private_codes=()):
                 out["_market"] = slim
     for code in codes:
         note = all_notes.get(code)
-        if not isinstance(note, dict):
-            continue
         if tier == "owner":
-            out[code] = note
-        else:
-            slim = {
+            if isinstance(note, dict):
+                out[code] = note
+            continue
+        merged = {}
+        gnote = guest_notes.get(code)
+        if isinstance(gnote, dict):
+            merged.update({k: gnote[k] for k in GUEST_NOTE_FIELDS if k in gnote})
+            if gnote.get("rec"):
+                merged["rec"] = gnote["rec"]
+        if isinstance(note, dict):
+            merged.update({
                 k: note[k] for k in GUEST_NOTE_FIELDS
                 if k in note and not _mentions_other_holding(note[k], code, private_codes)
-            }
-            if slim:
-                out[code] = slim
+            })
+        if merged:
+            out[code] = merged
     return out
 
 
@@ -168,6 +187,9 @@ def bootstrap(conn, cfg, user):
     picks_kline = _read_json(os.path.join(data_dir, "picks-kline.json"), None)
     picks_notes = _read_json(_root("picks-notes.json"), {}) or {}
     all_notes = _read_json(_root("holdings-notes.json"), {}) or {}
+    # Gemini's per-code analysis (server/gnotes.py). Only guests read it; missing file just means
+    # the step has not run yet, and notes_for() then behaves exactly as it did before.
+    guest_notes = {} if user["tier"] == "owner" else (_read_json(_root("guest-notes.json"), {}) or {})
     eval_report = _read_json(_root("eval-report.json"), None)
     # backtest-card.json is the page-card shape ({rows:[...]}) that backtest.ps1 splices into the
     # static page. backtest-result.json is the raw research output (grid/current/bestOOS) and has
@@ -219,6 +241,7 @@ def bootstrap(conn, cfg, user):
         "holdingsNotes": notes_for(
             user["tier"], codes, all_notes,
             () if user["tier"] == "owner" else owner_codes(conn),
+            guest_notes,
         ),
         "picks": picks,
         "picksKline": picks_kline,
