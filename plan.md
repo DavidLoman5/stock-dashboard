@@ -135,6 +135,21 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## 🤔 待決策（需要使用者拍板）
 
+- [ ] **🔴 已外洩的 git 歷史要不要改寫（需使用者拍板）**：2026-07-24 排程執行中發現，
+  `run-daily.sh` 的 publish 階段把 `build-demo.ps1` 排在 `publish.ps1` **之前**，
+  而 publish.ps1 會把 `holdings-notes.json` 原封不動 splice 進 `holdingsnotes` 區塊——
+  於是 demo 過濾後的頁面又被owner 完整註解蓋回去。**已修復並加測試**（見下方「已完成」），
+  但下列 commit 已推上公開 repo，內容仍在 GitHub 歷史裡：
+  - `dc82411`（2026-07-24 本次流程的第一次推送，已由 `c470555` 修正當前檔案）
+  - `68ab685`、`d7313a2`（2026-07-23 兩次 daily update）
+  外洩內容：owner 五檔**持股代號**（0050／00935／00947／00981A／00990A）、
+  每檔的 `rec` 操作建議全文、`_market.wind`（內含逐檔漲跌點名）。
+  **未外洩**：張數／成本／交易紀錄（`holdingsmeta` 一直只有 demo 的 2 檔、lots 皆為 demo 值），
+  也沒有帳號、密碼或 `data/` 任何檔案。
+  選項：(a) 不處理——代號本身敏感度低，且 0050／00935 本來就在公開 demo 裡；
+  (b) `git filter-repo` 改寫這 3 個 commit 的 index.html＋force push（會改變所有 commit hash，
+  且 GitHub 可能仍留有舊 object 快取，需另外向 GitHub 申請清除）。
+  **未經授權不做 (b)**：force push 改寫公開歷史屬不可逆且對外可見的操作。
 - [ ] **picks-log 去重鍵是「序列基準日」，同日跑兩次會讓後跑的 Top5 追蹤不到**：2026-07-23 實例——
   上午 11:06 盤中跑一次，基準日 20260722、當時快照為盤中價，記錄的新標的是 2801／1590；
   晚上 20:00 收盤後重跑，基準日仍是 20260722（月度端點落後一天）但快照已是 7/23 收盤，
@@ -158,6 +173,20 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## ✅ 已完成
 
+- 2026-07-24 **v18.1 修復 demo 過濾被 publish 覆蓋（隱私事故）**：`run-daily.sh` 的 publish 階段
+  順序是 `build-demo.ps1` → `publish.ps1`，但 publish.ps1 自己會 splice 未過濾的 `holdings-notes.json`，
+  等於每天都把 build-demo 剛過濾掉的 `rec`／`_market.wind`／其他持股代號**原樣寫回並推上公開 repo**。
+  只在「當天有重寫 notes」時觸發（notes 超過 15 小時會被 publish.ps1 跳過 splice，
+  所以純開發日的 commit 是乾淨的，看起來像沒問題——這是它撐了兩天沒被發現的原因）。
+  1. `publish.ps1` 改為在自己 splice 完之後，**以子行程呼叫** `build-demo.ps1`（`&` 呼叫時
+     $LASTEXITCODE 在乾淨執行下是 $null，會被誤判成失敗），再 commit
+  2. `publish.ps1` 新增 **fail-closed 檢查**：commit 前重讀 index.html，
+     `holdingsnotes` 區塊只要仍含 `"rec"`／`"wind"`／`"news"` 就中止推送
+  3. `run-daily.sh` 不再自行呼叫 build-demo.ps1（順序由 publish.ps1 結構性保證，不再靠慣例）
+  4. `tests.ps1` [8] 補 4 項：publish.ps1 有 demo 重建與 fail-closed 檢查、run-daily.sh 不呼叫
+     build-demo、以及**靜置狀態的 index.html 不得含 owner-only 欄位**（原本的測試只驗
+     build-demo.ps1 的原始碼「會不會過濾」，完全沒驗「過濾結果有沒有活到 commit」）
+  已推上公開 repo 的三個 commit 是否要改寫歷史，見上方「待決策」。
 - 2026-07-24 **v18 安全檢查＋進退場訊號＋backtest v2.2**（本輪安全稽核結論：架構面乾淨——
   loopback+tunnel、scrypt、token 雜湊、SameSite+Origin、CSP、SQL 參數化、guest fail-closed 過濾；
   修掉兩個實質問題，owner 弱密碼仍待使用者動作）：
