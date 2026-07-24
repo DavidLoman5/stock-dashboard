@@ -135,6 +135,21 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## 🤔 待決策（需要使用者拍板）
 
+- [ ] **🔴 `holdings-notes.json` / `holdings-context.json` 本身就在公開 repo 裡（2026-07-24 發現，尚未處理）**：
+  上一則記的是「index.html 被 splice 蓋回去」，已修；但那只堵住一條路。`publish.ps1:103` 是 `git add -A`，
+  而它的 fail-closed 隱私檢查（`publish.ps1:73`）**只看 index.html**，所以這兩個檔每個交易日照樣被推上公開 repo：
+  - `holdings-notes.json`：owner 五檔的 `rec` 全文、`_market.wind`、持股代號
+  - `holdings-context.json`：owner 的完整投組（代號＋名稱＋現價＋均線＋籌碼）
+  也就是說**現在任何人在 GitHub 上看到的，比登入後的 guest 看到的還多**——`build-demo.ps1`
+  那套 demo 替換等於被繞過。
+  已確認**沒有東西需要它們在 git 裡**：build-demo.ps1／publish.ps1／payload.py／run-daily.sh
+  全部讀工作目錄的本機檔。
+  修法分兩段：
+  (a) **往前不再外洩**（低風險、與現有設計一致）：把這兩個檔（含 `ai-tags.json` 要不要一起）
+      加進 `.gitignore` ＋ `git rm --cached`，並把 publish.ps1 的隱私檢查從「只掃 index.html」
+      擴大成「掃所有 staged 檔案」，否則下次再多一個檔又會重演；
+  (b) **既有歷史**：與上一則同一個決策，force push 改寫公開歷史，未經授權不做。
+
 - [ ] **🔴 已外洩的 git 歷史要不要改寫（需使用者拍板）**：2026-07-24 排程執行中發現，
   `run-daily.sh` 的 publish 階段把 `build-demo.ps1` 排在 `publish.ps1` **之前**，
   而 publish.ps1 會把 `holdings-notes.json` 原封不動 splice 進 `holdingsnotes` 區塊——
