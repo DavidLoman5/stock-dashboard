@@ -294,6 +294,28 @@ class TestValidation(Base):
             with self.assertRaises(validate.Invalid):
                 validate.price(bad)
 
+    def test_only_the_configured_proxy_header_is_trusted(self):
+        """Every rate limit is per-IP, so a client-settable IP disables all of them.
+        Tailscale Funnel overwrites X-Forwarded-For but passes CF-Connecting-IP straight
+        through from the client - pointing proxyHeader at the wrong one is a real hole,
+        not a cosmetic mismatch."""
+        class FakeReq:
+            def __init__(self, cfg, headers):
+                self.cfg = cfg
+                self.headers = headers
+                self.client_address = ("127.0.0.1", 1234)
+
+        cfg = dict(self.cfg, trustProxyHeader=True, proxyHeader="X-Forwarded-For")
+        spoofed = {"CF-Connecting-IP": "9.9.9.9", "X-Forwarded-For": "203.0.113.7"}
+        self.assertEqual(server.Handler.client_ip(FakeReq(cfg, spoofed)), "203.0.113.7")
+        # header the tunnel does not set at all -> fall back to the peer, never to a guess
+        self.assertEqual(
+            server.Handler.client_ip(FakeReq(cfg, {"CF-Connecting-IP": "9.9.9.9"})),
+            "127.0.0.1",
+        )
+        off = dict(cfg, trustProxyHeader=False)
+        self.assertEqual(server.Handler.client_ip(FakeReq(off, spoofed)), "127.0.0.1")
+
     def test_display_name_allows_spaces_that_a_username_may_not(self):
         # the whole reason display_name exists: "Felix Chen" is not a legal login id
         with self.assertRaises(validate.Invalid):

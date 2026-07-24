@@ -28,9 +28,14 @@ DEFAULTS = {
     "lockoutMinutes": 15,
     "pendingExpiryDays": 30,
     "secureCookie": True,         # set False only for plain-http local testing
-    # Behind Cloudflare Tunnel the peer address is always 127.0.0.1, so the real client IP
-    # has to come from a header. Safe here ONLY because we bind to loopback and cloudflared
-    # is the sole client. Set False if anything else can reach the port.
+    # Behind a tunnel the peer address is always 127.0.0.1, so the real client IP has to
+    # come from a header. Safe ONLY because we bind to loopback and the tunnel is the sole
+    # client. Set False if anything else can reach the port.
+    #   cloudflared        -> "CF-Connecting-IP"
+    #   Tailscale Funnel   -> "X-Forwarded-For"
+    # It must be a header your tunnel overwrites. Any other header passes through from the
+    # client verbatim, and then every rate limit here is opt-out. (Tailscale forwards a
+    # client-supplied CF-Connecting-IP untouched - so this default is wrong for Funnel.)
     "trustProxyHeader": True,
     "proxyHeader": "CF-Connecting-IP",
     "dbPath": "data/app.db",

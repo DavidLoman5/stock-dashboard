@@ -30,10 +30,15 @@
 maxLoginFailures 5／lockoutMinutes 60（2026-07-24 對外開放時收緊，原 10／15）／
 maxCodesPerUser 30／maxDistinctCodes 200／maxRegistrationsPerIpPerDay 3／pendingExpiryDays 30。
 
-**營運狀態（2026-07-24 起）**：兩個 systemd user service（`stock-dashboard`、`cloudflared`）
-＋`loginctl enable-linger`，開機自動起。cloudflared 裝在 `~/.local/bin`（單一執行檔、免 root），
-目前跑 **quick tunnel**，網址每次重啟就換一組，查法見 `SETUP.md`。要固定網址得走具名 tunnel，
-需要 Cloudflare 帳號＋自有網域（`cloudflared tunnel login` 要人工開瀏覽器）。
+**營運狀態（2026-07-24 起）**：`stock-dashboard` systemd user service＋`loginctl enable-linger`，
+開機自動起。對外走 **Tailscale Funnel**（`https://felix-server.tailf8b922.ts.net`，固定網址、
+免網域、免費）——cloudflared 已停用（quick tunnel 網址每次重啟就換，具名 tunnel 要自有網域，
+而 Cloudflare 帳號當時沒有託管網域）。`~/.local/bin/cloudflared` 保留著沒刪。
+
+**換 tunnel 必須同步改 `proxyHeader`**（血淋淋的實例）：切到 Funnel 後 config 仍是
+`CF-Connecting-IP`，而 Tailscale **不會**覆寫這個 header——實測 `curl -H 'CF-Connecting-IP: 9.9.9.9'`
+原封不動送達，等於任何人每次請求換個假 IP 就繞過全部節流與註冊上限。已改 `X-Forwarded-For`
+（實測 Tailscale 會覆寫它，偽造值被換掉）。這條的教訓是**「header 名稱設錯」不是無效而是開後門**。
 
 - [x] ~~改 SKILL.md 改用 `run-daily.sh` 兩段式~~（2026-07-23 完成，該檔在 repo 外）
 - [x] ~~首次對外開放前：裝 cloudflared、`secureCookie` 設回 `true`~~（2026-07-24 完成。
@@ -133,7 +138,10 @@ maxCodesPerUser 30／maxDistinctCodes 200／maxRegistrationsPerIpPerDay 3／pend
      算出 `NaN%`；`heroStance` 的 `if(tot>0)` 沒有 else，空投組會沿用 HTML fallback 那句
      「全數觸發防守 · 系統性重挫」——對還沒加股票的人是全錯的訊息
   4. 對外開放的加固：`maxLoginFailures` 10→5、`lockoutMinutes` 15→60、`secureCookie` 開
-  5. git 歷史：34 個 commit 的作者 email 改寫成 noreply（`--mailmap`＋force push，改寫前留
+  5. **顯示名稱與登入帳號分離**：`display_name` 欄位（`db.MIGRATIONS` 補既有 DB）。登入 id 仍受
+     `USERNAME_RE` 限制（英數/底線/連字號），顯示名稱可含空白與中文；空值退回帳號名
+  6. **對外改用 Tailscale Funnel**＋修掉 `proxyHeader` 沒跟著換造成的節流繞過（見上）
+  7. git 歷史：34 個 commit 的作者 email 改寫成 noreply（`--mailmap`＋force push，改寫前留
      bundle 備份）。**舊持股仍在歷史的 index.html 裡**（00990A 9 個 commit、00981A 8 個、
      00947 5 個）——要清得砍掉整個 38 commit 歷史，經評估後決定保留歷史
 - 2026-07-23 **v15 遷移 Ubuntu 後的文件與腳本對齊**（Windows→Linux 遷移於 07-22 完成，本輪補齊漂移）：

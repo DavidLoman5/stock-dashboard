@@ -26,7 +26,8 @@
   "_comment_cookie": "secureCookie=false ONLY for plain-http local testing. Behind the tunnel it must be true.",
   "secureCookie": true,
 
-  "_comment_proxy": "Cloudflare Tunnel makes every request look like it came from 127.0.0.1, so the real client IP (used for rate limiting) has to be read from a header. Safe only because the server binds loopback and cloudflared is the only thing that can reach it. Set false if anything else can.",
+  "_comment_proxy": "A tunnel makes every request look like it came from 127.0.0.1, so the real client IP (used for rate limiting) has to be read from a header. Safe only because the server binds loopback and the tunnel is the only thing that can reach it. Set false if anything else can.",
+  "_comment_proxy_header": "MUST match your tunnel: cloudflared = CF-Connecting-IP, Tailscale Funnel = X-Forwarded-For. Pick a header your tunnel does not overwrite and it arrives exactly as the client typed it - every rate limit below then becomes optional for the attacker.",
   "trustProxyHeader": true,
   "proxyHeader": "CF-Connecting-IP",
 

@@ -104,5 +104,5 @@ server/test_server.py（改 server/ 後必跑）認證、權限、token 隔離
 - 前端：單檔 HTML + 原生 JS + Canvas（無框架、無相依、離線可開、CSP 強制自足）
 - 引擎：PowerShell 7.6（pwsh on Ubuntu；TWSE OpenAPI／rwd JSON＋TPEx API，月級磁碟快取）
 - 伺服器：Python 3 標準庫（`http.server` + `sqlite3` + `hashlib.scrypt`）——**無 pip、無 venv、無 lockfile**，與前端「零外部相依」的原則一致
-- 部署：GitHub Pages（`main` 分支根目錄，公開 demo）＋自架伺服器經 Cloudflare Tunnel（多人模式）
+- 部署：GitHub Pages（`main` 分支根目錄，公開 demo）＋自架伺服器經 tunnel（多人模式，目前 Tailscale Funnel）
 - 品質：`tests.ps1` 離線迴歸＋`server/test_server.py` 認證與隔離＋每週歸因（evaluate）＋每月走前驗證（backtest v2.1）

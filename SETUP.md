@@ -103,11 +103,36 @@ python3 -m server.server         # 預設 http://127.0.0.1:8787
 
 ---
 
-## 對外開放（Cloudflare Tunnel）
+## 對外開放（tunnel）
 
 伺服器**只監聽 `127.0.0.1`**，這是刻意的：外面唯一進得來的路是 tunnel。不要改成 `0.0.0.0` 然後在路由器開 port——那會直接把你家 IP 和這台機器暴露出去。
 
-安裝 cloudflared **不需要 root**（它是單一靜態執行檔）：
+兩種 tunnel 都可以，差別在**固定網址要付出什麼**：
+
+| | 網址 | 需要 |
+|---|---|---|
+| **Tailscale Funnel** | `<機器>.<tailnet>.ts.net`，固定 | Tailscale 帳號，**不用網域** |
+| cloudflared quick | `*.trycloudflare.com`，**每次重啟就換** | 什麼都不用 |
+| cloudflared 具名 | 你自己的網域，固定 | Cloudflare 帳號＋**已託管的網域** |
+
+> ⚠️ 換 tunnel 一定要同步改 `config.json` 的 **`proxyHeader`**，見下方「真實 client IP」。
+
+### 方式 0：Tailscale Funnel（免網域、網址固定，本專案目前用這個）
+
+```bash
+sudo tailscale set --operator=$USER      # 一次性，之後不用 sudo
+tailscale funnel --bg 8787
+```
+
+第一次會叫你去管理後台開啟 **HTTPS Certificates** 與 **Funnel** 兩個開關（會直接印連結）。
+開完再跑一次就會印出固定網址。關閉：`tailscale funnel --https=443 off`。
+
+注意 Funnel 是**對全世界公開**。若只想自己的裝置看得到，什麼都不用開——在 tailnet 內直接連
+`http://<這台機器的 100.x IP>:8787` 即可（但那就不能分享給別人）。
+
+### 安裝 cloudflared（方式 A/B 才需要）
+
+不需要 root（單一靜態執行檔）：
 
 ```bash
 mkdir -p ~/.local/bin
@@ -148,11 +173,27 @@ ingress:
   - service: http_status:404
 ```
 
-兩種方式都有 HTTPS、都不用開防火牆埠、都不會曝光家用 IP。
+全部方式都有 HTTPS、都不用開防火牆埠、都不會曝光家用 IP。
 
 設定好之後把 `config.json` 的 `secureCookie` 設成 `true`（tunnel 之後瀏覽器端一律是 HTTPS）。
 `allowedOrigins` **可以留空**：CSRF 檢查會拿請求自己的 `Host` header 當同源基準，所以隨機的
-trycloudflare 網址也能正常登入；只有在你要允許「別的網域」跨站呼叫時才需要填。
+trycloudflare 網址、`.ts.net` 網址都能正常登入；只有在你要允許「別的網域」跨站呼叫時才需要填。
+
+### ⚠️ 真實 client IP：`proxyHeader` 必須跟著 tunnel 換
+
+經過 tunnel 之後，每個請求在伺服器眼中都來自 `127.0.0.1`。登入節流、註冊上限**全都是按 IP 算的**，
+所以真實 IP 得從 header 讀。不同 tunnel 塞的 header 不一樣：
+
+| tunnel | `proxyHeader` |
+|---|---|
+| Tailscale Funnel | `X-Forwarded-For` |
+| cloudflared | `CF-Connecting-IP` |
+
+**設錯不是沒效果，是開後門**：tunnel 只會覆寫它自己那個 header，其他 header 原封不動照傳。
+實測 Tailscale Funnel 會覆寫 `X-Forwarded-For`（偽造的值被換掉），但 `CF-Connecting-IP`
+是使用者打什麼就到什麼——所以 Tailscale 環境若沿用預設的 `CF-Connecting-IP`，攻擊者每次請求
+換一個假 IP 就完全繞過所有節流。`server/test_server.py::test_only_the_configured_proxy_header_is_trusted`
+守著這個行為。
 
 ### 開機自動啟動
 

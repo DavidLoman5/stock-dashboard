@@ -186,6 +186,14 @@ class Handler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------ helpers
 
     def client_ip(self):
+        """The throttles are per-IP, so a forgeable IP means no throttle at all.
+
+        proxyHeader must name a header the tunnel in front of us *overwrites* on every
+        request - verified for both supported tunnels: Cloudflare sets CF-Connecting-IP,
+        Tailscale Funnel sets X-Forwarded-For. Naming the wrong one is not a no-op, it is
+        a hole: any header the tunnel does not touch arrives exactly as the client typed
+        it (a Tailscale deployment left on CF-Connecting-IP lets anyone pick their own IP).
+        """
         if self.cfg["trustProxyHeader"]:
             forwarded = self.headers.get(self.cfg["proxyHeader"])
             if forwarded:
