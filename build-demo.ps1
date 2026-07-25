@@ -14,6 +14,7 @@
 # Run:  pwsh -File build-demo.ps1
 $ErrorActionPreference='Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
 $dataDir = Join-Path $root 'data'
 $idxPath = Join-Path $root 'index.html'
 
@@ -63,14 +64,23 @@ foreach($h in $demo.holdings){
   # user's holdings, and publishing it would leak which codes users hold.
   $prevStance = $null
   if($sharedMeta -and $sharedMeta.PSObject.Properties['_prevStance'] -and $sharedMeta._prevStance.PSObject.Properties[$c]){ $prevStance = $sharedMeta._prevStance.$c }
+  # today's rule-engine grade, per demo code. The page renders this instead of recomputing the
+  # judgement formula in JS; without it a demo holding shows no stance badge at all.
+  $stance = $null
+  if($sharedMeta -and $sharedMeta.PSObject.Properties[$c]){ $stance = $sharedMeta.$c.stance }
   $HOLDINGS_META[$c]=[ordered]@{
     name=$h.name; type=$h.type; theme=$h.theme; shares=(SharesOf $h); color=$h.color
-    techLike=$(if($h.PSObject.Properties['techLike']){[bool]$h.techLike}else{$false}); divNote=$divNote; prevStance=$prevStance
+    techLike=$(if($h.PSObject.Properties['techLike']){[bool]$h.techLike}else{$false}); divNote=$divNote
+    prevStance=$prevStance; stance=$stance
   }
 }
 
 # NOTES: same rule the server applies to guests - code-level factual fields only. `rec` and
-# `news` are advice written for the owner's portfolio and must not be published.
+# `news` are advice written for the owner's portfolio and must not be published. The field list
+# is page-contract.json's `noteFields.guest`, the same one server/payload.py filters guests
+# with, so the published page and a logged-in guest can never disagree about what is factual.
+$guestFields = @((Get-PageContract).noteFields.guest)
+if($guestFields.Count -eq 0){ Write-Host "FATAL: page-contract.json has no noteFields.guest"; exit 1 }
 $allNotes = ReadJson (Join-Path $root 'holdings-notes.json')
 $NOTES=[ordered]@{}
 if($allNotes){
@@ -97,7 +107,7 @@ if($allNotes){
   foreach($c in $demoCodes){
     if(-not $allNotes.PSObject.Properties[$c]){ continue }
     $n=$allNotes.$c; $slim=[ordered]@{}
-    foreach($f in @('sigFund','tech','chip','fund')){
+    foreach($f in $guestFields){
       if(-not $n.PSObject.Properties[$f]){ continue }
       $txt = "$($n.$f)"
       $leaks = @($ownerCodes | Where-Object { $_ -ne $c -and $txt.Contains($_) })
@@ -109,19 +119,11 @@ if($allNotes){
   if($dropped){ Write-Host "  dropped $dropped note field(s) that named other owner holdings" }
 }
 
-$enc=New-Object System.Text.UTF8Encoding($false)
-$html=[IO.File]::ReadAllText($idxPath,$enc)
-function Splice([string]$html,[string]$marker,[string]$payload){
-  $st='<script id="'+$marker+'">'
-  $i1=$html.IndexOf($st)
-  if($i1 -lt 0){ Write-Host "  marker $marker not found - skip"; return $html }
-  $i2=$html.IndexOf('</script>',$i1)
-  return $html.Substring(0,$i1+$st.Length)+$payload+$html.Substring($i2)
+Set-PageBlocks -IndexPath $idxPath -Blocks @{
+  dashdata      = $DASH
+  holdingsmeta  = $HOLDINGS_META
+  holdingsnotes = $NOTES
+  # appuser is server-injected per request; it must stay empty in the committed file
+  appuser       = $null
 }
-$html = Splice $html 'dashdata'      ('window.DASH='+($DASH|ConvertTo-Json -Depth 6 -Compress)+';')
-$html = Splice $html 'holdingsmeta'  ('window.HOLDINGS_META='+($HOLDINGS_META|ConvertTo-Json -Depth 4 -Compress)+';')
-$html = Splice $html 'holdingsnotes' ('window.HOLDINGS_NOTES='+($NOTES|ConvertTo-Json -Depth 5 -Compress)+';')
-# appuser is server-injected per request; it must stay empty in the committed file
-$html = Splice $html 'appuser' ''
-[IO.File]::WriteAllText($idxPath,$html,$enc)
 Write-Host "index.html rebuilt for public demo ($($demoCodes.Count) holdings, $($NOTES.Count) note entries)"

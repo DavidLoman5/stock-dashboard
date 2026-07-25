@@ -135,7 +135,7 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## 🤔 待決策（需要使用者拍板）
 
-- [ ] **🔴 `holdings-notes.json` / `holdings-context.json` 本身就在公開 repo 裡（2026-07-24 發現，尚未處理）**：
+- [x] **🔴 `holdings-notes.json` / `holdings-context.json` 本身就在公開 repo 裡（2026-07-24 發現，2026-07-25 修法 (a) 已做）**：
   上一則記的是「index.html 被 splice 蓋回去」，已修；但那只堵住一條路。`publish.ps1:103` 是 `git add -A`，
   而它的 fail-closed 隱私檢查（`publish.ps1:73`）**只看 index.html**，所以這兩個檔每個交易日照樣被推上公開 repo：
   - `holdings-notes.json`：owner 五檔的 `rec` 全文、`_market.wind`、持股代號
@@ -149,6 +149,18 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
       加進 `.gitignore` ＋ `git rm --cached`，並把 publish.ps1 的隱私檢查從「只掃 index.html」
       擴大成「掃所有 staged 檔案」，否則下次再多一個檔又會重演；
   (b) **既有歷史**：與上一則同一個決策，force push 改寫公開歷史，未經授權不做。
+
+  **2026-07-25 已做 (a)，做法與當初設想不同**：沒有把「再多列幾個檔名」當解法，而是把出口本身
+  變成模組（`lib/publish-gate.ps1`）。`publish.ps1` 不再 `git add -A`，改成只上架
+  `$PublishAllowlist` 列出的路徑，並在 commit 前做三件事：
+  (1) 檢查**每個被 git 追蹤的檔案**都在 allowlist 上；(2) 只 stage allowlist；
+  (3) 掃描實際 staged 的 JSON/HTML 內容有沒有 owner-only 欄位（遞迴找 key，抓得到 `_market.wind`）。
+  結果第一次跑就多抓到一個當初沒列到的檔：**`stance-log.json`**——它逐日記錄 owner 五檔的判級，
+  等於持續公開 owner 持有哪些代號。三個檔（notes／context／stance-log）已 `git rm --cached`
+  ＋ 進 `.gitignore`，檔案本身留在磁碟，流程照常讀工作目錄。
+  這就是 denylist 與 allowlist 的差別：前者只擋想得到的，後者連想不到的都預設不出去。
+  `tests.ps1` [8] 的斷言也跟著改成「每個被追蹤的檔案都在 allowlist 上」。
+  **副作用（已知、可接受）**：`stance-log.json` 不再有 git 當異地備份，只存在本機磁碟。
 
 - [ ] **🔴 已外洩的 git 歷史要不要改寫（需使用者拍板）**：2026-07-24 排程執行中發現，
   `run-daily.sh` 的 publish 階段把 `build-demo.ps1` 排在 `publish.ps1` **之前**，
@@ -183,10 +195,56 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 - [ ] 週一「週報模式」：彙總上週勝率、判級變化、出場事件
 - [ ] 大盤紅綠燈納入前夜美股/費半因子（目前僅由 AI 在文字面提及）
 - [ ] 上櫃大盤指數（櫃買指數）納入行情基準（屬策略變更，走月度回測儀式）
-- [ ] v14 稽核發現、尚未處理：screen.ps1 `splice()` 找不到 marker 時只警告不阻擋寫檔；
-  degenerate candle fallback 選錯 curMode（cosmetic）。~~holdings.json 讀取失敗靜默吞掉~~（2026-07-24 已改為警告）
+- [ ] v14 稽核發現：~~screen.ps1 `splice()` 找不到 marker 時只警告不阻擋寫檔~~（2026-07-25 已修：
+  splice 統一到 `lib/pagedata.ps1`，marker 不存在或 block id 不認識都 throw）；
+  degenerate candle fallback 選錯 curMode（cosmetic，未處理）。~~holdings.json 讀取失敗靜默吞掉~~（2026-07-24 已改為警告）
 
 ## ✅ 已完成
+
+### 2026-07-25 架構整理：把重複的邏輯收成模組（`/improve-codebase-architecture` 五個候選中的三個）
+
+起點是一次架構檢視，發現三處「同一件事寫了很多份」，而且每一處都已經造成過實際問題。
+
+**① 發佈閘門（`lib/publish-gate.ps1`）** — 見上面「待決策」那則的完結。原本的檢查在出口**旁邊**
+（只看 index.html 的一個 block），真正的出口 `git add -A` 沒人看。改成 allowlist 上架＋內容掃描，
+第一次跑就多抓到 `stance-log.json`。`publish.ps1 -DryRun` 可先看會推什麼。
+
+**② 頁面資料契約（`page-contract.json` ＋ `lib/pagedata.ps1` ＋ `server/pagedata.py`）** —
+「找到 `<script id=x>`、換掉內容、寫回檔案」原本有 9 個地方各寫一份（7 個寫入端＋2 個自己 parse
+marker 的檢查），兩種語言，`dashdata`／`holdingsmeta`／`holdingsnotes` 各有兩支腳本會寫，
+順序只靠 `run-daily.sh` 的呼叫次序維持。現在 block id、`window.*` 名稱、JSON depth、
+筆記欄位隱私政策都在 `page-contract.json` 宣告一次，pwsh 與 Python 各一個 adapter 讀它。
+順帶把 `window.META` 從「對 JS 原始碼做正則取代」改成一般 block（`<script id="meta">`），
+報告日期也由頁面從 META 帶出——以前把那行 JS 重新排版就會讓報告日期永久停更。
+
+**③ 判級只算一次（`lib/stance.ps1`）** — 判級公式原本在 pwsh 與 JS 各手抄一份，**而且已經漂移**：
+分數 −1 在 `stance-log.json` 記成 `trim`、頁面卻顯示 `hold`。46 筆歷史裡有 23 筆是 `trim`，
+也就是週歸因報告（`evaluate.ps1:92` 分四級統計）裡樣本最多的一格，在頁面上根本不存在。
+現在引擎算完把 `{score, level, tech, chip, extra, vp}` 放進 `HOLDINGS_META[代號].stance`，
+頁面 `adviseHolding` 只把分數翻成文字。`build-demo.ps1` 與 `payload.py` 都跟著帶這個欄位。
+
+**驗證時抓到的兩個真 bug**（都是 jsdom 實跑才看得到，靜態檢查不會發現）：
+- `LEVEL_VIEW` 用 `const` 宣告在 `hydrate()` **之後** → TDZ，整頁停在第一檔持股。已移到宣告區。
+- `h.sig.tech` / `h.sig.chip` 只在 `if(h.auto)` 分支裡才被建立，沒判級的代號渲染卡片時
+  讀 `h.sig.chip[0]` 直接整頁中斷。這是**舊有**的地雷（K 線不足 25 根就會踩到），
+  只是判級改由引擎供給後更容易踩。已在 `H` 建構時給中性預設值。
+
+測試：`tests.ps1` 新增 [9]（contract／gate／stance 共 20 項斷言），[8] 改為 allowlist 斷言；
+`server/test_server.py` 新增 shell 清空所有 contract block 的測試。兩套全綠，
+另以 jsdom 驗三種頁（正常／缺 stance／空投組）。
+
+**尚未做的兩個候選**（架構檢視有列，這次沒動）：
+- **行情抓取模組**：`GetJson` 有 3 份（timeout 已漂移 45/45/60），TWSE 欄位索引在
+  `screen.ps1`／`update-holdings.ps1`／`backtest.ps1` 之間手抄（註解直說「indexes proven in screen.ps1」），
+  `GetDailySeries` 把 HTTP＋快取＋解析綁在同一個函式裡，所以**實際抓取那條分支從來沒被測試執行過**
+  （測試只能 stub `GetJson` 讓它 throw，然後只驗快取命中）。做法：抽出 feed 模組，
+  live HTTP 與 fixture 兩個 adapter。
+- **頁面分析邏輯抽離**：`buildEquity` 約 75 行含息 TWR／波動／MDD／beta 的財務計算和 DOM 寫入混在一起，
+  `hydrate`／`fillTop`／`buildSignals` 同樣。抽成「投組進、結果出」的純函式後才能不開瀏覽器就驗算。
+  注意 `index.html` 必須維持單檔＋CSP `default-src 'none'`，所以是同一個 inline script 內部拆分，
+  不是改 module、也不引入 build step。
+
+
 
 - 2026-07-24 **v18.1 修復 demo 過濾被 publish 覆蓋（隱私事故）**：`run-daily.sh` 的 publish 階段
   順序是 `build-demo.ps1` → `publish.ps1`，但 publish.ps1 自己會 splice 未過濾的 `holdings-notes.json`，

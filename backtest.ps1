@@ -22,6 +22,7 @@
 # ASCII source only.
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
 function Num($s){ if($null -eq $s){return $null}; $t=("$s" -replace '[^0-9\.\-]',''); if($t -notmatch '[0-9]'){return $null}; try{ return [double]$t }catch{ return $null } }
 function GetJson($url){
   for($i=0;$i -lt 3;$i++){
@@ -382,11 +383,7 @@ $bt | ConvertTo-Json -Depth 4 | Out-File (Join-Path $root 'backtest-card.json') 
 Write-Host "saved backtest-card.json (page card shape, read by server/payload.py)"
 $idxPath=Join-Path $root 'index.html'
 if(Test-Path $idxPath){
-  $enc=New-Object System.Text.UTF8Encoding($false)
-  $html=[IO.File]::ReadAllText($idxPath,$enc)
-  $st='<script id="backtest">'; $i1=$html.IndexOf($st)
-  if($i1 -ge 0){ $i2=$html.IndexOf('</script>',$i1)
-    $html=$html.Substring(0,$i1+$st.Length)+('window.BACKTEST='+($bt|ConvertTo-Json -Depth 4 -Compress)+';')+$html.Substring($i2)
-    [IO.File]::WriteAllText($idxPath,$html,$enc); Write-Host "spliced backtest card into index.html" }
+  Set-PageBlocks -IndexPath $idxPath -Blocks @{ backtest=$bt }
+  Write-Host "spliced backtest card into index.html"
 }
 Write-Host "DONE."

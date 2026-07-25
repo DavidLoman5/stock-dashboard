@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "The contract between the pipeline and index.html, in one place.",
+    "",
+    "`blocks` names every <script id=\"...\"> block the page reads, the window.* global it",
+    "assigns, and the ConvertTo-Json depth its payload needs. Both languages that splice the",
+    "page read this file: lib/pagedata.ps1 (daily run) and server/pagedata.py (per request).",
+    "Before this file existed the same convention was hand-copied into nine places; a marker",
+    "rename silently produced a page with a stale block instead of an error.",
+    "",
+    "`noteFields` is the privacy policy for AI-written per-code notes. `guest` may be published",
+    "or shown to non-owners; `ownerOnly` is advice written with the owner's whole portfolio in",
+    "view and must never leave this machine. build-demo.ps1 filters to `guest`, the publication",
+    "gate refuses on `ownerOnly`, and server/payload.py applies both."
+  ],
+  "blocks": {
+    "appuser":       { "global": "APP_USER",       "depth": 4 },
+    "meta":          { "global": "META",           "depth": 3 },
+    "dashdata":      { "global": "DASH",           "depth": 6 },
+    "pkline":        { "global": "PICKS_KLINE",    "depth": 6 },
+    "pkdata":        { "global": "PICKS_DATA",     "depth": 6 },
+    "evaldata":      { "global": "EVAL",           "depth": 5 },
+    "backtest":      { "global": "BACKTEST",       "depth": 4 },
+    "pknotes":       { "global": "PICKS_NOTES",    "depth": 4 },
+    "holdingsmeta":  { "global": "HOLDINGS_META",  "depth": 4 },
+    "holdingsnotes": { "global": "HOLDINGS_NOTES", "depth": 5 }
+  },
+  "noteFields": {
+    "guest": ["sigFund", "tech", "chip", "fund"],
+    "ownerOnly": ["rec", "news", "wind"]
+  }
+}

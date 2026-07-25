@@ -5,6 +5,7 @@
 # ASCII source only (no BOM needed).
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
 
 function Grp($rows){
   $a=@($rows | Where-Object { $_.PSObject.Properties['alphaFinal'] -and $null -ne $_.alphaFinal })
@@ -102,14 +103,7 @@ Write-Host "wrote eval-report.json"
 # splice into the page (card auto-hides below 5 closed samples)
 $idxPath=Join-Path $root 'index.html'
 if(Test-Path $idxPath){
-  $enc=New-Object System.Text.UTF8Encoding($false)
-  $html=[IO.File]::ReadAllText($idxPath,$enc)
-  $st='<script id="evaldata">'; $i1=$html.IndexOf($st)
-  if($i1 -ge 0){
-    $i2=$html.IndexOf('</script>',$i1)
-    $html=$html.Substring(0,$i1+$st.Length)+('window.EVAL='+($out|ConvertTo-Json -Depth 5 -Compress)+';')+$html.Substring($i2)
-    [IO.File]::WriteAllText($idxPath,$html,$enc)
-    Write-Host "spliced EVAL into index.html"
-  } else { Write-Host "evaldata marker not found - page not updated" }
+  Set-PageBlocks -IndexPath $idxPath -Blocks @{ evaldata=$out }
+  Write-Host "spliced EVAL into index.html"
 }
 Write-Host "DONE."

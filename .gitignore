@@ -18,5 +18,17 @@ guest-notes.json
 # derived each morning from holdings-notes.json purely so the AI step can read ~1KB instead of
 # the whole file; nothing reads it afterwards, so it is churn in every diff
 prev-recs.json
+# Owner-derived daily artifacts. Every one of these was committed to the public repo until
+# 2026-07-25, because the privacy check only ever looked at index.html while `git add -A`
+# published the whole tree. Nothing needs them in git - build-demo.ps1, publish.ps1,
+# server/payload.py and run-daily.sh all read the working copy.
+#   holdings-notes.json    the owner's per-code `rec` advice and _market.wind
+#   holdings-context.json  the owner's whole portfolio: codes, names, prices, MAs, chip data
+#   stance-log.json        rule-engine stance history, keyed by the owner's holdings
+# Untracking stance-log.json also means git no longer backs up that history: it is append-only
+# on disk and evaluate.ps1 refuses to run rather than overwrite it, but it is now local-only.
+holdings-notes.json
+holdings-context.json
+stance-log.json
 __pycache__/
 *.pyc

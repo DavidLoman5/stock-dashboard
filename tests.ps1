@@ -7,11 +7,14 @@
 # ASCII source only. Paths must stay cross-platform (no $env:TEMP - unset on Linux).
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $root 'lib/pagedata.ps1')
+. (Join-Path $root 'lib/publish-gate.ps1')
+. (Join-Path $root 'lib/stance.ps1')
 $fails=@()
 function Assert($ok,$name){ if($ok){ Write-Host "  PASS $name" } else { Write-Host "  FAIL $name"; $script:fails+=$name } }
 
 Write-Host "[1] syntax parse..."
-foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1','backtest.ps1','build-demo.ps1')){
+foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1','backtest.ps1','build-demo.ps1','lib/pagedata.ps1','lib/publish-gate.ps1','lib/stance.ps1')){
   $tok=$null;$err=$null
   [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root $f),[ref]$tok,[ref]$err)
   Assert ($err.Count -eq 0) "syntax $f"
@@ -19,7 +22,7 @@ foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1',
 }
 
 Write-Host "[2] UTF-8 BOM convention (pwsh 7 does not need it; kept so CJK literals survive a PS5.1/Windows run)..."
-foreach($f in @('screen.ps1','update-holdings.ps1','publish.ps1','build-demo.ps1')){
+foreach($f in @('screen.ps1','update-holdings.ps1','publish.ps1','build-demo.ps1','lib/pagedata.ps1','lib/publish-gate.ps1','lib/stance.ps1')){
   $b=[IO.File]::ReadAllBytes((Join-Path $root $f))
   Assert ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) "BOM $f"
 }
@@ -92,9 +95,16 @@ foreach($pat in @('data/','*.db','config.json')){
 # the committed holdings.json is the public demo: it must never carry real transaction prices
 $hj = Get-Content (Join-Path $root 'holdings.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 Assert (@($hj.trades).Count -eq 0) "holdings.json demo carries no trades (found $(@($hj.trades).Count))"
-# build-demo.ps1 publishes guest-level notes only; `rec`/`news` are owner-specific advice
+# build-demo.ps1 publishes guest-level notes only; `rec`/`news` are owner-specific advice.
+# The field lists live in page-contract.json now, so assert the contract rather than the source.
+$contract = Get-PageContract
+Assert (@($contract.noteFields.guest).Count -gt 0) "contract declares guest note fields"
+foreach($f in @('rec','news','wind')){
+  Assert (@($contract.noteFields.ownerOnly) -contains $f) "contract marks '$f' owner-only"
+  Assert (@($contract.noteFields.guest) -notcontains $f) "contract never lets '$f' through to guests"
+}
 $bd = Get-Content (Join-Path $root 'build-demo.ps1') -Raw
-Assert ($bd -match "'sigFund','tech','chip','fund'") "build-demo publishes factual note fields only"
+Assert ($bd -match 'noteFields\.guest') "build-demo filters by the contract's guest field list"
 Assert ($bd -notmatch "'rec'") "build-demo never publishes rec"
 # _prevStance's KEY SET is the union of every user's codes; per-demo-code values are fine,
 # publishing the map itself would leak which codes users hold
@@ -105,7 +115,8 @@ Assert ($bd -notmatch "HOLDINGS_META\['_prevStance'\]") "build-demo never publis
 # notes. These three assertions test the pipeline, not the intent.
 $pb = Get-Content (Join-Path $root 'publish.ps1') -Raw
 Assert ($pb -match "build-demo\.ps1") "publish.ps1 runs the demo rebuild itself (after its splice)"
-Assert ($pb -match "refusing to commit") "publish.ps1 has a fail-closed privacy check before git"
+Assert ($pb -match "Invoke-PublishGate") "publish.ps1 exits through the publication gate, not raw git"
+Assert ($pb -notmatch "git add -A") "publish.ps1 no longer stages the whole working tree"
 $rd = Get-Content (Join-Path $root 'run-daily.sh') -Raw
 $bdCall = ([regex]::Matches($rd, '(?m)^\s*pwsh -File build-demo\.ps1')).Count
 Assert ($bdCall -eq 0) "run-daily.sh does not call build-demo.ps1 (publish.ps1 owns the ordering)"
@@ -121,13 +132,88 @@ if($p1 -ge 0){
     Assert (-not $noteBlock.Contains($f)) "index.html at rest carries no owner-only note field $f"
   }
 }
-# tracked files must not include anything from data/ (belt and braces if .gitignore regressed)
+# The real check is no longer "are these particular names untracked" but "is everything git
+# tracks on the publish allowlist". That is the assertion that would have caught
+# holdings-notes.json / holdings-context.json / stance-log.json in 2026-07-23..25; a
+# name-by-name denylist by definition only catches leaks somebody already thought of.
 if(Get-Command git -ErrorAction SilentlyContinue){
   Push-Location $root
   $tracked = @(git ls-files 'data' 'config.json' '*.db' 2>$null)
+  $allTracked = @(git ls-files)
+  $allowed = @(git ls-files -- $PublishAllowlist)
   Pop-Location
   Assert ($tracked.Count -eq 0) "no per-deployment files tracked by git (found: $($tracked -join ', '))"
+  $stray = @($allTracked | Where-Object { $allowed -notcontains $_ })
+  Assert ($stray.Count -eq 0) "every tracked file is on the publish allowlist (stray: $($stray -join ', '))"
+  foreach($f in @('holdings-notes.json','holdings-context.json','stance-log.json')){
+    Assert ($allTracked -notcontains $f) "$f is not tracked (owner-derived, must never be published)"
+  }
 }
+
+Write-Host "[9] page-data contract + publication gate + stance engine..."
+# a block id that is not in the contract must be an error, not a silent no-op
+$tmpIdx = Join-Path ([IO.Path]::GetTempPath()) ("idx-"+[guid]::NewGuid().ToString('N')+".html")
+Copy-Item (Join-Path $root 'index.html') $tmpIdx
+$threw=$false
+try{ Set-PageBlocks -IndexPath $tmpIdx -Blocks @{ notarealblock=1 } }catch{ $threw=$true }
+Assert $threw "Set-PageBlocks rejects an unknown block id"
+# a missing marker must refuse to write, not warn and carry on (the old Splice wrote anyway)
+$encT = New-Object System.Text.UTF8Encoding($false)
+$htmlT = [IO.File]::ReadAllText($tmpIdx,$encT).Replace('<script id="evaldata">','<script id="renamed">')
+[IO.File]::WriteAllText($tmpIdx,$htmlT,$encT)
+$threw=$false
+try{ Set-PageBlocks -IndexPath $tmpIdx -Blocks @{ evaldata=@{a=1} } }catch{ $threw=$true }
+Assert $threw "Set-PageBlocks refuses to write when a marker is missing"
+# payload must not be able to close the script element early
+Copy-Item (Join-Path $root 'index.html') $tmpIdx -Force
+Set-PageBlocks -IndexPath $tmpIdx -Blocks @{ evaldata=@{ x='a</script>b' } }
+$blk = Get-PageBlockText ([IO.File]::ReadAllText($tmpIdx,$encT)) 'evaldata'
+Assert ($blk -notmatch '</script>') "spliced payload cannot close the script tag"
+Remove-Item $tmpIdx -Force
+
+# every block the contract declares must actually exist in index.html
+$idxAll = [IO.File]::ReadAllText((Join-Path $root 'index.html'), $encT)
+foreach($id in @($contract.blocks.PSObject.Properties.Name)){
+  Assert ($null -ne (Get-PageBlockText $idxAll $id)) "index.html has a '$id' block"
+}
+
+# the gate's content check must see an owner-only field wherever it is nested
+$tmpJson = Join-Path ([IO.Path]::GetTempPath()) ("gate-"+[guid]::NewGuid().ToString('N')+".json")
+'{"_market":{"windLead":"ok","wind":"leak"},"2330":{"tech":"fine"}}' | Out-File $tmpJson -Encoding UTF8
+$hits = @(Test-FileForOwnerContent $tmpJson 'fixture.json')
+Assert ($hits.Count -ge 1) "gate finds a nested owner-only field (_market.wind)"
+'{"2330":{"tech":"fine","chip":"fine"}}' | Out-File $tmpJson -Encoding UTF8
+$hits = @(Test-FileForOwnerContent $tmpJson 'fixture.json')
+Assert ($hits.Count -eq 0) "gate passes a guest-safe notes file"
+Remove-Item $tmpJson -Force
+
+# stance engine: the four levels and their boundaries, in one place
+$mkSer = {
+  param($n,$closes)
+  $out=@()
+  for($i=0;$i -lt $n;$i++){ $c=[double]$closes[$i]; $out += [ordered]@{ o=$c; h=$c; l=$c; c=$c; chg=0.0; v=100 } }
+  return ,$out
+}
+$flat = & $mkSer 70 (1..70 | ForEach-Object { 10.0 })
+Assert ($null -eq (Get-StanceGrade (& $mkSer 10 (1..10 | ForEach-Object { 10.0 })) @() @())) "stance: <25 bars is ungraded"
+$g0 = Get-StanceGrade $flat @() @()
+Assert ($g0.score -eq 0 -and $g0.level -eq 'hold') "stance: flat series scores 0 -> hold (got $($g0.score)/$($g0.level))"
+# score -1 must be 'trim'. This is the level the page used to render as 'hold' while
+# stance-log recorded 'trim' - 23 of 46 logged rows sat in that gap.
+# 70 bars, not 30: the tech=-1 branch compares against the 60-day line, so a shorter
+# fixture can never reach it and would silently grade everything 'hold'.
+$down = & $mkSer 70 (1..70 | ForEach-Object { 40.0 - $_ * 0.3 })
+$gd = Get-StanceGrade $down @() @()
+Assert ($gd.tech -eq -1) "stance: below the 60-day line scores tech=-1"
+Assert ($gd.score -eq -1 -and $gd.level -eq 'trim') "stance: score -1 is 'trim' (got $($gd.score)/$($gd.level))"
+$gd2 = Get-StanceGrade $down @(@{f=-5},@{f=-5}) @()
+Assert ($gd2.score -eq -2 -and $gd2.level -eq 'defend') "stance: score -2 is 'defend' (got $($gd2.score)/$($gd2.level))"
+# the page's display map must cover exactly the levels the engine can emit
+$idxJs = $idxAll
+foreach($lvl in @('up','hold','trim','defend')){
+  Assert ($idxJs -match ("LEVEL_VIEW=\{[^}]*" + $lvl + ":")) "index.html LEVEL_VIEW maps '$lvl'"
+}
+Assert ($idxJs -notmatch "score>=2\?\['up'") "index.html no longer re-derives the stance thresholds"
 
 Write-Host ""
 if($fails.Count -eq 0){ Write-Host "ALL TESTS PASSED"; exit 0 }

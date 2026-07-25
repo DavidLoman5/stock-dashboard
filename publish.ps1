@@ -1,20 +1,20 @@
 ﻿# publish.ps1 - deterministic finishing step for the daily routine.
 # Takes small AI-authored note files (holdings-notes.json, picks-notes.json), splices them
-# into index.html markers, then commits and pushes. AI never edits the 200KB+ HTML directly
-# and never has to chain individual git commands.
+# into index.html markers, then publishes. AI never edits the 200KB+ HTML directly and never
+# has to chain individual git commands.
+#
+# The commit/push itself lives in lib/publish-gate.ps1, not here: it is the only place anything
+# leaves this machine, so it stages an allowlist and content-checks what it staged rather than
+# trusting whatever the daily run happened to write. See that file for why.
+#
+#   pwsh -File publish.ps1            splice, rebuild the demo page, publish
+#   pwsh -File publish.ps1 -DryRun    everything except the commit and push
+param([switch]$DryRun)
 $ErrorActionPreference='Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $root 'lib/pagedata.ps1')     # Set-PageBlocks / Get-PageBlockText / Get-PageContract
+. (Join-Path $root 'lib/publish-gate.ps1') # Invoke-PublishGate
 $idxPath = Join-Path $root 'index.html'
-$enc = New-Object System.Text.UTF8Encoding($false)
-$html = [IO.File]::ReadAllText($idxPath, $enc)
-
-function Splice([string]$html,[string]$marker,[string]$payload){
-  $st='<script id="'+$marker+'">'
-  $i1=$html.IndexOf($st)
-  if($i1 -lt 0){ Write-Host "  marker $marker not found - skip"; return $html }
-  $i2=$html.IndexOf('</script>',$i1)
-  return $html.Substring(0,$i1+$st.Length)+$payload+$html.Substring($i2)
-}
 
 # guard: never splice yesterday's notes (e.g. today's Write step failed but old file remains)
 function IsFresh($path){ ((Get-Date) - (Get-Item $path).LastWriteTime).TotalHours -le 15 }
@@ -26,13 +26,14 @@ function ReadJsonRetry($path){
   return $null
 }
 
+$blocks = @{}
 $hnPath = Join-Path $root 'holdings-notes.json'
 if((Test-Path $hnPath) -and -not (IsFresh $hnPath)){
   Write-Host "holdings-notes.json older than 15h - stale, skipping splice"
 } elseif(Test-Path $hnPath){
   $hn = ReadJsonRetry $hnPath
   if($null -ne $hn){
-    $html = Splice $html 'holdingsnotes' ('window.HOLDINGS_NOTES='+($hn | ConvertTo-Json -Depth 5 -Compress)+';')
+    $blocks['holdingsnotes'] = $hn
     Write-Host "spliced holdings-notes.json -> window.HOLDINGS_NOTES"
   } else { Write-Host "WARN: holdings-notes.json unreadable after retries - skipping this splice, publish continues" }
 } else { Write-Host "no holdings-notes.json found - skipping (holdings text stays as-is)" }
@@ -43,12 +44,12 @@ if((Test-Path $pnPath) -and -not (IsFresh $pnPath)){
 } elseif(Test-Path $pnPath){
   $pn = ReadJsonRetry $pnPath
   if($null -ne $pn){
-    $html = Splice $html 'pknotes' ('window.PICKS_NOTES='+($pn | ConvertTo-Json -Depth 4 -Compress)+';')
+    $blocks['pknotes'] = $pn
     Write-Host "spliced picks-notes.json -> window.PICKS_NOTES"
   } else { Write-Host "WARN: picks-notes.json unreadable after retries - skipping this splice, publish continues" }
 } else { Write-Host "no picks-notes.json found - skipping (pick notes stay as-is)" }
 
-[IO.File]::WriteAllText($idxPath, $html, $enc)
+if($blocks.Count){ Set-PageBlocks -IndexPath $idxPath -Blocks $blocks }
 
 # The splice above wrote the OWNER's full notes (incl. `rec` and `_market.wind`) into
 # index.html. That is correct for the local/server copy but must never be committed, so the
@@ -62,21 +63,6 @@ if((Test-Path $pnPath) -and -not (IsFresh $pnPath)){
 # which reads as a failure).
 pwsh -File (Join-Path $root 'build-demo.ps1')
 if($LASTEXITCODE -ne 0){ Write-Host "FATAL: build-demo.ps1 failed - refusing to commit an unfiltered page"; exit 1 }
-
-# fail-closed: whatever produced the file, it does not get pushed if it still carries
-# owner-only fields. Ordering bugs are silent; this is not.
-$pub = [IO.File]::ReadAllText($idxPath, $enc)
-$mk='<script id="holdingsnotes">'
-$i1=$pub.IndexOf($mk)
-if($i1 -lt 0){ Write-Host "FATAL: holdingsnotes marker missing - refusing to commit"; exit 1 }
-$block=$pub.Substring($i1+$mk.Length, $pub.IndexOf('</script>',$i1)-($i1+$mk.Length))
-foreach($bad in @('"rec"','"wind"','"news"')){
-  if($block.Contains($bad)){
-    Write-Host "FATAL: public index.html still contains owner-only field $bad - refusing to commit"
-    exit 1
-  }
-}
-Write-Host "privacy check passed: public notes carry factual fields only"
 
 # attach AI verdict tags (ai-tags.json: {code:{sust:bool,risk:string}}) to open picks-log
 # entries lacking them - lets evaluate.ps1 score whether AI topic judgment adds value
@@ -99,14 +85,5 @@ if((Test-Path $tagPath) -and (Test-Path $logPath) -and (IsFresh $tagPath)){
   }catch{ Write-Host "ai-tags attach skipped: $($_.Exception.Message)" }
 }
 
-Set-Location $root
-git add -A
 $today = Get-Date -Format 'yyyy-MM-dd'
-$status = git status --porcelain
-if([string]::IsNullOrWhiteSpace($status)){
-  Write-Host "nothing to commit"
-} else {
-  git commit -m "daily update $today" | Out-Null
-  git push origin main
-  Write-Host "committed and pushed: daily update $today"
-}
+if(-not (Invoke-PublishGate -Root $root -Message "daily update $today" -DryRun:$DryRun)){ exit 1 }

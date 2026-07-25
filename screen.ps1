@@ -3,6 +3,7 @@
 # v2: regime-aware scoring, 20-day auto-close tracking, dedupe, spark output
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
 function Num($s){ if($null -eq $s){return $null}; $t=("$s" -replace '[^0-9\.\-]',''); if($t -notmatch '[0-9]'){return $null}; try{ return [double]$t }catch{ return $null } }
 function GetJson($url){
   for($i=0;$i -lt 3;$i++){
@@ -591,18 +592,7 @@ $pd=[ordered]@{
 
 $idxPath=Join-Path $root 'index.html'
 if(Test-Path $idxPath){
-  $enc=New-Object System.Text.UTF8Encoding($false)
-  $html=[IO.File]::ReadAllText($idxPath,$enc)
-  function Splice([string]$html,[string]$marker,[string]$payload){
-    $st='<script id="'+$marker+'">'
-    $i1=$html.IndexOf($st)
-    if($i1 -lt 0){ Write-Host "  marker $marker not found - skip"; return $html }
-    $i2=$html.IndexOf('</script>',$i1)
-    return $html.Substring(0,$i1+$st.Length)+$payload+$html.Substring($i2)
-  }
-  $html=Splice $html 'pkline' ('window.PICKS_KLINE='+($kd|ConvertTo-Json -Depth 6 -Compress)+';')
-  $html=Splice $html 'pkdata' ('window.PICKS_DATA='+($pd|ConvertTo-Json -Depth 6 -Compress)+';')
-  [IO.File]::WriteAllText($idxPath,$html,$enc)
+  Set-PageBlocks -IndexPath $idxPath -Blocks @{ pkline=$kd; pkdata=$pd }
   Write-Host "  spliced PICKS_KLINE + PICKS_DATA into index.html"
 }
 

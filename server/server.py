@@ -10,7 +10,6 @@ Run:  python3 -m server.server        (from the repo root)
 import http.cookies
 import json
 import os
-import re
 import sys
 import threading
 import time
@@ -20,17 +19,11 @@ if __package__ in (None, ""):  # allow `python3 server/server.py` as well as `-m
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     __package__ = "server"
 
-from . import api, auth, config, db, payload, validate  # noqa: E402
+from . import api, auth, config, db, pagedata, payload, validate  # noqa: E402
 
 MAX_BODY = 64 * 1024
 COOKIE_NAME = "sid"
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-# every <script id> the daily pipeline splices data into; the server must serve the page with
-# all of them emptied, or one user's spliced portfolio would ship to everybody
-DATA_BLOCK_IDS = (
-    "dashdata", "pkline", "pkdata", "evaldata",
-    "backtest", "pknotes", "holdingsmeta", "holdingsnotes", "appuser",
-)
 _shell_cache = {"mtime": None, "html": None}
 _shell_lock = threading.Lock()
 # prune used to run only at startup, which under systemd means "once per boot, ever" -
@@ -50,23 +43,17 @@ def prune_if_due(conn, cfg):
     auth.prune(conn, cfg)
 
 
-def _splice(html, block_id, payload):
-    """Same marker convention publish.ps1 uses: replace the body of <script id="x">…</script>."""
-    start_tag = '<script id="%s">' % block_id
-    i1 = html.find(start_tag)
-    if i1 < 0:
-        return html
-    i2 = html.find("</script>", i1)
-    return html[: i1 + len(start_tag)] + payload + html[i2:]
-
-
 def build_shell(index_path):
     """index.html with every spliced data block emptied and CSP relaxed just enough to call our
-    own API. This is the per-request template; the on-disk file stays the strict static demo."""
+    own API. This is the per-request template; the on-disk file stays the strict static demo.
+
+    Emptying *every* block in the contract (rather than a list kept here) is the point: a block
+    added to the pipeline is blank in the shell by default instead of shipping the static demo's
+    copy - or one user's portfolio - to everybody until somebody remembers to extend the list."""
     with open(index_path, "r", encoding="utf-8") as fh:
         html = fh.read()
-    for block_id in DATA_BLOCK_IDS:
-        html = _splice(html, block_id, "")
+    for block_id in pagedata.block_ids():
+        html = pagedata.splice(html, block_id, "")
     html = html.replace("connect-src 'none'", "connect-src 'self'")
     return html
 
@@ -80,24 +67,18 @@ def shell(index_path):
         return _shell_cache["html"]
 
 
-def _js(value):
-    """JSON for embedding inside <script>. Breaking up '</' is what stops a string in the data
-    from closing the tag early and turning data into markup."""
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-
-
-# window.X name for each block, so the page sees exactly what the static build gives it
-BLOCK_VARS = (
-    ("dashdata", "DASH", "dash"),
-    ("holdingsmeta", "HOLDINGS_META", "holdingsMeta"),
-    ("holdingsnotes", "HOLDINGS_NOTES", "holdingsNotes"),
-    ("pkdata", "PICKS_DATA", "picks"),
-    ("pkline", "PICKS_KLINE", "picksKline"),
-    ("pknotes", "PICKS_NOTES", "picksNotes"),
-    ("evaldata", "EVAL", "eval"),
-    ("backtest", "BACKTEST", "backtest"),
+# block id -> the key its value lives under in payload.bootstrap()'s result. The window.* name
+# is not repeated here; it comes from page-contract.json via pagedata.set_block.
+BLOCK_SOURCES = (
+    ("dashdata", "dash"),
+    ("holdingsmeta", "holdingsMeta"),
+    ("holdingsnotes", "holdingsNotes"),
+    ("pkdata", "picks"),
+    ("pkline", "picksKline"),
+    ("pknotes", "picksNotes"),
+    ("evaldata", "eval"),
+    ("backtest", "backtest"),
 )
-META_RE = re.compile(r"window\.META=\{[^}]*\};")
 
 
 def render_page(template, boot):
@@ -108,25 +89,19 @@ def render_page(template, boot):
     time, exactly as it does in the static build.
     """
     html = template
-    for block_id, var, key in BLOCK_VARS:
+    for block_id, key in BLOCK_SOURCES:
         value = boot.get(key)
         if value is None:
             continue
-        html = _splice(html, block_id, "window.%s=%s;" % (var, _js(value)))
+        html = pagedata.set_block(html, block_id, value)
     meta = boot.get("meta") or {}
-    html = META_RE.sub(
-        lambda _m: "window.META=%s;" % _js(
-            {"generated": meta.get("generated", ""), "lastTrade": meta.get("lastTrade", "")}
-        ),
-        html, count=1,
-    )
-    html = _splice(html, "appuser", "window.APP_USER=%s;" % _js({
+    html = pagedata.set_block(html, "meta", {
+        "generated": meta.get("generated", ""), "lastTrade": meta.get("lastTrade", ""),
+    })
+    html = pagedata.set_block(html, "appuser", {
         **boot.get("user", {}),
         "pendingCodes": boot.get("pendingCodes", []),
-    }))
-    generated = meta.get("generated")
-    if generated:
-        html = re.sub(r"報告日期：<b>[^<]*</b>", "報告日期：<b>%s</b>" % generated, html, count=1)
+    })
     return html
 
 

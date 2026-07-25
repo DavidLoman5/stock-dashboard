@@ -14,6 +14,8 @@ param(
 )
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
+. (Join-Path $root 'lib/stance.ps1')     # Get-StanceGrade (the 判級 rule engine)
 function Num($s){ if($null -eq $s){return $null}; $t=("$s" -replace '[^0-9\.\-]',''); if($t -notmatch '[0-9]'){return $null}; try{ return [double]$t }catch{ return $null } }
 function GetJson($url){
   for($i=0;$i -lt 3;$i++){
@@ -319,36 +321,26 @@ foreach($c in @($HOLDINGS_META.Keys)){
 $psAll=[ordered]@{}
 foreach($c in $codes){ if($prevStanceMap.ContainsKey($c)){ $psAll[$c]=$prevStanceMap[$c].s } }
 $HOLDINGS_META['_prevStance']=$psAll   # union-code map for server mode (page ignores _ keys)
+# Grade every code, every run. The log append is still once-per-day, but the page needs the
+# grade whether or not today was already logged - it renders this instead of recomputing the
+# formula in JavaScript, which is how the log and the page came to disagree about 'trim'.
+$grades=[ordered]@{}
+foreach($c in $codes){
+  $g = Get-StanceGrade $DASH[$c].series $DASH[$c].inst $DASH[$c].margin
+  if($null -ne $g){ $grades[$c]=$g }
+}
+foreach($c in @($HOLDINGS_META.Keys)){
+  if($c -like '_*'){ continue }
+  $HOLDINGS_META[$c]['stance']=$(if($grades.Contains($c)){ $grades[$c] } else { $null })
+}
+Write-Host "  graded $($grades.Count)/$($codes.Count) codes"
+
 $already=@($slog | Where-Object { $_.date -eq $lastDate }).Count -gt 0
 if($slogOk -and -not $already){
   foreach($c in $codes){
-    $s=@($DASH[$c].series); if($s.Count -lt 25){ continue }
-    $cl=@($s | ForEach-Object { $_.c }); $L=$cl.Count; $lastB=$s[$L-1]
-    $m20=SMAlast $cl 20; $m60=SMAlast $cl 60
-    $m20p= if($L -ge 25){ SMAlast ($cl[0..($L-6)]) 20 } else { $null }
-    $tech=0
-    if($m20 -and $lastB.c -gt $m20 -and $m20p -and $m20 -gt $m20p){ $tech=1 }
-    elseif($m60 -and $lastB.c -lt $m60){ $tech=-1 }
-    $f=@($DASH[$c].inst | ForEach-Object { $_.f })
-    $chip2=0
-    if($f.Count){ $f5=($f | Measure-Object -Sum).Sum; $lf=$f[$f.Count-1]
-      if($f5 -gt 0 -and $lf -gt 0){ $chip2=1 } elseif($f5 -lt 0 -and $lf -lt 0){ $chip2=-1 } }
-    $mgA=@($DASH[$c].margin); $mg= if($mgA.Count){ $mgA[$mgA.Count-1] } else { $null }
-    $extra=0
-    if($mg -and $mg.finPrev -gt 0){ $r2=($mg.fin-$mg.finPrev)/$mg.finPrev
-      if($r2 -gt 0.03 -and $chip2 -lt 0){ $extra=-1 } elseif($r2 -lt -0.02 -and $chip2 -gt 0){ $extra=1 } }
-    $vAvg= if($L -ge 21){ (@($s[($L-21)..($L-2)] | ForEach-Object { $_.v }) | Measure-Object -Average).Average } else { $null }
-    $vr= if($vAvg -and $vAvg -gt 0){ $lastB.v/$vAvg } else { $null }
-    $rng=$lastB.h-$lastB.l
-    $upW= if($rng -gt 0){ ($lastB.h-[math]::Max($lastB.o,$lastB.c))/$rng } else { 0 }
-    $cp2= if($rng -gt 0){ ($lastB.c-$lastB.l)/$rng } else { 0.5 }
-    $n40=[math]::Min(40,$L); $hi40=($cl[($L-$n40)..($L-1)] | Measure-Object -Maximum).Maximum
-    $vp=0
-    if(($lastB.c/$hi40-1) -ge -0.03 -and $vr -and $vr -ge 2 -and ($cp2 -lt 0.35 -or $upW -gt 0.6)){ $vp=-1 }
-    elseif($lastB.chg -gt 0 -and $vr -and $vr -ge 1.5){ $vp=1 }
-    $sc=$tech+$chip2+$extra+$vp
-    $lv= if($sc -ge 2){'up'} elseif($sc -ge 0){'hold'} elseif($sc -eq -1){'trim'} else {'defend'}
-    $slog += ,@{ date=$lastDate; code=$c; close=$lastB.c; score=$sc; stance=$lv }
+    if(-not $grades.Contains($c)){ continue }
+    $g=$grades[$c]; $s=@($DASH[$c].series)
+    $slog += ,@{ date=$lastDate; code=$c; close=$s[$s.Count-1].c; score=$g.score; stance=$g.level }
   }
   @{ rows=$slog } | ConvertTo-Json -Depth 4 | Out-File $stancePath -Encoding UTF8
   Write-Host "  stance-log: appended rows for $lastDate (total $($slog.Count))"
@@ -356,26 +348,20 @@ if($slogOk -and -not $already){
 
 Write-Host "[6/6] splice window.DASH / window.META / window.HOLDINGS_META into index.html..."
 $idxPath=Join-Path $root 'index.html'
-$enc=New-Object System.Text.UTF8Encoding($false)
-$html=[IO.File]::ReadAllText($idxPath,$enc)
-function Splice([string]$html,[string]$marker,[string]$payload){
-  $st='<script id="'+$marker+'">'
-  $i1=$html.IndexOf($st)
-  if($i1 -lt 0){ Write-Host "  marker $marker not found - skip"; return $html }
-  $i2=$html.IndexOf('</script>',$i1)
-  return $html.Substring(0,$i1+$st.Length)+$payload+$html.Substring($i2)
-}
 # the page only ever renders HOLDINGS_META's codes - splicing other users' quotes would just
 # bloat index.html, so the static page gets this portfolio's slice and data/quotes.json gets all
 $DASHPage=[ordered]@{}
 foreach($k in $DASH.Keys){ if($k -eq 'TAIEX' -or $ownCodes -contains $k){ $DASHPage[$k]=$DASH[$k] } }
-$html = Splice $html 'dashdata' ('window.DASH='+($DASHPage|ConvertTo-Json -Depth 6 -Compress)+';')
-$html = Splice $html 'holdingsmeta' ('window.HOLDINGS_META='+($HOLDINGS_META|ConvertTo-Json -Depth 4 -Compress)+';')
 $genDate = $today.ToString('yyyy/MM/dd')
 $lastTradeIso = "$($lastDate.Substring(0,4))-$($lastDate.Substring(4,2))-$($lastDate.Substring(6,2))"
-$html = $html -replace 'window\.META=\{[^}]*\};', ("window.META={generated:'$genDate',lastTrade:'$lastTradeIso'};")
-$html = $html -replace '報告日期：<b>[^<]*</b>', "報告日期：<b>$genDate</b>"
-[IO.File]::WriteAllText($idxPath,$html,$enc)
+# META used to be written by regex over the page's JS source (and a second regex over the
+# 報告日期 markup). It is a data block like every other one now; the page renders both strings
+# from it, so re-indenting that line can no longer silently freeze the report date.
+Set-PageBlocks -IndexPath $idxPath -Blocks @{
+  dashdata     = $DASHPage
+  holdingsmeta = $HOLDINGS_META
+  meta         = ([ordered]@{ generated=$genDate; lastTrade=$lastTradeIso })
+}
 
 # server-mode exports: same payloads the page gets, as plain JSON for server.py to serve
 # per user. Written last so a failure here can never leave index.html half-spliced.

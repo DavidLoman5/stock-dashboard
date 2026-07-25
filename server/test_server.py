@@ -18,7 +18,9 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from server import admin, api, auth, config, db, gnotes, payload, server, validate  # noqa: E402
+from server import (  # noqa: E402
+    admin, api, auth, config, db, gnotes, pagedata, payload, server, validate,
+)
 
 
 def make_cfg(tmp):
@@ -617,10 +619,11 @@ class TestShell(Base):
         self.assertIn("connect-src 'self'", html)
 
     def test_render_injects_this_users_data_only(self):
+        # META is a data block like every other one now, not a regex over the page's JS source
+        # and a second regex over the 報告日期 markup - the page renders both strings from it.
         template = (
             '<script id="dashdata"></script><script id="holdingsmeta"></script>'
-            '<script id="appuser"></script>'
-            "window.META={generated:'x',lastTrade:'y'};報告日期：<b>x</b>"
+            '<script id="appuser"></script><script id="meta"></script>'
         )
         html = server.render_page(template, {
             "dash": {"TAIEX": [1]},
@@ -633,7 +636,17 @@ class TestShell(Base):
         self.assertIn('"shares":4000', html)
         self.assertIn('"username":"nina"', html)
         self.assertIn('"lastTrade":"2026-07-23"', html)
-        self.assertIn("報告日期：<b>2026/07/23</b>", html)
+        self.assertIn('"generated":"2026/07/23"', html)
+
+    def test_shell_empties_every_block_the_contract_declares(self):
+        # the old shell carried its own list of block ids; a block added to the pipeline but not
+        # to that list would have shipped the static demo's copy to every logged-in user
+        index = os.path.join(self.tmp, "index.html")
+        with open(index, "w", encoding="utf-8") as fh:
+            for block_id in pagedata.block_ids():
+                fh.write('<script id="%s">window.LEAK_%s=1;</script>\n' % (block_id, block_id))
+        html = server.build_shell(index)
+        self.assertNotIn("LEAK_", html)
 
     def test_script_close_sequence_in_data_cannot_break_out(self):
         template = '<script id="holdingsmeta"></script>'
