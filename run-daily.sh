@@ -12,15 +12,22 @@
 #
 #   run-daily.sh --phase fetch     exports + update-holdings + screen   (before the AI writes)
 #   run-daily.sh --phase publish   demo rebuild + publish               (after the AI writes)
+#   run-daily.sh --phase publish --no-push
+#                                   same, but commits without pushing - only the cron wrapper's
+#                                   token-usage handoff should ever pass this (see
+#                                   lib/publish-gate.ps1 / finish-daily-push.ps1); it leaves a
+#                                   local commit that MUST be pushed by something else
 #   run-daily.sh                   everything, no AI steps
 set -euo pipefail
 cd "$(dirname "$0")"
 
 PHASE=all
+NOPUSH=""
 if [ "${1:-}" = "--phase" ]; then
   PHASE="${2:?--phase needs a value: fetch|publish|all}"
+  if [ "${3:-}" = "--no-push" ]; then NOPUSH="-NoPush"; fi
 elif [ $# -gt 0 ]; then
-  echo "usage: $0 [--phase fetch|publish|all]" >&2; exit 2
+  echo "usage: $0 [--phase fetch|publish|all] [--no-push]" >&2; exit 2
 fi
 
 fetch() {
@@ -29,6 +36,7 @@ fetch() {
   if [ -f data/app.db ]; then
     python3 -m server.admin export-codes
     python3 -m server.admin export-owner
+    python3 -m server.admin export-guestplus-codes
   else
     echo "no data/app.db - single-user mode, using holdings.json"
   fi
@@ -81,7 +89,7 @@ publish() {
   #    notes into index.html and so must run the demo rebuild itself, afterwards. Calling it
   #    here first (as this did until 2026-07-24) let the splice overwrite the filtered page and
   #    published the owner's real holdings + `rec` advice to GitHub.
-  pwsh -File publish.ps1
+  pwsh -File publish.ps1 $NOPUSH
 }
 
 case "$PHASE" in

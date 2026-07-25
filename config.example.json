@@ -25,6 +25,9 @@
   "maxCodesPerUser": 30,
   "maxDistinctCodes": 200,
 
+  "_comment_guest_plus": "guest_plus is a tier the owner grants per-account (admin.html or `admin.py promote`) whose holdings get the same Claude-quality, portfolio-blind analysis as the owner's own codes, instead of Gemini's. guestPlusCodeBudget caps how many EXTRA codes (beyond the owner's own) this can add to the daily Claude batch, regardless of how many accounts are granted - a grant that would exceed it is refused; an already-granted account adding a new holding that exceeds it just has that one code quietly stay Gemini-quality.",
+  "guestPlusCodeBudget": 15,
+
   "_comment_cookie": "secureCookie=false ONLY for plain-http local testing. Behind the tunnel it must be true.",
   "secureCookie": true,
 

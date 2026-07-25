@@ -14,7 +14,7 @@ import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from . import db, validate
+from . import db, payload, validate
 
 SCRYPT_N = 1 << 15
 SCRYPT_R = 8
@@ -172,6 +172,39 @@ def set_status(conn, user_id, status, actor_id=None):
         # take effect now, not when the cookie happens to expire
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
     db.audit(conn, actor_id, "set_status", "user=%d status=%s" % (user_id, status))
+    conn.commit()
+
+
+TIERS = ("guest", "guest_plus")   # owner is fixed at creation, never settable through here
+
+
+def set_tier(conn, cfg, user_id, tier, actor_id=None):
+    """Grant or revoke guest_plus. Downgrading (or a no-op) always succeeds; granting is refused
+    if it would push the daily Claude code budget (cfg['guestPlusCodeBudget']) over cap - the
+    check runs against what this specific account would add right now, so it can be wrong by
+    the time they add another holding later (payload.guest_plus_codes_in_budget then just drops
+    the newest code back to Gemini quality instead of erroring)."""
+    if tier not in TIERS:
+        raise AuthError("身分別不合法", 400)
+    row = conn.execute("SELECT tier FROM users WHERE id = ?", (user_id,)).fetchone()
+    if row is None:
+        raise AuthError("帳號不存在", 404)
+    if row["tier"] == "owner":
+        raise AuthError("不能變更 owner 身分", 400)
+    if row["tier"] == tier:
+        return
+    if tier == "guest_plus":
+        new_codes = payload.guest_plus_new_codes_for(conn, user_id)
+        used = len(payload.guest_plus_codes_ranked(conn))
+        cap = cfg["guestPlusCodeBudget"]
+        if used + len(new_codes) > cap:
+            raise AuthError(
+                "guest plus 代碼預算已滿（上限 %d，目前占用 %d，這位使用者會新增 %d 檔：%s）"
+                % (cap, used, len(new_codes), "、".join(new_codes) or "—"),
+                409,
+            )
+    conn.execute("UPDATE users SET tier = ? WHERE id = ?", (tier, user_id))
+    db.audit(conn, user_id, "set_tier", "tier=%s by=%s" % (tier, actor_id))
     conn.commit()
 
 

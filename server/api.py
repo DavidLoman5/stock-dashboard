@@ -197,7 +197,13 @@ def admin_users(ctx):
         "       (SELECT COUNT(*) FROM holdings h WHERE h.user_id = u.id) AS codes "
         "FROM users u ORDER BY (u.status = 'pending') DESC, u.created_at DESC"
     ).fetchall()
-    return 200, {"ok": True, "users": [dict(r) for r in rows]}
+    cap = ctx.cfg["guestPlusCodeBudget"]
+    used = len(payload.guest_plus_codes_ranked(ctx.conn))
+    return 200, {
+        "ok": True,
+        "users": [dict(r) for r in rows],
+        "guestPlusBudget": {"used": used, "cap": cap},
+    }
 
 
 def admin_action(ctx):
@@ -216,6 +222,9 @@ def admin_action(ctx):
         auth.delete_user(ctx.conn, target, actor["id"])
     elif action == "delete":
         auth.delete_user(ctx.conn, target, actor["id"])
+    elif action == "set_tier":
+        tier = (ctx.body.get("tier") or "").strip()
+        auth.set_tier(ctx.conn, ctx.cfg, target, tier, actor["id"])
     else:
         raise ApiError("不支援的操作", 400)
     return 200, {"ok": True}

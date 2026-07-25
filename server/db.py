@@ -77,6 +77,48 @@ def lots_to_shares(conn):
         conn.execute("ALTER TABLE %s DROP COLUMN lots" % table)
 
 
+def migrate_tier_check(conn):
+    """CHECK constraints are baked into the table at CREATE time, so CREATE TABLE IF NOT EXISTS
+    (in schema.sql) does nothing to add 'guest_plus' to an existing DB's tier CHECK - the whole
+    table has to be rebuilt. Explicit ids are copied over (not re-assigned), so every foreign
+    key elsewhere (sessions/holdings/trades/audit) keeps pointing at the same account; the
+    autoincrement counter is repaired afterwards since explicit-id inserts do not advance it.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+    ).fetchone()
+    if row is None or "guest_plus" in row["sql"]:
+        return
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.executescript(
+        "ALTER TABLE users RENAME TO users_pre_guest_plus;"
+        "CREATE TABLE users ("
+        "  id            INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  username      TEXT NOT NULL UNIQUE,"
+        "  display_name  TEXT NOT NULL DEFAULT '',"
+        "  pw_hash       TEXT NOT NULL,"
+        "  pw_salt       TEXT NOT NULL,"
+        "  tier          TEXT NOT NULL DEFAULT 'guest' CHECK (tier IN ('owner','guest','guest_plus')),"
+        "  status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active','suspended')),"
+        "  note          TEXT NOT NULL DEFAULT '',"
+        "  reg_ip        TEXT NOT NULL DEFAULT '',"
+        "  created_at    TEXT NOT NULL,"
+        "  approved_at   TEXT,"
+        "  approved_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,"
+        "  last_login_at TEXT"
+        ");"
+        "INSERT INTO users SELECT * FROM users_pre_guest_plus;"
+        "DROP TABLE users_pre_guest_plus;"
+    )
+    conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('users', 'users_pre_guest_plus')")
+    max_id = conn.execute("SELECT COALESCE(MAX(id), 0) AS m FROM users").fetchone()["m"]
+    if max_id:
+        conn.execute(
+            "INSERT INTO sqlite_sequence (name, seq) VALUES ('users', ?)", (max_id,)
+        )
+    conn.execute("PRAGMA foreign_keys = ON")
+
+
 def init_schema(db_path):
     conn = get(db_path)
     with open(SCHEMA_PATH, "r", encoding="utf-8") as fh:
@@ -85,6 +127,7 @@ def init_schema(db_path):
         if column not in _columns(conn, table):
             conn.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, column, decl))
     lots_to_shares(conn)
+    migrate_tier_check(conn)
     conn.commit()
     # the DB holds other people's portfolios - keep it owner-readable only
     try:

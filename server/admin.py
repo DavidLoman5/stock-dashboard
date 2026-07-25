@@ -7,6 +7,8 @@ no browser handy, plus the two exports the daily pipeline consumes.
   python3 -m server.admin reject <user>        delete a pending registration
   python3 -m server.admin suspend <user>       block immediately (kills their sessions)
   python3 -m server.admin resume <user>
+  python3 -m server.admin tier <user> <guest|guest_plus>   guest_plus = owner-quality Claude
+                                                            notes for their codes, budget-capped
   python3 -m server.admin delete <user>
   python3 -m server.admin passwd <user>
   python3 -m server.admin rename <user> "顯示名稱"   頁面上顯示的名字（登入帳號不變）
@@ -14,6 +16,8 @@ no browser handy, plus the two exports the daily pipeline consumes.
   python3 -m server.admin import-holdings <holdings.json> <user>
   python3 -m server.admin export-codes         -> data/active-codes.json   (for screen/update)
   python3 -m server.admin export-owner         -> data/owner-holdings.json (owner only)
+  python3 -m server.admin export-guestplus-codes -> data/guestplus-codes.json (today's budgeted
+                                                     guest_plus codes, for the daily AI step)
   python3 -m server.admin backfill-names       用 data/names.json 補上只有代號的持股中文名
 """
 
@@ -109,6 +113,14 @@ def _status_cmd(status):
         auth.set_status(conn, user["id"], status)
         print("%s -> %s" % (user["username"], status))
     return run
+
+
+def cmd_tier(cfg, conn, args):
+    if len(args) < 2:
+        sys.exit("用法: tier <帳號> <guest|guest_plus>")
+    user = _resolve(conn, args[0])
+    auth.set_tier(conn, cfg, user["id"], args[1])
+    print("%s -> tier=%s" % (user["username"], args[1]))
 
 
 def cmd_reject(cfg, conn, args):
@@ -237,6 +249,18 @@ def cmd_export_owner(cfg, conn, args):
     print("  %d holdings, %d trades" % (len(data["holdings"]), len(data["trades"])))
 
 
+def cmd_export_guestplus_codes(cfg, conn, args):
+    """Today's guest_plus code budget, for the daily AI step. codes-context.json (written by
+    update-holdings.ps1, same run that reads active-codes.json) carries the raw numbers for
+    these codes - this file is just which of them are in budget, so the AI step and future
+    grants/holdings changes don't need to agree on anything beyond a code list."""
+    cap = cfg["guestPlusCodeBudget"]
+    codes = payload.guest_plus_codes_in_budget(conn, cap)
+    _write_json(os.path.join(cfg["dataDir"], "guestplus-codes.json"),
+                {"generated": db.now(), "cap": cap, "codes": codes})
+    print("  %d guest_plus code(s) in budget: %s" % (len(codes), ", ".join(codes) or "—"))
+
+
 def cmd_backfill_names(cfg, conn, args):
     """Fill in official names for holdings that only ever got a code. Rows where the user typed
     a real name are left alone - this only touches name = '' or name = code."""
@@ -264,6 +288,7 @@ COMMANDS = {
     "approve": _status_cmd("active"),
     "resume": _status_cmd("active"),
     "suspend": _status_cmd("suspended"),
+    "tier": cmd_tier,
     "reject": cmd_reject,
     "delete": cmd_delete,
     "passwd": cmd_passwd,
@@ -272,6 +297,7 @@ COMMANDS = {
     "import-holdings": cmd_import_holdings,
     "export-codes": cmd_export_codes,
     "export-owner": cmd_export_owner,
+    "export-guestplus-codes": cmd_export_guestplus_codes,
     "backfill-names": cmd_backfill_names,
 }
 

@@ -45,10 +45,12 @@
   .pill.pending{background:#f6edd6;color:#7a5f12}
   .pill.suspended{background:#fbe9e7;color:#a52a22}
   .pill.owner{background:var(--accent-soft);color:var(--accent)}
+  .pill.guest_plus{background:#e4ecfb;color:#2c5cb8}
   @media(prefers-color-scheme:dark){
     .pill.active{background:#123027;color:#34c48d}
     .pill.pending{background:#2e2712;color:#e0b955}
     .pill.suspended{background:#3a1c1a;color:#ff8079}
+    .pill.guest_plus{background:#1a2740;color:#7fa8ee}
   }
   .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
   button{font:inherit;font-size:12px;padding:5px 11px;border-radius:8px;cursor:pointer;
@@ -81,6 +83,7 @@
 
   <div class="card">
     <h2>所有帳號 <span class="count" id="cAll"></span></h2>
+    <p class="sub" id="budgetLine" style="margin-bottom:12px"></p>
     <table>
       <thead><tr><th>帳號</th><th>狀態</th><th>持股</th><th style="text-align:right">操作</th></tr></thead>
       <tbody id="tAll"></tbody>
@@ -133,16 +136,21 @@ function actionButton(label, cls, onClick){
 }
 
 const STATUS_TEXT = {pending: '待核准', active: '已啟用', suspended: '已停用'};
+const TIER_TEXT = {guest: 'guest', guest_plus: 'guest plus'};
 
-async function act(action, user, confirmText){
+async function act(action, user, confirmText, extra){
   if (confirmText && !confirm(confirmText)) return;
   try {
-    await call('/api/admin/users', {action, id: user.id});
+    await call('/api/admin/users', Object.assign({action, id: user.id}, extra || {}));
     say($('msg'), '已對 ' + user.username + ' 執行「' + action + '」', 'ok');
     await load();
   } catch (e) {
     say($('msg'), e.message, 'err');
   }
+}
+
+function setTier(user, tier, confirmText){
+  return act('set_tier', user, confirmText, {tier});
 }
 
 function pendingRow(u){
@@ -175,6 +183,7 @@ function userRow(u){
   const tdS = document.createElement('td');
   tdS.appendChild(pill(STATUS_TEXT[u.status] || u.status, u.status));
   if (u.tier === 'owner') { tdS.appendChild(document.createTextNode(' ')); tdS.appendChild(pill('owner', 'owner')); }
+  if (u.tier === 'guest_plus') { tdS.appendChild(document.createTextNode(' ')); tdS.appendChild(pill('guest plus', 'guest_plus')); }
   tr.appendChild(tdS);
 
   tr.appendChild(cell('td', String(u.codes) + ' 檔'));
@@ -183,6 +192,13 @@ function userRow(u){
   tdA.style.textAlign = 'right';
   const acts = cell('div', null, 'acts');
   if (u.tier !== 'owner') {
+    if (u.tier === 'guest') {
+      acts.appendChild(actionButton('升級 guest plus', 'primary',
+        () => setTier(u, 'guest_plus', '將 ' + u.username + ' 升級為 guest plus？其持股會計入每日 Claude 代碼預算。')));
+    } else if (u.tier === 'guest_plus') {
+      acts.appendChild(actionButton('降回 guest', '',
+        () => setTier(u, 'guest', '將 ' + u.username + ' 降回 guest？')));
+    }
     if (u.status === 'pending') acts.appendChild(actionButton('核准', 'primary', () => act('approve', u)));
     if (u.status === 'active') acts.appendChild(actionButton('暫停', '', () => act('suspend', u)));
     if (u.status === 'suspended') acts.appendChild(actionButton('恢復', 'primary', () => act('resume', u)));
@@ -211,6 +227,12 @@ async function load(){
 
   $('tAll').replaceChildren(...users.map(userRow));
   $('cAll').textContent = '（' + users.length + '）';
+
+  const budget = data.guestPlusBudget;
+  if (budget) {
+    $('budgetLine').textContent =
+      'guest plus 代碼預算：' + budget.used + ' ／ ' + budget.cap + '（超過上限會拒絕新的升級）';
+  }
 }
 
 $('mkInvite').onclick = async () => {

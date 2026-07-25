@@ -23,6 +23,10 @@ DEFAULTS = {
     "inviteDays": 7,
     "maxCodesPerUser": 30,
     "maxDistinctCodes": 200,
+    # how many codes beyond the owner's own holdings a guest_plus grant may add to the daily
+    # Claude batch (server/payload.py: guest_plus_codes_ranked/guest_plus_codes_in_budget).
+    # Bounds cost independently of how many guest_plus accounts get granted.
+    "guestPlusCodeBudget": 15,
     "maxRegistrationsPerIpPerDay": 3,
     "maxLoginFailures": 10,       # per-IP; tight, an attacker's own cost
     # per-username, deliberately loose: it only bounds a *distributed* brute force. Tight

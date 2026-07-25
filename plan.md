@@ -106,6 +106,14 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## 🐛 待修：資料新鮮度不一致（2026-07-24 排程中發現，非阻斷、先記錄）
 
+- [ ] **`codes-context.json` 疑似漏掉非 owner 使用者的代號**（2026-07-25 /grill-with-docs 節流討論中查到，
+  非阻斷、未查根因）：真實 guest 帳號 `yianchen960630` 持有 18 檔（多數非 owner 持股，如 2330/2454/6919 等），
+  `active-codes.json` 正確抓到 21 碼聯集，但 `data/codes-context.json`（`gnotes.py` 餵給 Gemini 的唯一輸入）
+  當天只有 5 筆＝剛好等於 owner 的持股。若屬實，代表這個 guest 的多數持股在 `guest-notes.json` 裡永遠是
+  「尚無分析」，Gemini 補洞的機制沒有真正生效。問題應該在 `update-holdings.ps1` 產生 `$allContext`
+  那段（`$codes = $ownCodes + $extraCodes` 之後、逐碼呼叫 `CodeContext` 那個迴圈），還沒查是
+  `$extraCodes` 本身是空的，還是 `CodeContext` 對這些代號回傳 null。下次排程時可先加一行 debug 輸出確認。
+
 兩處「同一份頁面混用兩個交易日」的問題，都不影響數字正確性，但會讓文字敘述失準：
 
 - [ ] **選股基準日落後行情一天**：`screen.ps1:96` 的 `$lastDate` 取自 OpenAPI `STOCK_DAY_ALL`，
@@ -200,6 +208,101 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
   degenerate candle fallback 選錯 curMode（cosmetic，未處理）。~~holdings.json 讀取失敗靜默吞掉~~（2026-07-24 已改為警告）
 
 ## ✅ 已完成
+
+### 2026-07-25 每日 Claude token 用量公開顯示（同一次 commit 帶真實數字，不落後一天）
+
+背景：想在 index.html 公開顯示當天跑 `claude -p`（`~/run-stock-briefing.sh`）實際花的 token。
+實作中途發現時序問題：SKILL.md 步驟四（git commit/push）**在 `claude -p` 行程裡面跑**，
+wrapper 要等那個行程結束、用 `--output-format json` 讀輸出，才知道今天真正的用量——這時候正常
+流程早就 push 完了。拍板結果（使用者：「20:00 自動發上去後包含那次 token 用量」，即同一個
+commit，不要落後一天、也不要每天兩次推播）：
+
+- **`lib/publish-gate.ps1::Invoke-PublishGate` 新增 `-NoPush`**：只 commit、不 push。
+  `publish.ps1`／`run-daily.sh --phase publish --no-push` 逐層透傳。SKILL.md 步驟四的排程專用
+  提示詞（僅 wrapper 呼叫時，互動執行不受影響）改用這個旗標，把「今天的 commit」留在本機不推。
+- **新增 `finish-daily-push.ps1`**（deterministic、不經 AI，UTF-8 BOM，已排進 `tests.ps1` [1][2]）：
+  wrapper 在 `claude -p` 結束、讀到真實 token 數後呼叫。合併同日多次執行（`runs` 累加，不覆蓋）→
+  寫 `token-usage.json` → splice 進新的 `tokenusage` block → `git commit --amend --no-edit`
+  補進今天那個還沒推的 commit → push。**絕不 force-push**：`git fetch` 比對 `origin/main`，
+  若發現不是簡單的「本機領先一個 commit」（例如同一時間有別的東西推了 main），改成疊加一個
+  新 commit 而不是 amend；若那次 push 仍失敗，退回「不管有沒有 token 數字、至少把今天真正的
+  儀表板更新推出去」，只有在這個最後手段也失敗時才以非零 exit code 收尾、留在本機等人工處理。
+  三種情境（正常 amend／真衝突 fallback／同日重跑加總）都用真的 git repo 手動驗證過。
+- **`~/run-stock-briefing.sh`**：`claude -p` 改 `--output-format json`；Python 內嵌腳本解析
+  `.result`（照樣寫回人類看的 log，敘事不丟失）與 `.usage.*`／`.total_cost_usd`，解析失敗一律
+  退回印原始輸出、用量歸零，**但不論解析成不成功都一定呼叫 `finish-daily-push.ps1`**——因為
+  SKILL.md 已經用 `--no-push` 留了一個沒推的 commit，一定要有人把它推掉。`claude -p` 本身失敗
+  （exit≠0）才整段跳過，比照原本行為。
+- **頁面**：`page-contract.json` 新增 `tokenusage` block（`window.TOKEN_USAGE`）；index.html
+  頁尾加一段小字（`buildTokenUsage()`，token 數與 input/output/cache 都有、不顯示美金，
+  依拍板決定）；`tools/boot-check.js` 驗過不影響既有三種 fixture 的既有行為。
+  只顯示「今天」，不留歷史／不畫圖（拍板的最小可行版本）。
+- **`lib/publish-gate.ps1` 的既有 bug，實作途中發現並修掉**：`git add -A -- $PublishAllowlist`
+  是把整份清單一次丟給 git——**只要清單裡任何一個 pathspec（哪怕是萬用字元）目前一個檔案都
+  沒對到，整個 `git add` 直接整包失敗、什麼都不會被 stage**，而 `Invoke-PublishGate` 接著看到
+  「沒東西可 commit」就回傳成功。新增 `token-usage.json` 到 allowlist 之後這顆雷差點當場踩到：
+  它在第一次 `finish-daily-push.ps1` 真正跑之前本來就不存在，會讓**當天整個發佈（含 index.html
+  本體）悄悄失敗、卻回報成功**。修法：allowlist 逐項個別 `git add`（`tests.ps1` 新增
+  「gate stages a real change even though most of the allowlist does not exist on disk」防
+  回歸）。這個 bug 跟 token 功能本身無關，是既有程式碼裡一直存在、只是從沒被剛好踩到的地雷。
+
+### 2026-07-25 新增 guest_plus 身分別：owner 可隨時把特定使用者升級為 Claude 品質分析，代碼數預算封頂
+
+背景：owner 想要一個開關，能把特定使用者從「Gemini 分析」升級成「跟 owner 一樣的 Claude 分析」，
+同時又要記錄每日 Claude token 用量（後者見上面「🤔 待決策」，實作中途發現時序問題卡住，先擱置）。
+這與硬規則 1（「Claude token 只花在 owner 身上」）正面衝突，經 `/grill-me` 逐項拍板後的設計：
+
+- **以代碼為單位擴大批次，不是以帳號為單位重跑**：guest_plus 使用者「owner 本來沒持有」的代碼，
+  併入既有的每日 Claude 批次，成本只跟著新增代碼數成長，不跟著 guest_plus 人數線性成長。
+- **接 SKILL.md 步驟三（picks 選股短評）風格，不是步驟二（owner 投組分析）**：portfolio-blind、
+  單檔獨立，不需要知道誰持有什麼，也不需要把 `_mentions_other_holding` 隱私過濾器擴大到別人的
+  持股——避開了整個「owner 持股外洩到別人筆記」的風險面。
+- **代碼數預算硬上限（`cfg["guestPlusCodeBudget"]`，預設 15，`payload.guest_plus_codes_ranked/
+  guest_plus_codes_in_budget`）**：升級時若會讓「owner 未持有的代碼聯集」超過上限，`auth.set_tier`
+  直接拒絕（409），不做部分升級。已升級的人事後新增持股若把預算打滿，只有那一檔靜默留在 Gemini
+  品質（不報錯、guest_plus 自己頁面上也不會標示），跟現在「還沒分析完」的使用者體感一致。
+  優先序＝最早被授予 guest_plus 的人優先（`audit` 表 `set_tier` 紀錄的時間），同代碼再按代號排序。
+- **`server/payload.py::notes_for()` 改成用「這代碼是不是 owner 自己的持股」而不是「讀者的身分別」
+  來決定 `rec` 能不能分享**：owner 自己 5 檔的 rec 永遠不外流；guest_plus 額外代碼的 rec 因為寫法
+  本來就 portfolio-blind，可以安全分享——而且是按代碼分享，不是按身分別，所以一般 guest 若剛好
+  也持有同一檔，會一起沾光（跟 tech/chip/fund 現有的按代碼共用邏輯一致，不是新洞）。
+- **schema 遷移**：`tier` 的 CHECK 約束多了 `guest_plus`，SQLite 的 CHECK 是建表時固定的，
+  `db.migrate_tier_check()` 做標準的「重建表」遷移（保留原 id，修好 `sqlite_sequence` 避免
+  之後新帳號 id 撞號）。
+- **`/admin` 頁面**新增升級／降回 guest_plus 的按鈕與代碼預算用量顯示；CLI 對應
+  `python3 -m server.admin tier <帳號> <guest|guest_plus>`。
+- **SKILL.md 新增「步驟三附加」**：讀 `data/guestplus-codes.json`（今日預算內的代碼清單，
+  由 `run-daily.sh --phase fetch` 的 `export-guestplus-codes` 匯出）＋ `data/codes-context.json`
+  的對應數字，寫進同一份 `holdings-notes.json`（不開新檔）。**這步依賴 `codes-context.json`
+  正確包含全部使用者的代碼聯集**——與上面「🐛 待修」那則已知 bug 共用同一份輸入，兩者按拍板
+  結果各自獨立推進，未等 bug 修好。
+- 測試：`server/test_server.py` 新增 `TestGuestPlusTier`／`TestGuestPlusCodeBudget`，
+  `python3 -m unittest discover -s server -t .`（81 個，含既有）與 `pwsh -File tests.ps1` 皆過。
+
+### 2026-07-25 每日流程 token 節流：評估「owner 分析交給免費模型」後拍板不做，改用兩個非換模型節流
+
+背景：guest 的三面分析與 `rec` 已 100% 由 Gemini（`server/gnotes.py`）產出、不花 Claude token；owner 自己
+5 檔的分析（步驟二 tech/chip/fund/sigFund/rec）與選股短評/ai-tags（步驟三）仍 100% 由 Claude 寫。
+討論中發現一個可以零邊際成本利用的事實：`data/codes-context.json` 本來就是 union of all users（含 owner
+代號），所以 `guest-notes.json` 其實**已經**在幫 owner 的 5 檔白算一份 tech/chip/fund/rec，只是
+`payload.notes_for()` 目前完全丟棄它（`notes_for()` 註解原話：「Claude's fields win... they are the
+better analysis」）。曾評估讓 Claude 直接採用/審閱這份既有草稿以省輸出 token。
+
+**拍板：不做**——owner 的持股分析與選股短評/ai-tags 維持 100% Claude 寫，不引入 Gemini 草稿。理由：
+(1) 品質落差是既有共識（上面那句註解），owner 自己的分析不該打折；
+(2) `ai-tags.json` 的 `sust`/`risk` 會被 `evaluate.ps1` 週報拿去驗證「AI 判讀是否有超額價值」，換一個模型
+寫等於污染這條長期在追蹤的指標，兩者不能混用。
+
+改採兩個不換模型、零品質風險的節流，已落地在 `SKILL.md`（repo 外，`~/.claude/scheduled-tasks/daily-tw-stock-briefing/SKILL.md`）：
+1. **步驟三 WebSearch 預算加一句共用檢查**：選股短評先看步驟二搜過的結果是否已覆蓋該檔題材（同產業鏈／
+   同大盤脈絡），覆蓋到的直接引用、不重搜。
+2. **步驟〇跳過條件的敘事精簡**：原本整段重述 2026-07-23 漏更新事故，砍成一句保留教訓，操作規則不變。
+   精簡判準：**結論已固化成規則的講古才砍；「違反了沒有錯誤訊息會提醒你」那類敘事保留**（例如個股註解
+   點名其他持股會被伺服器端 fail-closed 過濾器靜默丟掉整段——這種沒有自然回饋迴路的規則，敘事本身就是
+   防呆機制，砍了品質會真的下降）。CLAUDE.md 已經是條列式、沒有明顯可砍的講古段落，這次只動了 SKILL.md。
+
+副產品：討論過程中查到一個既有 bug，與此決策無關，已記在上面「🐛 待修」——`codes-context.json` 疑似漏掉
+非 owner 使用者的代號。
 
 ### 2026-07-25 架構整理：把重複的邏輯收成模組（`/improve-codebase-architecture` 五個候選全做）
 

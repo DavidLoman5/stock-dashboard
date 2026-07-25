@@ -11,7 +11,17 @@
     "`noteFields` is the privacy policy for AI-written per-code notes. `guest` may be published",
     "or shown to non-owners; `ownerOnly` is advice written with the owner's whole portfolio in",
     "view and must never leave this machine. build-demo.ps1 filters to `guest`, the publication",
-    "gate refuses on `ownerOnly`, and server/payload.py applies both."
+    "gate refuses on `ownerOnly`, and server/payload.py applies both.",
+    "",
+    "One narrower exception, live server only (build-demo.ps1/publish-gate.ps1 are unaffected -",
+    "the git-published demo has no guest_plus accounts, so `rec` there is still unconditionally",
+    "ownerOnly): a guest_plus grant (server/auth.set_tier) buys a per-account budget of EXTRA",
+    "codes (payload.guest_plus_codes_in_budget) that get Claude-quality, portfolio-blind notes",
+    "instead of Gemini's, including a rec - safe because the daily prompt writes those codes",
+    "with no portfolio in view at all, unlike the owner's own rec. server/payload.py's",
+    "notes_for() tells the two apart by code (is it one of the owner's own holdings?), not by",
+    "the reader's tier, so this list stays the source of truth for `rec`'s ownerOnly-ness only",
+    "as it applies to the owner's OWN codes."
   ],
   "blocks": {
     "appuser":       { "global": "APP_USER",       "depth": 4 },
@@ -23,7 +33,8 @@
     "backtest":      { "global": "BACKTEST",       "depth": 4 },
     "pknotes":       { "global": "PICKS_NOTES",    "depth": 4 },
     "holdingsmeta":  { "global": "HOLDINGS_META",  "depth": 4 },
-    "holdingsnotes": { "global": "HOLDINGS_NOTES", "depth": 5 }
+    "holdingsnotes": { "global": "HOLDINGS_NOTES", "depth": 5 },
+    "tokenusage":    { "global": "TOKEN_USAGE",    "depth": 2 }
   },
   "noteFields": {
     "guest": ["sigFund", "tech", "chip", "fund"],

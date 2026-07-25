@@ -9,7 +9,11 @@
 #
 #   pwsh -File publish.ps1            splice, rebuild the demo page, publish
 #   pwsh -File publish.ps1 -DryRun    everything except the commit and push
-param([switch]$DryRun)
+#   pwsh -File publish.ps1 -NoPush    commit but do not push - only for the cron wrapper's
+#                                      token-usage handoff (see lib/publish-gate.ps1); an
+#                                      interactive/manual run should never pass this, there is
+#                                      no second process coming along to finish the push
+param([switch]$DryRun, [switch]$NoPush)
 $ErrorActionPreference='Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $root 'lib/pagedata.ps1')     # Set-PageBlocks / Get-PageBlockText / Get-PageContract
@@ -86,4 +90,4 @@ if((Test-Path $tagPath) -and (Test-Path $logPath) -and (IsFresh $tagPath)){
 }
 
 $today = Get-Date -Format 'yyyy-MM-dd'
-if(-not (Invoke-PublishGate -Root $root -Message "daily update $today" -DryRun:$DryRun)){ exit 1 }
+if(-not (Invoke-PublishGate -Root $root -Message "daily update $today" -DryRun:$DryRun -NoPush:$NoPush)){ exit 1 }

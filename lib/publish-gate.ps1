@@ -41,6 +41,9 @@ $PublishAllowlist = @(
   'backtest-result.json'
   'backtest-card.json'
   'ai-tags.json'
+  # daily Claude token/cost totals for THIS project's automation only (finish-daily-push.ps1) -
+  # a plain number, never AI-authored free text, safe to publish
+  'token-usage.json'
 )
 
 # Owner-only note fields, from page-contract.json. Same list build-demo.ps1 strips to and
@@ -100,11 +103,19 @@ function Unstage-IfOurs($PreStaged){
 
 # The gate. Returns $true when the working tree was published (or would be, under -DryRun).
 # Writes its reasoning to the host; a refusal is always explained with the command that fixes it.
+#
+# -NoPush: commit locally but do not `git push`. Exists for the cron wrapper's token-usage
+# handoff (plan.md, 2026-07-25): the daily token/cost number is only known once `claude -p`
+# exits, which is *after* this gate would normally have already pushed. The wrapper amends this
+# still-local commit once it knows the number (see finish-daily-push.ps1) instead of pushing
+# twice or publishing a number that belongs to yesterday's run. Interactive/manual callers must
+# not pass this - they have no second process coming along to finish the push.
 function Invoke-PublishGate {
   param(
     [Parameter(Mandatory=$true)][string]$Root,
     [Parameter(Mandatory=$true)][string]$Message,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$NoPush
   )
   Push-Location $Root
   try{
@@ -128,7 +139,15 @@ function Invoke-PublishGate {
     }
 
     # 2. stage the allowlist only. Whatever else the daily run wrote stays in the working tree.
-    git add -A -- $PublishAllowlist
+    #    Pathspecs go in ONE AT A TIME, not as a single list: `git add -A -- <list>` aborts the
+    #    WHOLE call - staging nothing, not even the other entries - the moment any single
+    #    pathspec matches zero files, true for a missing literal file (token-usage.json before
+    #    its first run ever wrote one) and even for a glob with zero current matches. Staged
+    #    together, one not-yet-created allowlisted file would silently no-op the entire publish
+    #    while this function still returns success - exactly the "looked fine, published
+    #    nothing" failure mode this file exists to prevent (found 2026-07-25 while adding
+    #    token-usage.json - it very nearly shipped that way).
+    foreach($entry in $PublishAllowlist){ git add -A -- $entry 2>$null }
     $staged = @(git diff --cached --name-only)
     if($staged.Count -eq 0){ Write-Host "nothing to commit"; return $true }
 
@@ -157,6 +176,10 @@ function Invoke-PublishGate {
       return $true
     }
     git commit -m $Message | Out-Null
+    if($NoPush){
+      Write-Host "committed locally, NOT pushed (-NoPush): $Message"
+      return $true
+    }
     git push origin main
     Write-Host "committed and pushed: $Message"
     return $true

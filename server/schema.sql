@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   display_name  TEXT NOT NULL DEFAULT '',
   pw_hash       TEXT NOT NULL,
   pw_salt       TEXT NOT NULL,
-  tier          TEXT NOT NULL DEFAULT 'guest' CHECK (tier IN ('owner','guest')),
+  tier          TEXT NOT NULL DEFAULT 'guest' CHECK (tier IN ('owner','guest','guest_plus')),
   status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active','suspended')),
   note          TEXT NOT NULL DEFAULT '',
   reg_ip        TEXT NOT NULL DEFAULT '',

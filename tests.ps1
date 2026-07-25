@@ -15,7 +15,7 @@ $fails=@()
 function Assert($ok,$name){ if($ok){ Write-Host "  PASS $name" } else { Write-Host "  FAIL $name"; $script:fails+=$name } }
 
 Write-Host "[1] syntax parse..."
-foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1','backtest.ps1','build-demo.ps1','lib/pagedata.ps1','lib/publish-gate.ps1','lib/stance.ps1','lib/feed.ps1')){
+foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1','backtest.ps1','build-demo.ps1','finish-daily-push.ps1','lib/pagedata.ps1','lib/publish-gate.ps1','lib/stance.ps1','lib/feed.ps1')){
   $tok=$null;$err=$null
   [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root $f),[ref]$tok,[ref]$err)
   Assert ($err.Count -eq 0) "syntax $f"
@@ -23,7 +23,7 @@ foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1',
 }
 
 Write-Host "[2] UTF-8 BOM convention (pwsh 7 does not need it; kept so CJK literals survive a PS5.1/Windows run)..."
-foreach($f in @('screen.ps1','update-holdings.ps1','publish.ps1','build-demo.ps1','lib/pagedata.ps1','lib/publish-gate.ps1','lib/stance.ps1','lib/feed.ps1')){
+foreach($f in @('screen.ps1','update-holdings.ps1','publish.ps1','build-demo.ps1','finish-daily-push.ps1','lib/pagedata.ps1','lib/publish-gate.ps1','lib/stance.ps1','lib/feed.ps1')){
   $b=[IO.File]::ReadAllBytes((Join-Path $root $f))
   Assert ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) "BOM $f"
 }
@@ -243,6 +243,52 @@ Assert ($hits.Count -ge 1) "gate finds a nested owner-only field (_market.wind)"
 $hits = @(Test-FileForOwnerContent $tmpJson 'fixture.json')
 Assert ($hits.Count -eq 0) "gate passes a guest-safe notes file"
 Remove-Item $tmpJson -Force
+
+# Invoke-PublishGate -NoPush: must commit but NOT push. finish-daily-push.ps1 (the cron
+# wrapper's token-usage handoff, plan.md 2026-07-25) relies on this to fold the day's real
+# token count into that still-local commit instead of shipping a stale number or a second push.
+$gateRepo = Join-Path ([IO.Path]::GetTempPath()) ("gaterepo-"+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $gateRepo -Force | Out-Null
+try {
+  $barePath = Join-Path $gateRepo 'bare.git'
+  $workPath = Join-Path $gateRepo 'work'
+  git init -q --bare -b main $barePath 2>$null | Out-Null
+  git clone -q $barePath $workPath 2>$null | Out-Null
+  Push-Location $workPath
+  try {
+    git config user.email test@test.local
+    git config user.name test
+    # .gitignore must exist: `git add -A -- $PublishAllowlist` includes it as a literal
+    # pathspec, and git aborts the whole add (staging nothing at all) if any pathspec in the
+    # list matches zero files - a missing .gitignore silently made this test stage nothing.
+    '' | Out-File (Join-Path $workPath '.gitignore') -Encoding UTF8
+    'v1' | Out-File (Join-Path $workPath 'picks-notes.json') -Encoding UTF8
+    git add -A | Out-Null; git commit -q -m init | Out-Null
+    git push -q origin main 2>$null | Out-Null
+
+    'v2' | Out-File (Join-Path $workPath 'picks-notes.json') -Encoding UTF8
+    $ok1 = Invoke-PublishGate -Root $workPath -Message 'test nopush' -NoPush
+    $head1 = (git rev-parse HEAD).Trim(); $remote1 = (git rev-parse origin/main).Trim()
+    Assert $ok1 "gate -NoPush reports success"
+    Assert ($head1 -ne $remote1) "gate -NoPush commits locally but does not push"
+
+    'v3' | Out-File (Join-Path $workPath 'picks-notes.json') -Encoding UTF8
+    $ok2 = Invoke-PublishGate -Root $workPath -Message 'test push'
+    $head2 = (git rev-parse HEAD).Trim(); $remote2 = (git rev-parse origin/main).Trim()
+    Assert $ok2 "gate without -NoPush reports success"
+    Assert ($head2 -eq $remote2) "gate without -NoPush actually pushes (also carries the earlier -NoPush commit)"
+
+    # regression: this fixture never creates run-daily.sh / index.html / token-usage.json /
+    # etc - almost every other $PublishAllowlist entry is absent. `git add -A -- <the whole
+    # list>` used to abort STAGING EVERYTHING (not just the missing ones) the instant any one
+    # pathspec matched zero files, so the two assertions above only pass post-fix; this one
+    # names the failure mode directly so it stays obvious if the per-entry loop ever regresses
+    # back to a single `git add -A -- $PublishAllowlist` call.
+    Assert ((git log --format=%s -1).Trim() -eq 'test push') "gate stages a real change even though most of the allowlist does not exist on disk"
+  } finally { Pop-Location }
+} finally {
+  Remove-Item $gateRepo -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 # stance engine: the four levels and their boundaries, in one place
 $mkSer = {

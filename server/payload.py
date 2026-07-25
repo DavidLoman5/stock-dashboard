@@ -123,6 +123,46 @@ def owner_codes(conn):
     return {r["code"] for r in rows}
 
 
+def guest_plus_codes_ranked(conn):
+    """Codes held by an active guest_plus user that the owner does not already hold, oldest
+    grant first (audit.action='set_tier', set by auth.set_tier) then code - a stable order so
+    which codes make today's Claude budget does not flap with dict/set iteration order.
+
+    This is the whole list a guest_plus grant *could* add; guest_plus_codes_in_budget() below
+    is what actually gets promoted once the daily cap is applied.
+    """
+    owned = owner_codes(conn)
+    rows = conn.execute(
+        "SELECT h.code, MIN(a.ts) AS granted_at "
+        "FROM holdings h "
+        "JOIN users u ON u.id = h.user_id "
+        "LEFT JOIN audit a ON a.user_id = h.user_id AND a.action = 'set_tier' "
+        "  AND a.detail LIKE 'tier=guest_plus%' "
+        "WHERE u.tier = 'guest_plus' AND u.status = 'active' "
+        "GROUP BY h.code "
+        "ORDER BY (granted_at IS NULL), granted_at, h.code"
+    ).fetchall()
+    return [r["code"] for r in rows if r["code"] not in owned]
+
+
+def guest_plus_codes_in_budget(conn, cap):
+    """The codes that actually get a Claude-quality note today: the ranked list above, capped.
+    Anything past the cap silently stays on Gemini quality - no error, nothing shown to the
+    user, exactly like an unpromoted guest's codes look today."""
+    return guest_plus_codes_ranked(conn)[:cap]
+
+
+def guest_plus_new_codes_for(conn, candidate_user_id):
+    """What granting guest_plus to `candidate_user_id` (not yet that tier) would actually add
+    to the budget: their codes minus whatever the owner or an existing guest_plus grant already
+    covers. Used at grant time to decide whether the budget has room."""
+    covered = owner_codes(conn) | set(guest_plus_codes_ranked(conn))
+    rows = conn.execute(
+        "SELECT code FROM holdings WHERE user_id = ?", (candidate_user_id,)
+    ).fetchall()
+    return [r["code"] for r in rows if r["code"] not in covered]
+
+
 def _mentions_other_holding(text, own_code, private_codes):
     """True if free text names one of the owner's OTHER holdings.
 
@@ -147,8 +187,14 @@ def notes_for(tier, codes, all_notes, private_codes=(), guest_notes=None):
     Gemini fills the gaps - which is the whole point, since a code the owner does not hold has
     no Claude note at all and used to render as '（尚無分析）'.
 
-    `rec` is the exception and always comes from Gemini: the owner's rec is advice written
-    against the owner's portfolio, so it neither transfers nor may be disclosed.
+    `rec` is usually Gemini-only: the owner's own rec is advice written against the owner's
+    portfolio (cost basis, weight, cross-holding comparisons), so it neither transfers nor may
+    be disclosed - `code in private_codes` is exactly "is this the owner's own holding". The one
+    exception is a guest_plus-budgeted code (payload.guest_plus_codes_in_budget): the daily run
+    writes those portfolio-blind, same as tech/chip/fund, so Claude's rec for them is as safe to
+    share as any other field - distinguished here by code (not by the reader's tier), so a plain
+    guest who happens to also hold that code benefits too, same as the other three fields already
+    do today.
     """
     all_notes = all_notes or {}
     guest_notes = guest_notes or {}
@@ -178,6 +224,9 @@ def notes_for(tier, codes, all_notes, private_codes=(), guest_notes=None):
                 k: note[k] for k in GUEST_NOTE_FIELDS
                 if k in note and not _mentions_other_holding(note[k], code, private_codes)
             })
+            if (code not in private_codes and note.get("rec")
+                    and not _mentions_other_holding(note["rec"], code, private_codes)):
+                merged["rec"] = note["rec"]   # guest_plus-budgeted code: written portfolio-blind
         if merged:
             out[code] = merged
     return out

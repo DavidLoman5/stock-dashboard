@@ -19,13 +19,15 @@
 - 使用者回報交易時仍**同步改 shares 並 append trades**，但目標是 DB，不是 `holdings.json`；localStorage 成本輸入仍可覆寫頁面損益
 
 ## 多使用者的兩條硬規則
-1. **Claude token 只花在 owner 身上**：每日 AI 步驟的唯一輸入是 `holdings-context.json`，而它只由 owner 的持股產生。guest 新增股票只會多一次免費的 TWSE 抓取，**絕不可**因此觸發任何 Claude 呼叫。guest 看到的內容有兩個來源，都不花 Claude token：owner 當日產出的共用欄位，＋ **Gemini**（`server/gnotes.py` → `guest-notes.json`，free tier）補上 `rec` 與 owner 沒持有的代號。合併規則在 `payload.notes_for()`：Claude 欄位優先、Gemini 補洞、`rec` 一律用 Gemini（owner 的 rec 是為 owner 投組寫的，永不外流）
-2. **使用者輸入絕不進 AI prompt**：別人自填的股票名稱／備註是不可信輸入；AI 只讀腳本消化過的數值。這條對 Gemini 一樣成立——`data/codes-context.json` 的 name 取自 `data/names.json`（證交所全市場對照表），不是 DB 裡使用者打的字。這條同時擋掉 prompt injection 通往自動 `git push` 的路徑
+1. **Claude token 預設只花在 owner 身上，例外要走預算閘門**：每日 AI 步驟的主要輸入是 `holdings-context.json`，只由 owner 的持股產生。guest 新增股票只會多一次免費的 TWSE 抓取，**絕不可**因此觸發任何 Claude 呼叫。guest 看到的內容有兩個來源，都不花 Claude token：owner 當日產出的共用欄位，＋ **Gemini**（`server/gnotes.py` → `guest-notes.json`，free tier）補上 `rec` 與 owner 沒持有的代號。合併規則在 `payload.notes_for()`：Claude 欄位優先、Gemini 補洞、`rec` 通常也只用 Gemini（owner 的 rec 是為 owner 投組寫的，永不外流）。
+   **唯一例外（2026-07-25 起）**：owner 在 `/admin` 頁面把某人升級為 **guest_plus**（`server/auth.set_tier`），這位使用者「owner 本來就沒持有」的持股代碼會**額外**被排進 Claude 的每日分析批次（SKILL.md「步驟三附加」），寫法與 Gemini 的 guest 分析一樣單檔獨立、不知道誰持有什麼、不提投組——差別只是模型換成 Claude。這仍然不違反「guest 的行為不能觸發 Claude 呼叫」：guest_plus 是 **owner 主動授予**的狀態，不是 guest 自己的動作觸發的，且有 `cfg["guestPlusCodeBudget"]`（預設 15 檔，`payload.guest_plus_codes_in_budget()`）硬性上限，超過上限的升級會被 `auth.set_tier` 直接拒絕，事後新增的持股若把上限打滿則靜默留在 Gemini 品質、不報錯。`payload.notes_for()` 用「這個代碼是不是 owner 自己的持股」（不是身分別）決定 `rec` 能不能分享，所以 guest_plus 代碼的 rec 也可能被同代碼的一般 guest 看到——這是刻意的，跟 tech/chip/fund 現有的按代碼共用邏輯一致。
+2. **使用者輸入絕不進 AI prompt**：別人自填的股票名稱／備註是不可信輸入；AI 只讀腳本消化過的數值。這條對 Gemini 一樣成立——`data/codes-context.json` 的 name 取自 `data/names.json`（證交所全市場對照表），不是 DB 裡使用者打的字。這條同時擋掉 prompt injection 通往自動 `git push` 的路徑。guest_plus 的額外代碼一樣只給代號清單（`data/guestplus-codes.json`），不含「誰持有」，不違反這條
 
 ## 執行環境：Ubuntu + pwsh 7.6（2026-07-22 起，不再是 Windows PS5.1）
 - 一律 `pwsh -File xxx.ps1`；`-ExecutionPolicy` 在 Linux 無作用；路徑大小寫敏感；`$env:TEMP` 為空（用 `[IO.Path]::GetTempPath()`）
 - PS7 差異（刻意不改程式）：`Out-File -Encoding UTF8` 不寫 BOM（新 JSON 無 BOM、舊檔有，兩者皆可讀）；`ConvertFrom-Json` 陣列 pipeline 陷阱已修，`@()` 包裹留著當跨版本保險
-- 排程：crontab `0 20 * * 1-5 /home/felix/run-stock-briefing.sh`（該 wrapper 以 `claude -p --permission-mode auto` 跑 SKILL.md，日誌 `~/stock-briefing-cron.log`）；20:00 已收盤，當日流程用的是**當日**收盤資料
+- 排程：crontab `0 20 * * 1-5 /home/felix/run-stock-briefing.sh`（該 wrapper 以 `claude -p --output-format json --permission-mode auto` 跑 SKILL.md，日誌 `~/stock-briefing-cron.log`）；20:00 已收盤，當日流程用的是**當日**收盤資料。
+  SKILL.md 步驟四被排程專用提示詞要求用 `run-daily.sh --phase publish --no-push`（commit 但不 push）；`claude -p` 結束後 wrapper 解析 `--output-format json` 讀到今日 token 用量，呼叫 `finish-daily-push.ps1`（deterministic、非 AI）把用量 amend 進那個還沒推的 commit 並完成 push——這樣「今日 token 用量」才能跟今日的儀表板更新同一個 commit 出去，見 `lib/publish-gate.ps1` 的 `-NoPush` 與 `plan.md` 2026-07-25。互動執行（非排程）仍走一般 `--phase publish`，會直接 push，不受影響
 
 ## 共用模組（2026-07-25 起，`lib/` 與 `page-contract.json`）
 從前每支腳本各自帶一份同樣的邏輯，改一處要記得改六處。現在有單一來源：
@@ -49,15 +51,16 @@
 
 ## 別手改：每日流程會覆寫的部分
 - `guest-notes.json`（Gemini 每日產出，gitignore）；`prev-recs.json`（每日由 holdings-notes.json 抽出，gitignore）
-- splice 區塊全部：`<script id>` = `dashdata`、`holdingsmeta`、`holdingsnotes`（含 `_market` 市場風向）、`pkdata`、`pkline`、`pknotes`、`evaldata`（週五）、`backtest`（月跑）、`meta`（報告日期／行情基準日）、`appuser`（伺服器逐使用者注入，committed 檔案內**必須留空**）
+- splice 區塊全部：`<script id>` = `dashdata`、`holdingsmeta`、`holdingsnotes`（含 `_market` 市場風向）、`pkdata`、`pkline`、`pknotes`、`evaldata`（週五）、`backtest`（月跑）、`meta`（報告日期／行情基準日）、`tokenusage`（`finish-daily-push.ps1` 寫，非 AI）、`appuser`（伺服器逐使用者注入，committed 檔案內**必須留空**）
 - Hero 市值/損益/整體傾向（heroStance）、大盤數字、市場風向區（windBox/miSox/miMood）、權重、今日訊號、績效曲線 → 頁面 JS 自動算或 `_market` 覆寫，勿寫死；HTML 內殘留文字只是 JS 失敗時的 fallback
 
 ## 可以安全改
 CSS／版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯、渲染器、`screen.ps1` 選股演算法、`holdings.json`
 
 ## 硬性慣例（違反會壞）
-- `screen.ps1`／`update-holdings.ps1`／`publish.ps1`／`build-demo.ps1`／`lib/*.ps1` 存 **UTF-8 with BOM**（pwsh 7 不需要，保留是為了在 Windows PS5.1 也能解析中文字面值；`tests.ps1` [2] 驗證）
+- `screen.ps1`／`update-holdings.ps1`／`publish.ps1`／`build-demo.ps1`／`finish-daily-push.ps1`／`lib/*.ps1` 存 **UTF-8 with BOM**（pwsh 7 不需要，保留是為了在 Windows PS5.1 也能解析中文字面值；`tests.ps1` [2] 驗證）
 - **repo 只放 `$PublishAllowlist` 列出的檔案**（`lib/publish-gate.ps1`；`tests.ps1` [8] 驗證「每個被追蹤的檔案都在 allowlist 上」）。`data/`、`*.db`、`config.json`、`holdings-notes.json`、`holdings-context.json`、`stance-log.json` 都不在上面——前三個一直如此，後三個是 2026-07-25 才停止外洩的（見 plan.md）；推上 GitHub 的 `index.html` 一律由 `build-demo.ps1` 用 demo 持股重建，**不可**直接推 `update-holdings.ps1` 產出的版本——那裡面是 owner 的真實部位
+- **`$PublishAllowlist` 的項目要逐項個別 `git add`，不可合成一次 `git add -A -- $PublishAllowlist`**：清單裡任何一個 pathspec（含萬用字元）當下若一個檔案都沒對到，git 會整包 fatal、什麼都不 stage——`Invoke-PublishGate` 接著會誤判「沒東西可 commit」而回報成功，等於當天整個發佈悄悄失敗（2026-07-25 加 `token-usage.json` 時差點踩到，見 plan.md；`tests.ps1` [9] 有防回歸測試）。新增 allowlist 項目時留意這點
 - 伺服器只綁 `127.0.0.1`，對外一律經 tunnel（目前 Tailscale Funnel）；不要改成 `0.0.0.0` 或在路由器開埠
 - 換 tunnel 必須同步改 `config.json` 的 `proxyHeader`（Funnel=`X-Forwarded-For`、cloudflared=`CF-Connecting-IP`）——設錯不是無效，是讓所有按 IP 的節流可被偽造繞過
 - 抓官方 API 用 `Invoke-WebRequest`+手動 UTF-8 解碼（`Invoke-RestMethod` 會亂碼）；用現成的 `GetJson()`
@@ -65,6 +68,7 @@ CSS／版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯�
 - **台股紅漲綠跌**（--up 紅、--down 綠）；證交所日期是民國年（西元−1911）
 - picks-log／stance-log 讀取失敗**絕不可用空資料覆寫**（FATAL/skip 防護勿移除）
 - **改選股/評分/出場（`screen.ps1`）或判級（`lib/stance.ps1`）規則 → 必須同步更新 index.html 的「📐 現行選股與評價邏輯」卡（`id="logicCard"`）與 plan.md**
+- **升降 guest_plus 一律走 `auth.set_tier`（網頁走 `/admin` 或 `python3 -m server.admin tier`），不要直接 `UPDATE users SET tier`**：那個函式是唯一做 Claude 代碼預算檢查（`cfg["guestPlusCodeBudget"]`）的地方，繞過它等於繞過每日 Claude 成本的唯一硬上限
 
 ## 測試與部署
 - 預覽 `python3 -m http.server 8000`｜引擎 `pwsh -File screen.ps1`｜伺服器 `python3 -m server.server`

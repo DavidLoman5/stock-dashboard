@@ -224,6 +224,175 @@ class TestApproval(Base):
         self.assertEqual(left, 0)
 
 
+class TestGuestPlusTier(Base):
+    """guest_plus grants a per-account upgrade to Claude-quality, portfolio-blind analysis for
+    that account's own codes, capped in aggregate (cfg['guestPlusCodeBudget']) so the owner can
+    grant it freely without an unbounded Claude-cost blowup."""
+
+    def test_grant_and_revoke_round_trip(self):
+        uid = self.mkuser("kate")
+        auth.set_tier(self.conn, self.cfg, uid, "guest_plus", actor_id=1)
+        self.assertEqual(auth.find_user(self.conn, "kate")["tier"], "guest_plus")
+        auth.set_tier(self.conn, self.cfg, uid, "guest", actor_id=1)
+        self.assertEqual(auth.find_user(self.conn, "kate")["tier"], "guest")
+
+    def test_owner_tier_is_immutable(self):
+        uid = self.mkuser("owner1", tier="owner")
+        with self.assertRaises(auth.AuthError):
+            auth.set_tier(self.conn, self.cfg, uid, "guest_plus")
+
+    def test_only_guest_and_guest_plus_are_settable(self):
+        uid = self.mkuser("leo")
+        with self.assertRaises(auth.AuthError):
+            auth.set_tier(self.conn, self.cfg, uid, "owner")   # no self-promotion to owner
+        with self.assertRaises(auth.AuthError):
+            auth.set_tier(self.conn, self.cfg, uid, "bogus")
+
+    def test_grant_refused_once_budget_is_full(self):
+        self.cfg["guestPlusCodeBudget"] = 1
+        a = self.mkuser("alice")
+        b = self.mkuser("bob")
+        self.conn.execute(
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)", (a, "2330", "x", 1))
+        self.conn.execute(
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)", (b, "2454", "x", 1))
+        self.conn.commit()
+        auth.set_tier(self.conn, self.cfg, a, "guest_plus")
+        with self.assertRaises(auth.AuthError) as ctx:
+            auth.set_tier(self.conn, self.cfg, b, "guest_plus")
+        self.assertEqual(ctx.exception.status, 409)
+        self.assertEqual(auth.find_user(self.conn, "bob")["tier"], "guest")   # refusal, not partial grant
+
+    def test_code_the_owner_already_holds_does_not_use_up_budget(self):
+        owner_id = self.mkuser("owner1", tier="owner")
+        self.conn.execute(
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)", (owner_id, "0050", "x", 1))
+        self.cfg["guestPlusCodeBudget"] = 0
+        a = self.mkuser("alice")
+        self.conn.execute(
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)", (a, "0050", "x", 1))
+        self.conn.commit()
+        auth.set_tier(self.conn, self.cfg, a, "guest_plus")   # adds nothing new -> must not be refused
+        self.assertEqual(auth.find_user(self.conn, "alice")["tier"], "guest_plus")
+
+    def test_holding_added_after_grant_can_silently_miss_the_budget_rather_than_error(self):
+        """set_tier only gates the grant itself. A guest_plus adding a holding afterward is a
+        normal holdings-edit call with no budget check in its path - payload.py's daily
+        selection is what actually enforces the cap, by just not promoting the overflow code."""
+        self.cfg["guestPlusCodeBudget"] = 1
+        a = self.mkuser("alice")
+        self.conn.execute(
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)", (a, "2330", "x", 1))
+        self.conn.commit()
+        auth.set_tier(self.conn, self.cfg, a, "guest_plus")
+        self.conn.execute(
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)", (a, "2454", "x", 1))
+        self.conn.commit()
+        in_budget = payload.guest_plus_codes_in_budget(self.conn, self.cfg["guestPlusCodeBudget"])
+        self.assertEqual(len(in_budget), 1)   # the cap held...
+        self.assertEqual(len(payload.guest_plus_codes_ranked(self.conn)), 2)   # ...only by dropping one
+
+    def test_migration_preserves_ids_and_autoincrement_does_not_collide(self):
+        path = os.path.join(self.tmp, "legacy_tier.db")
+        conn = db.connect(path)
+        conn.executescript(
+            "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE,"
+            " display_name TEXT NOT NULL DEFAULT '', pw_hash TEXT NOT NULL, pw_salt TEXT NOT NULL,"
+            " tier TEXT NOT NULL DEFAULT 'guest' CHECK (tier IN ('owner','guest')),"
+            " status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active','suspended')),"
+            " note TEXT NOT NULL DEFAULT '', reg_ip TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,"
+            " approved_at TEXT, approved_by INTEGER, last_login_at TEXT);"
+        )
+        conn.execute(
+            "INSERT INTO users (id, username, pw_hash, pw_salt, tier, status, created_at) "
+            "VALUES (5, 'legacy', 'h', 's', 'guest', 'active', '2026-01-01T00:00:00Z')"
+        )
+        conn.commit()
+        conn.close()
+        db.close_all()
+
+        conn = db.init_schema(path)
+        row = conn.execute("SELECT id FROM users WHERE username = 'legacy'").fetchone()
+        self.assertEqual(row["id"], 5)   # sessions/holdings pointing at id=5 must still resolve
+        conn.execute("UPDATE users SET tier = 'guest_plus' WHERE id = 5")   # CHECK now allows it
+        conn.commit()
+        new_id = auth.create_user(conn, "fresh", "correct-horse-1")
+        self.assertGreater(new_id, 5)   # autoincrement did not reset and collide with id 5
+
+    def test_migration_is_a_no_op_on_an_already_migrated_db(self):
+        db.migrate_tier_check(self.conn)   # setUp already ran init_schema once
+        self.conn.execute("SELECT 1 FROM users")   # table still usable, nothing corrupted
+
+    def test_admin_api_grants_tier_and_reports_budget(self):
+        owner_id = self.mkuser("owner1", tier="owner")
+        owner = auth.find_user(self.conn, "owner1")
+        target_id = self.mkuser("mia")
+
+        status, body = api.admin_action(
+            FakeCtx(self.conn, self.cfg, owner, body={"action": "set_tier", "id": target_id, "tier": "guest_plus"})
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(auth.find_user(self.conn, "mia")["tier"], "guest_plus")
+
+        status, body = api.admin_users(FakeCtx(self.conn, self.cfg, owner))
+        self.assertEqual(body["guestPlusBudget"], {"used": 0, "cap": self.cfg["guestPlusCodeBudget"]})
+
+    def test_admin_api_non_owner_cannot_set_tier(self):
+        self.mkuser("owner1", tier="owner")
+        target_id = self.mkuser("nina")
+        target = auth.find_user(self.conn, "nina")
+        with self.assertRaises(api.ApiError) as ctx:
+            api.admin_action(
+                FakeCtx(self.conn, self.cfg, target, body={"action": "set_tier", "id": target_id, "tier": "guest_plus"})
+            )
+        self.assertEqual(ctx.exception.status, 403)
+
+
+class TestGuestPlusCodeBudget(Base):
+    def test_ranked_excludes_owner_codes_and_orders_earliest_grant_first(self):
+        owner_id = self.mkuser("owner1", tier="owner")
+        self.conn.execute(
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
+            (owner_id, "0050", "x", 1))
+        a = self.mkuser("alice", tier="guest_plus")
+        b = self.mkuser("bob", tier="guest_plus")
+        for uid, code in ((a, "0050"), (a, "9999"), (b, "1101")):
+            self.conn.execute(
+                "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)", (uid, code, "x", 1))
+        # explicit timestamps: bob granted before alice, regardless of wall-clock test speed
+        self.conn.execute(
+            "INSERT INTO audit (ts, user_id, action, detail) VALUES (?,?,?,?)",
+            ("2026-01-01T00:00:00Z", b, "set_tier", "tier=guest_plus by=1"))
+        self.conn.execute(
+            "INSERT INTO audit (ts, user_id, action, detail) VALUES (?,?,?,?)",
+            ("2026-01-02T00:00:00Z", a, "set_tier", "tier=guest_plus by=1"))
+        self.conn.commit()
+
+        ranked = payload.guest_plus_codes_ranked(self.conn)
+        self.assertNotIn("0050", ranked)             # the owner already covers it
+        self.assertEqual(ranked, ["1101", "9999"])    # bob's earlier grant outranks alice's
+
+    def test_budget_caps_the_ranked_list(self):
+        a = self.mkuser("alice", tier="guest_plus")
+        for code in ("1101", "2330", "9999"):
+            self.conn.execute(
+                "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)", (a, code, "x", 1))
+        self.conn.execute(
+            "INSERT INTO audit (ts, user_id, action, detail) VALUES (?,?,?,?)",
+            ("2026-01-01T00:00:00Z", a, "set_tier", "tier=guest_plus by=1"))
+        self.conn.commit()
+        self.assertEqual(payload.guest_plus_codes_in_budget(self.conn, 2), ["1101", "2330"])
+
+    def test_plain_guest_codes_never_enter_the_ranking(self):
+        self.mkuser("owner1", tier="owner")
+        guest_id = self.mkuser("plain_guest")   # tier stays 'guest', never granted
+        self.conn.execute(
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
+            (guest_id, "2330", "x", 1))
+        self.conn.commit()
+        self.assertEqual(payload.guest_plus_codes_ranked(self.conn), [])
+
+
 class TestTiers(Base):
     NOTES = {
         "_market": {"mood": "偏多", "windLead": "大盤收紅",
@@ -233,7 +402,10 @@ class TestTiers(Base):
     }
 
     def test_guest_gets_factual_fields_but_not_owner_advice(self):
-        got = payload.notes_for("guest", ["0050"], self.NOTES)
+        # private_codes={"0050"}: this is the owner's own holding, same as a real bootstrap()
+        # call would pass - without it there is nothing to distinguish "0050" from a
+        # guest_plus-budgeted code, whose rec IS meant to be shared (see TestGuestPlusTier).
+        got = payload.notes_for("guest", ["0050"], self.NOTES, private_codes={"0050"})
         self.assertEqual(got["0050"]["tech"], "站上月線")
         self.assertNotIn("rec", got["0050"])    # portfolio-level advice is owner-only
         self.assertNotIn("news", got["0050"])
@@ -255,6 +427,20 @@ class TestTiers(Base):
         got = payload.notes_for("guest", ["0050"], notes, private_codes={"0050", "00947", "00981A"})
         self.assertIn("tech", got["0050"])
         self.assertNotIn("fund", got["0050"])
+
+    def test_guest_plus_budgeted_code_rec_is_shared_but_owners_own_rec_is_not(self):
+        notes = {
+            "0050": {"tech": "站上月線", "rec": "owner 專屬建議"},                          # owner's own
+            "2603": {"tech": "散裝景氣回升", "rec": "若站回月線則觀察轉多。非買賣指令。"},   # guest_plus code
+        }
+        got = payload.notes_for("guest", ["0050", "2603"], notes, private_codes={"0050"})
+        self.assertNotIn("rec", got["0050"])
+        self.assertEqual(got["2603"]["rec"], "若站回月線則觀察轉多。非買賣指令。")
+
+    def test_guest_plus_code_rec_still_respects_the_other_holding_filter(self):
+        notes = {"2603": {"rec": "與 0050 同步操作。非買賣指令。"}}
+        got = payload.notes_for("guest", ["2603"], notes, private_codes={"0050"})
+        self.assertNotIn("rec", got.get("2603", {}))
 
     def test_filter_does_not_trip_on_prices_or_the_notes_own_code(self):
         notes = {"0050": {"tech": "0050 收 44,850.81 點、成交 9,306 億、融資 5,637 張"}}
@@ -290,7 +476,9 @@ class TestGuestNoteMerge(Base):
     }
 
     def test_claude_wins_where_it_exists_and_rec_always_comes_from_gemini(self):
-        got = payload.notes_for("guest", ["0050"], self.CLAUDE, guest_notes=self.GEMINI)
+        # 0050 is the owner's own holding here (see test_rec_for_a_guest_plus_budgeted_code
+        # above for the code NOT in private_codes, where Claude's rec is meant to win too).
+        got = payload.notes_for("guest", ["0050"], self.CLAUDE, private_codes={"0050"}, guest_notes=self.GEMINI)
         self.assertEqual(got["0050"]["tech"], "Claude 技術")
         self.assertEqual(got["0050"]["sigFund"], ["neu", "中性"])
         self.assertEqual(got["0050"]["rec"], "若跌破季線則減碼。非買賣指令。")
