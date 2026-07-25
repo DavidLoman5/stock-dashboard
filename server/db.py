@@ -107,7 +107,10 @@ def migrate_tier_check(conn):
         "  approved_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,"
         "  last_login_at TEXT"
         ");"
-        "INSERT INTO users SELECT * FROM users_pre_guest_plus;"
+        "INSERT INTO users (id, username, display_name, pw_hash, pw_salt, tier, status, note,"
+        "  reg_ip, created_at, approved_at, approved_by, last_login_at)"
+        " SELECT id, username, display_name, pw_hash, pw_salt, tier, status, note,"
+        "  reg_ip, created_at, approved_at, approved_by, last_login_at FROM users_pre_guest_plus;"
         "DROP TABLE users_pre_guest_plus;"
     )
     conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('users', 'users_pre_guest_plus')")

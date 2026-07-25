@@ -358,6 +358,43 @@ riskRow／riskContrib／eqHead **輸出完全一致**，確認是純重構。
 現在是 repo 的一部分；jsdom/canvas 仍不進 repo（`index.html` 必須維持零相依），
 用 `NODE_PATH` 指到暫存的 node_modules。
 
+### 2026-07-25 事故：伺服器頁面全白（服務跑舊碼＋既有 migration bug 兩層疊加）
+
+使用者回報 `felix-server.tailf8b922.ts.net` 頁面幾乎空白（Hero 數字是 `—`、殘留舊新聞文字）。
+用 claude-in-chrome 開真實瀏覽器讀 console 才看到，curl／jsdom 對這台伺服器都測不到——
+症狀只在「登入後的個人化頁面」才會炸，靜態 demo 頁（GitHub Pages）完全正常。
+
+**第一層、觸發原因**：`stock-dashboard.service` 是 07-24 11:31 啟動的常駐 process，但「持股單位
+張改股」（commit `ef38837`）07-24 20:59 才 commit——**晚於服務啟動**。服務跑的是記憶體裡的舊碼，
+`payload.holdings_meta()` 吐出的欄位還叫 `lots`，前端 JS 已經改讀 `h.shares` 去算持股卡片
+（`fmt(h.shares)`），對 `undefined` 呼叫 `.toLocaleString()` 直接拋例外、把整支渲染 script 卡死。
+**教訓：`server/` 的變更 push 上去不會自動生效，process 要重啟才會載入新碼**——跟 `index.html`
+這種每次請求都重讀的檔案完全不同的部署模型，很容易忘記。
+
+**第二層、重啟時炸出的既有 bug**：重啟後 `db.migrate_tier_check()`（guest_plus 那次遷移，
+`server/db.py`）用 `INSERT INTO users SELECT * FROM users_pre_guest_plus`——`SELECT *` 是按
+**欄位順序**而非名稱複製。但既有 DB 的 `display_name` 欄位是後來用 `ALTER TABLE ADD COLUMN`
+補上去的，順序排在最後；新表的 `CREATE TABLE` 卻把它排在第 3 欄——順序對不上，每一欄的值全部
+錯位塞進去，owner 那筆的 `approved_at`（NULL）錯位塞進新表 `created_at`（NOT NULL）直接撞
+constraint，`INSERT` 整句被 SQLite rollback，新 `users` 表變空、舊資料孤兒在 `users_pre_guest_plus`
+（**資料沒遺失，只是搬錯地方**）。`ALTER TABLE ... RENAME` 還會**自動**把 `sessions`／`invites`／
+`holdings`／`trades` 裡指向 `users` 的外鍵定義改成指向 `users_pre_guest_plus`，這張表後來被
+`DROP` 掉，四張表的外鍵定義變成指向不存在的表，`PRAGMA foreign_keys=ON` 一生效就整個炸開。
+
+**修法**：
+1. `server/db.py` 的 `INSERT` 改成明確列欄位名稱，不再依賴順序（已 commit）
+2. 手動修復當時已損毀的 `data/app.db`：先用 `INSERT INTO users (欄位...) SELECT 欄位... FROM
+   users_pre_guest_plus` 把 3 筆帳號用正確對應寫回去；再用 `PRAGMA writable_schema=ON` +
+   `UPDATE sqlite_master SET sql=REPLACE(...)` 把四張表 CREATE TABLE 語句裡的表名文字改回
+   `users`（**不動資料或索引**，只是修 schema 文字，比整表重建安全），`foreign_key_check`／
+   `integrity_check` 皆確認乾淨
+3. 備份留在 `data/app.db.bak-20260725155148`（gitignore，僅本機）
+
+**後續要做**：`git push` 完若動到 `server/` 下的檔案，要記得 `systemctl --user restart
+stock-dashboard.service`，不然會有一段時間服務跑舊碼、吐出的資料格式跟前端對不上而整頁空白
+且不報錯（伺服器 log 完全正常，只有瀏覽器 console 看得到）。目前沒有部署後自動重啟的機制，
+是純手動步驟，容易忘記——值得評估要不要在 `publish.ps1` 或另一支 deploy 腳本裡補上這一步
+（但要小心：重啟會讓當下所有登入 session 的請求短暫中斷，服務本身無 zero-downtime 機制）。
 
 
 - 2026-07-24 **v18.1 修復 demo 過濾被 publish 覆蓋（隱私事故）**：`run-daily.sh` 的 publish 階段
