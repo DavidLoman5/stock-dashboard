@@ -35,12 +35,16 @@
 | `page-contract.json` | 頁面資料契約：每個 `<script id>` 對應的 `window.*` 名稱與 JSON depth，＋ 筆記欄位隱私政策（`noteFields.guest` / `noteFields.ownerOnly`） | 下面三個 lib＋`server/pagedata.py` |
 | `lib/pagedata.ps1` | `Set-PageBlocks` / `Get-PageBlockText`：唯一的 splice 實作 | 六支 .ps1 全部 |
 | `lib/publish-gate.ps1` | `Invoke-PublishGate`：唯一的對外出口（allowlist 上架＋內容掃描＋commit/push） | `publish.ps1` |
-| `lib/stance.ps1` | `Get-StanceGrade`：唯一的判級（判級）公式 | `update-holdings.ps1`；頁面只顯示結果 |
+| `lib/stance.ps1` | `Get-StanceGrade`：唯一的判級公式 | `update-holdings.ps1`；頁面只顯示結果 |
+| `lib/feed.ps1` | `Get-FeedJson`／`Get-FeedDailySeries`／`$FeedCols`：唯一的抓取、快取與欄位索引 | `screen.ps1`、`update-holdings.ps1`、`backtest.ps1` |
+| `tools/boot-check.js` | jsdom 實跑 index.html 並斷言（含 `window.ANALYTICS` 純函式） | 改前端後手動跑 |
 | `server/pagedata.py` | 同一份 `page-contract.json` 的 Python 端 | `server/server.py`、`payload.py` |
 
 - **splice 一律用 `Set-PageBlocks`**，別再手寫 `IndexOf('<script id=...')`。找不到 marker 或不認識的 block id 都會 throw（以前只警告然後照樣寫檔）
 - **`window.META` 是一般 block**，不再是對 HTML 做正則取代；報告日期由頁面從 META 帶出
 - **判級公式只改 `lib/stance.ps1`**，頁面 `adviseHolding` 只把分數翻成文字、不得再寫一份門檻
+- **抓官方資料一律走 `lib/feed.ps1`**：`Get-FeedJson`（重試＋UTF-8 手動解碼）、`Get-FeedDailySeries`（含完成月快取與 TWSE/TPEx 路由）。欄位索引在 `$FeedCols`——**T86（上市）與 TPEx dailyTrade（上櫃）欄位不同**（trust/total 是 10/18 vs 13/23），別混用。測試用 `Set-FeedTransport` 換掉傳輸層即可離線驗真正的解析路徑
+- **頁面的財務計算放在 `computeEquity()`**（純函式、不碰 DOM，掛在 `window.ANALYTICS`）；`buildEquity()` 只負責畫。新增計算照這個分法，才驗得動
 - **新增每日產出檔 → 預設不會被發佈**。要公開必須明確加進 `lib/publish-gate.ps1` 的 `$PublishAllowlist`；`tests.ps1` [8] 會擋下「已被 git 追蹤但不在 allowlist」的檔案
 
 ## 別手改：每日流程會覆寫的部分
@@ -65,7 +69,7 @@ CSS／版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯�
 ## 測試與部署
 - 預覽 `python3 -m http.server 8000`｜引擎 `pwsh -File screen.ps1`｜伺服器 `python3 -m server.server`
 - **改任何腳本後、commit 前必跑 `pwsh -File tests.ps1`**（離線、秒級）；**改 `server/` 下任何東西則必跑 `python3 -m unittest discover -s server -t .`**
-- **改 `index.html` 的 JS 後**：用 jsdom 實跑一次（`npm i jsdom canvas`，`runScripts:"dangerously"` ＋ shim `window.matchMedia`）。少了 canvas 套件 `getContext('2d')` 回 null，boot() 第一步就斷，後面全部不會執行——「沒有錯誤」會是假的。至少驗三種頁：正常、`HOLDINGS_META` 缺 `stance`、空投組 `{"_trades":[]}`
+- **改 `index.html` 的 JS 後**：`D=$(mktemp -d) && (cd "$D" && npm install jsdom canvas)` 然後 `NODE_PATH="$D/node_modules" node tools/boot-check.js index.html`。少了 canvas 套件 `getContext('2d')` 回 null，boot() 第一步就斷，後面全部不會執行——「沒有錯誤」會是假的。另驗 `HOLDINGS_META` 缺 `stance` 與空投組 `{"_trades":[]}` 兩種變體（腳本第三、四個參數可換掉某個 block）
 - **發佈前想看會推什麼**：`pwsh -File publish.ps1 -DryRun`（跑完整流程但不 commit/push）
 - 每日完整流程：`./run-daily.sh --phase fetch` →（AI 寫 notes）→ `./run-daily.sh --phase publish`
 - 部署：push `main`（2026-07-21 起使用者授權 Claude 自主 push，測試通過即可推）

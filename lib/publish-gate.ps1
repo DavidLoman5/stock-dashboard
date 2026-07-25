@@ -25,6 +25,7 @@ $PublishAllowlist = @(
   '*.ps1'
   'lib/*.ps1'
   'run-daily.sh'
+  'tools/'
   'server/'
   'docs/'
   'index.html'

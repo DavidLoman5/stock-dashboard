@@ -7,6 +7,7 @@
 # ASCII source only. Paths must stay cross-platform (no $env:TEMP - unset on Linux).
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $root 'lib/feed.ps1')
 . (Join-Path $root 'lib/pagedata.ps1')
 . (Join-Path $root 'lib/publish-gate.ps1')
 . (Join-Path $root 'lib/stance.ps1')
@@ -14,7 +15,7 @@ $fails=@()
 function Assert($ok,$name){ if($ok){ Write-Host "  PASS $name" } else { Write-Host "  FAIL $name"; $script:fails+=$name } }
 
 Write-Host "[1] syntax parse..."
-foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1','backtest.ps1','build-demo.ps1','lib/pagedata.ps1','lib/publish-gate.ps1','lib/stance.ps1')){
+foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1','backtest.ps1','build-demo.ps1','lib/pagedata.ps1','lib/publish-gate.ps1','lib/stance.ps1','lib/feed.ps1')){
   $tok=$null;$err=$null
   [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root $f),[ref]$tok,[ref]$err)
   Assert ($err.Count -eq 0) "syntax $f"
@@ -22,16 +23,18 @@ foreach($f in @('screen.ps1','update-holdings.ps1','evaluate.ps1','publish.ps1',
 }
 
 Write-Host "[2] UTF-8 BOM convention (pwsh 7 does not need it; kept so CJK literals survive a PS5.1/Windows run)..."
-foreach($f in @('screen.ps1','update-holdings.ps1','publish.ps1','build-demo.ps1','lib/pagedata.ps1','lib/publish-gate.ps1','lib/stance.ps1')){
+foreach($f in @('screen.ps1','update-holdings.ps1','publish.ps1','build-demo.ps1','lib/pagedata.ps1','lib/publish-gate.ps1','lib/stance.ps1','lib/feed.ps1')){
   $b=[IO.File]::ReadAllBytes((Join-Path $root $f))
   Assert ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) "BOM $f"
 }
 
 Write-Host "[3] extract functions from screen.ps1..."
+# Num/GetJson/GetDailySeries are one-line delegates to lib/feed.ps1 now and are tested
+# there directly (section [5]); only the logic screen.ps1 still owns is extracted here.
 $tok=$null;$err=$null
 $ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'screen.ps1'),[ref]$tok,[ref]$err)
 $fns=$ast.FindAll({param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]},$true)
-foreach($n in @('Num','DivSumSince','CheckRevCols','GetDailySeries')){
+foreach($n in @('DivSumSince','CheckRevCols')){
   $fd=$fns | Where-Object { $_.Name -eq $n } | Select-Object -First 1
   Assert ($null -ne $fd) "function $n exists"
   if($fd){ Invoke-Expression $fd.Extent.Text }
@@ -56,22 +59,76 @@ Assert ([math]::Abs($s2-10.0) -lt 1e-9) "10 percent boundary counted (got $s2, w
 $s3=DivSumSince $rows '20260702'          # since-date filter: only day3 event, which is capped away
 Assert ([math]::Abs($s3) -lt 1e-9) "sinceDt filter (got $s3, want 0)"
 
-Write-Host "[5] GetDailySeries cache read path (cache-hit must never fetch; array-shape guard)..."
-$tmp=Join-Path ([IO.Path]::GetTempPath()) ("kline-cache-test-"+[guid]::NewGuid().ToString('N'))
+Write-Host "[5] feed module: cache, live-fetch parse, market routing..."
+# The live-fetch branch had never been executed by a test: fetch, cache and parse were fused in
+# one function body, so the only way to stay offline was to stub the fetcher into throwing and
+# assert the cache path. Set-FeedTransport makes the fetch a seam, so the parsing that actually
+# reads the exchange response is now covered too.
+$tmp=Join-Path ([IO.Path]::GetTempPath()) ("feed-test-"+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
-$mkt=@{}
-$klineCache=$tmp
+
+# a. cache hit must not fetch at all
+Set-FeedTransport { param($u) throw "cache hit must never fetch (got $u)" }
 $fixture=@()
 for($i=1;$i -le 21;$i++){ $fixture += [ordered]@{ d="1/$i"; dt=("202501{0:00}" -f $i); o=10.0; h=11.0; l=9.0; c=(10.0+$i*0.1); chg=0.1; v=100 } }
 ConvertTo-Json -InputObject $fixture -Depth 3 -Compress | Out-File (Join-Path $tmp '9999-202501.json') -Encoding UTF8
-$ser=GetDailySeries '9999' @('20250101')
-Assert ($ser.Count -eq 21) "cache hit returns 21 rows (got $($ser.Count))"
-Assert ("$($ser[0].dt)" -eq '20250101' -and $ser[20].c -eq 12.1) "row fields intact (dt=$($ser[0].dt) c=$($ser[20].c))"
+$r=Get-FeedDailySeries -Code '9999' -Months @('20250101') -Market 't' -CacheDir $tmp -WithDt
+Assert ($r.Rows.Count -eq 21) "cache hit returns 21 rows (got $($r.Rows.Count))"
+Assert ("$($r.Rows[0].dt)" -eq '20250101' -and $r.Rows[20].c -eq 12.1) "row fields intact (dt=$($r.Rows[0].dt) c=$($r.Rows[20].c))"
+
+# b. a suspiciously short cache file is treated as corrupt and refetched
 $one=@([ordered]@{ d='1/2'; dt='20250102'; o=1;h=1;l=1;c=1.0;chg=0;v=1 })
 ConvertTo-Json -InputObject $one -Depth 3 -Compress | Out-File (Join-Path $tmp '9998-202501.json') -Encoding UTF8
 $threw=$false
-try{ $null=GetDailySeries '9998' @('20250101') }catch{ $threw=$true }   # <5 rows = corrupt -> refetch -> stub throws
+try{ $null=Get-FeedDailySeries -Code '9998' -Months @('20250101') -Market 't' -CacheDir $tmp }catch{ $threw=$true }
 Assert $threw "suspicious cache (<5 rows) falls through to refetch"
+
+# c. live TWSE parse: ROC dates -> yyyymmdd, share volume -> lots
+Set-FeedTransport {
+  param($u)
+  if($u -match 'STOCK_DAY\?date=(\d{6})'){
+    $ym=$Matches[1]; $data=@()
+    for($i=1;$i -le 6;$i++){
+      $data += ,@(("115/{0}/{1:00}" -f $ym.Substring(4,2),$i),"12345000","1","10.0","11.0","9.0",("{0}" -f (10.0+$i*0.1)),"0.10")
+    }
+    return [pscustomobject]@{ stat='OK'; data=$data }
+  }
+  return $null
+}
+$r=Get-FeedDailySeries -Code '2330' -Months @('20250601') -Market 't' -WithDt
+Assert ($r.Rows.Count -eq 6) "live TWSE parse returns 6 bars (got $($r.Rows.Count))"
+Assert ("$($r.Rows[0].dt)" -eq '20260601') "ROC 115/06/01 -> 20260601 (got $($r.Rows[0].dt))"
+Assert ($r.Rows[0].v -eq 12345) "TWSE share volume normalised to lots (got $($r.Rows[0].v))"
+
+# d. a no-trade day ('--' close) is skipped, never turned into a 0 close
+Set-FeedTransport {
+  param($u)
+  return [pscustomobject]@{ stat='OK'; data=@(
+    ,@('115/06/01','1000','1','10.0','11.0','9.0','--','0.0')
+    ,@('115/06/02','2000','1','10.0','11.0','9.0','10.5','0.5')
+  ) }
+}
+$r=Get-FeedDailySeries -Code '2330' -Months @('20250601') -Market 't'
+Assert ($r.Rows.Count -eq 1 -and $r.Rows[0].c -eq 10.5) "no-trade day skipped, close never 0 (rows=$($r.Rows.Count))"
+
+# e. 'auto' routing: TWSE empty -> TPEx, and TPEx volume is already lots
+Set-FeedTransport {
+  param($u)
+  if($u -match 'tradingStock'){
+    return [pscustomobject]@{ tables=@([pscustomobject]@{ data=@( ,@('115/06/01','900','1','5.0','5.5','4.5','5.2','0.1') ) }) }
+  }
+  return [pscustomobject]@{ stat='no data' }
+}
+$r=Get-FeedDailySeries -Code '6488' -Months @('20250601') -Market 'auto'
+Assert ($r.Market -eq 'o' -and $r.Rows.Count -eq 1) "auto routing falls back to TPEx (market=$($r.Market))"
+Assert ($r.Rows[0].v -eq 900) "TPEx volume already in lots, not divided (got $($r.Rows[0].v))"
+
+# f. the two institutional endpoints do NOT share a column layout - conflating them is the
+#    exact mistake hand-copied indices invite
+Assert ($FeedCols.T86.trust -eq 10 -and $FeedCols.T86.total -eq 18) "T86 (TWSE) trust/total = 10/18"
+Assert ($FeedCols.TpexInsti.trust -eq 13 -and $FeedCols.TpexInsti.total -eq 23) "TPEx insti trust/total = 13/23"
+
+Set-FeedTransport $null
 Remove-Item -Recurse -Force $tmp
 
 Write-Host "[6] CheckRevCols warns on layout change..."

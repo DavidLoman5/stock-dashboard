@@ -201,7 +201,7 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## ✅ 已完成
 
-### 2026-07-25 架構整理：把重複的邏輯收成模組（`/improve-codebase-architecture` 五個候選中的三個）
+### 2026-07-25 架構整理：把重複的邏輯收成模組（`/improve-codebase-architecture` 五個候選全做）
 
 起點是一次架構檢視，發現三處「同一件事寫了很多份」，而且每一處都已經造成過實際問題。
 
@@ -229,20 +229,31 @@ marker 的檢查），兩種語言，`dashdata`／`holdingsmeta`／`holdingsnote
   讀 `h.sig.chip[0]` 直接整頁中斷。這是**舊有**的地雷（K 線不足 25 根就會踩到），
   只是判級改由引擎供給後更容易踩。已在 `H` 建構時給中性預設值。
 
-測試：`tests.ps1` 新增 [9]（contract／gate／stance 共 20 項斷言），[8] 改為 allowlist 斷言；
-`server/test_server.py` 新增 shell 清空所有 contract block 的測試。兩套全綠，
-另以 jsdom 驗三種頁（正常／缺 stance／空投組）。
+測試：`tests.ps1` 91 項全綠（新增 [9] contract／gate／stance，[5] 改為測 feed 模組，
+[8] 改為 allowlist 斷言）；`server/test_server.py` 66 項全綠；
+`tools/boot-check.js` 以 jsdom 驗三種頁（正常／缺 stance／空投組）。
 
-**尚未做的兩個候選**（架構檢視有列，這次沒動）：
-- **行情抓取模組**：`GetJson` 有 3 份（timeout 已漂移 45/45/60），TWSE 欄位索引在
-  `screen.ps1`／`update-holdings.ps1`／`backtest.ps1` 之間手抄（註解直說「indexes proven in screen.ps1」），
-  `GetDailySeries` 把 HTTP＋快取＋解析綁在同一個函式裡，所以**實際抓取那條分支從來沒被測試執行過**
-  （測試只能 stub `GetJson` 讓它 throw，然後只驗快取命中）。做法：抽出 feed 模組，
-  live HTTP 與 fixture 兩個 adapter。
-- **頁面分析邏輯抽離**：`buildEquity` 約 75 行含息 TWR／波動／MDD／beta 的財務計算和 DOM 寫入混在一起，
-  `hydrate`／`fillTop`／`buildSignals` 同樣。抽成「投組進、結果出」的純函式後才能不開瀏覽器就驗算。
-  注意 `index.html` 必須維持單檔＋CSP `default-src 'none'`，所以是同一個 inline script 內部拆分，
-  不是改 module、也不引入 build step。
+**④ 行情抓取模組（`lib/feed.ps1`）** — `GetJson` 原本三份、timeout 已漂移（45/45/60），
+「抓一個代號的月 K、快取完成月、TWSE/TPEx 路由」兩份，其中一份的 OTC fallback **沒有快取**
+（所以上櫃持股每天都重抓四個月）。TWSE 欄位索引在腳本之間手抄，註解直說
+「indexes proven in screen.ps1」。現在集中成一個模組，`$FeedCols` 把欄位索引命名一次——
+過程中發現 **T86（上市）與 TPEx dailyTrade（上櫃）欄位其實不同**（trust/total 是 10/18 vs 13/23），
+第一版把兩者寫成同一組常數就是手抄會犯的錯，已分開並加斷言。
+`backtest.ps1` 的 60 秒 timeout 保留，但改成明寫 `$FeedTimeoutSec = 60`，不再是各自帶一份的副作用。
+關鍵收穫是 `Set-FeedTransport`：抓取變成可替換的接縫，**實際解析交易所回應的那條路徑第一次被測試執行到**
+（以前只能 stub 成 throw 然後驗快取命中）。另以真實網路各驗一次 TWSE 與 TPEx auto-routing。
+
+**⑤ 頁面財務計算抽離** — `buildEquity()` 原本把含息還原、TWR、波動、MDD、Beta、風險貢獻
+和 `getElementById` 混在同一個函式，等於非開瀏覽器不能驗算。拆成純函式 `computeEquity()`
+（掛 `window.ANALYTICS`）＋ 只負責畫的 `buildEquity()`。拆完用 jsdom 跑新舊兩版比對
+riskRow／riskContrib／eqHead **輸出完全一致**，確認是純重構。
+`index.html` 仍是單檔＋CSP `default-src 'none'`——這是同一段 inline script 內部的拆分，
+沒有改 module、沒有 build step。
+新測試驗到一條以前驗不到的性質：**期中買進是現金流不是報酬，TWR 必須維持 0%**。
+
+**測試腳本進 repo**：`tools/boot-check.js`（jsdom 實跑＋約 19 項斷言）。以前每次都要重寫一份，
+現在是 repo 的一部分；jsdom/canvas 仍不進 repo（`index.html` 必須維持零相依），
+用 `NODE_PATH` 指到暫存的 node_modules。
 
 
 

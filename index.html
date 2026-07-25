@@ -602,30 +602,33 @@ function buildCostPanel(){
 }
 (function(){const b=document.getElementById('costBtn');if(b)b.addEventListener('click',()=>{const p=document.getElementById('costPanel');p.hidden=!p.hidden;if(!p.hidden)buildCostPanel();});})();
 
-/* ---------- equity curve vs TAIEX + risk metrics ---------- */
-function buildEquity(){
- const cv=document.getElementById('eqChart'),rr=document.getElementById('riskRow');
- if(!cv||!rr)return;
+/* ---------- equity curve vs TAIEX + risk metrics ----------
+   計算與畫面分兩段：computeEquity() 只吃資料、只回傳數字，完全不碰 DOM；buildEquity() 才寫畫面。
+   這段是全頁最重的財務計算（含息還原、TWR、波動、MDD、Beta、風險貢獻），以前和 getElementById
+   綁在同一個函式裡，等於非開瀏覽器不能驗算。拆開後可以直接餵 fixture 斷言數字。
+   （index.html 仍是單檔＋CSP default-src 'none'，這是同一段 inline script 內部的拆分，
+     沒有改成 module、也沒有引入 build step。） */
+function computeEquity(holdings,dash,trades,shares,lastTrade){
  /* 除息還原：除息日官方 chg 是相對除息參考價，故 每股配息 = chg −（今收−昨收）；
     累加回序列即含息（total return）績效，大盤為價格指數未含息 */
  const maps={},cumDiv={};
- H.forEach(h=>{const s=DASH[h.code].series,m={},cd={};let cum=0;
+ holdings.forEach(h=>{const s=dash[h.code].series,m={},cd={};let cum=0;
   for(let i=0;i<s.length;i++){
    /* dv>10% 前收＝減資/除權等參考價調整、非現金股息，不還原 */
    if(i>0&&s[i].chg!=null&&s[i].c!=null&&s[i-1].c!=null){const dv=s[i].chg-(s[i].c-s[i-1].c);if(dv>0.005&&s[i-1].c>0&&dv/s[i-1].c<=0.10)cum+=dv;}
    m[s[i].d]=s[i].c;cd[s[i].d]=cum;}
   maps[h.code]=m;cumDiv[h.code]=cd;});
- const tmap={};DASH.TAIEX.forEach(d=>tmap[d.d]=d.c);
- let dates=DASH.TAIEX.map(d=>d.d).filter(d=>H.every(h=>maps[h.code][d]!=null));
- if(dates.length<10)return;
+ const tmap={};dash.TAIEX.forEach(d=>tmap[d.d]=d.c);
+ let dates=dash.TAIEX.map(d=>d.d).filter(d=>holdings.every(h=>maps[h.code][d]!=null));
+ if(dates.length<10)return null;
  /* ---- TWR：由 trades 反推每日實際股數與現金流；trades 為空時 flow=0、股數恆定，數學上等同舊算法 ---- */
- /* 序列日期 "M/D" 轉可比較的 yyyymmdd（由 META.lastTrade 年份向前回推，處理跨年） */
- const isoD=(function(){const out=new Array(dates.length);let y=+META.lastTrade.slice(0,4),pm=null;
+ /* 序列日期 "M/D" 轉可比較的 yyyymmdd（由 lastTrade 年份向前回推，處理跨年） */
+ const isoD=(function(){const out=new Array(dates.length);let y=+String(lastTrade).slice(0,4),pm=null;
   for(let i=dates.length-1;i>=0;i--){const [m,dd]=dates[i].split('/').map(Number);if(pm!=null&&m>pm)y--;pm=m;out[i]=y*10000+m*100+dd;}return out;})();
  const shDelta=dates.map(()=>null),flowsAt=new Array(dates.length).fill(0);
  let hasWinTrades=false;
- TRADES.forEach(t=>{
-  if(!SHARES.hasOwnProperty(t.code))return;
+ trades.forEach(t=>{
+  if(!shares.hasOwnProperty(t.code))return;
   const p=String(t.d).split('-');if(p.length<3)return;
   const tn=(+p[0])*10000+(+p[1])*100+(+p[2]);
   if(tn<=isoD[0]||tn>isoD[isoD.length-1])return;      /* 窗前=已含在期初股數；窗後=未來，忽略 */
@@ -634,23 +637,20 @@ function buildEquity(){
   (shDelta[i]=shDelta[i]||{})[t.code]=(shDelta[i][t.code]||0)+sh;
   flowsAt[i]+=sh*t.price;
   hasWinTrades=true;});
- const open={};H.forEach(h=>{open[h.code]=SHARES[h.code];});
+ const open={};holdings.forEach(h=>{open[h.code]=shares[h.code];});
  shDelta.forEach(m=>{if(m)for(const c in m)open[c]-=m[c];});
  const sharesAt=[];{let cur={...open};
   for(let i=0;i<dates.length;i++){const m=shDelta[i];if(m)for(const c in m)cur[c]=(cur[c]||0)+m[c];sharesAt.push({...cur});}}
- const mv=dates.map((d,i)=>H.reduce((s,h)=>s+(maps[h.code][d]+cumDiv[h.code][d])*Math.max(0,sharesAt[i][h.code]||0),0));
+ const mv=dates.map((d,i)=>holdings.reduce((s,h)=>s+(maps[h.code][d]+cumDiv[h.code][d])*Math.max(0,sharesAt[i][h.code]||0),0));
  /* 期初市值為 0（窗內才開倉）→ 從首個非零日起算 */
  let s0=0;while(s0<mv.length&&mv[s0]<=0)s0++;
- if(mv.length-s0<10)return;
+ if(mv.length-s0<10)return null;
  if(s0>0){dates=dates.slice(s0);}
  const mv2=mv.slice(s0),fl2=flowsAt.slice(s0);
  const idx=dates.map(d=>tmap[d]);
  const pn=[100];
  for(let i=1;i<mv2.length;i++){const prev=mv2[i-1];pn.push(prev>0?pn[pn.length-1]*((mv2[i]-fl2[i])/prev):pn[pn.length-1]);}
  const inx=idx.map(v=>v/idx[0]*100);
- const eh=document.getElementById('eqHead');
- if(eh&&hasWinTrades)eh.textContent='近三個月績效：投組（TWR·含息·依實際交易紀錄）vs 加權指數（起點＝100）';
- priceChart(cv,pn,cssv('--accent'),{grid:true,pad:{t:8,r:8,b:8,l:8},lw:2,overlays:[{vals:inx,color:cssv('--ink-faint')}]});
  const pRet=pn[pn.length-1]-100, iRet=inx[inx.length-1]-100;
  const rets=[],mrets=[];
  for(let i=1;i<pn.length;i++){rets.push(pn[i]/pn[i-1]-1);mrets.push(idx[i]/idx[i-1]-1);}
@@ -661,22 +661,35 @@ function buildEquity(){
  const cov=mean(rets.map((r,i)=>(r-mR)*(mrets[i]-mM)));
  const varM=mean(mrets.map(r=>(r-mM)**2));
  const beta=varM>0?cov/varM:0;
+ /* 個股風險貢獻 = 權重 × beta_i（減碼參考） */
+ const contrib=holdings.map(h=>{const cl2=dates.map(dd2=>maps[h.code][dd2]+cumDiv[h.code][dd2]);const r=[];
+  for(let i=1;i<cl2.length;i++)r.push(cl2[i]/cl2[i-1]-1);
+  const mr=mean(r);const cvr=mean(r.map((x,i)=>(x-mr)*(mrets[i]-mM)));
+  const b=varM>0?cvr/varM:0;return {code:h.code,v:h.weight*b};});
+ const contribTotal=contrib.reduce((a,c)=>a+Math.abs(c.v),0);
+ return {dates,pn,inx,pRet,iRet,vol,mdd,beta,hasWinTrades,contrib,contribTotal};
+}
+/* 讓 jsdom/node 測試不必開瀏覽器就能餵 fixture 驗算（CSP 無關，純物件） */
+window.ANALYTICS={computeEquity};
+
+function buildEquity(){
+ const cv=document.getElementById('eqChart'),rr=document.getElementById('riskRow');
+ if(!cv||!rr)return;
+ const e=computeEquity(H,DASH,TRADES,SHARES,META.lastTrade);
+ if(!e)return;
+ const eh=document.getElementById('eqHead');
+ if(eh&&e.hasWinTrades)eh.textContent='近三個月績效：投組（TWR·含息·依實際交易紀錄）vs 加權指數（起點＝100）';
+ priceChart(cv,e.pn,cssv('--accent'),{grid:true,pad:{t:8,r:8,b:8,l:8},lw:2,overlays:[{vals:e.inx,color:cssv('--ink-faint')}]});
  rr.innerHTML=`
-  <div class="rk">期間報酬（投組·含息）<b class="${plColor(pRet)}">${fmtSign(pRet,1)}%</b></div>
-  <div class="rk">期間報酬（大盤）<b class="${plColor(iRet)}">${fmtSign(iRet,1)}%</b></div>
-  <div class="rk">年化波動度<b>${vol.toFixed(1)}%</b></div>
-  <div class="rk">最大回撤<b class="down-txt">${(mdd*100).toFixed(1)}%</b></div>
-  <div class="rk">Beta（vs 大盤）<b>${beta.toFixed(2)}</b></div>`;
- // per-holding risk contribution = weight × beta_i (減碼參考)
+  <div class="rk">期間報酬（投組·含息）<b class="${plColor(e.pRet)}">${fmtSign(e.pRet,1)}%</b></div>
+  <div class="rk">期間報酬（大盤）<b class="${plColor(e.iRet)}">${fmtSign(e.iRet,1)}%</b></div>
+  <div class="rk">年化波動度<b>${e.vol.toFixed(1)}%</b></div>
+  <div class="rk">最大回撤<b class="down-txt">${(e.mdd*100).toFixed(1)}%</b></div>
+  <div class="rk">Beta（vs 大盤）<b>${e.beta.toFixed(2)}</b></div>`;
  const rc=document.getElementById('riskContrib');
- if(rc){
-  const contrib=H.map(h=>{const cl2=dates.map(dd2=>maps[h.code][dd2]+cumDiv[h.code][dd2]);const r=[];
-   for(let i=1;i<cl2.length;i++)r.push(cl2[i]/cl2[i-1]-1);
-   const mr=mean(r);const cv=mean(r.map((x,i)=>(x-mr)*(mrets[i]-mM)));
-   const b=varM>0?cv/varM:0;return {code:h.code,v:h.weight*b};});
-  const tot=contrib.reduce((a,c)=>a+Math.abs(c.v),0);
-  if(tot>0){contrib.sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
-   rc.innerHTML='<b>風險貢獻排序</b>（若要降波動，先動貢獻大者效果最大）：'+contrib.map(c=>`${c.code} <b class="num">${(Math.abs(c.v)/tot*100).toFixed(0)}%</b>`).join('・');}
+ if(rc&&e.contribTotal>0){
+  const contrib=[...e.contrib].sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
+  rc.innerHTML='<b>風險貢獻排序</b>（若要降波動，先動貢獻大者效果最大）：'+contrib.map(c=>`${c.code} <b class="num">${(Math.abs(c.v)/e.contribTotal*100).toFixed(0)}%</b>`).join('・');
  }
 }
 /* riskContrib 偶發首次載入空白（載入時序）——window load 後重跑一次，冪等安全 */

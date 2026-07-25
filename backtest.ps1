@@ -22,18 +22,15 @@
 # ASCII source only.
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $root 'lib/feed.ps1')       # Get-FeedJson / Get-FeedDailySeries / FeedCols
 . (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
-function Num($s){ if($null -eq $s){return $null}; $t=("$s" -replace '[^0-9\.\-]',''); if($t -notmatch '[0-9]'){return $null}; try{ return [double]$t }catch{ return $null } }
-function GetJson($url){
-  for($i=0;$i -lt 3;$i++){
-    try{
-      $resp=Invoke-WebRequest -Uri $url -TimeoutSec 60 -UseBasicParsing
-      $txt=[System.Text.Encoding]::UTF8.GetString($resp.RawContentStream.ToArray())
-      return ($txt | ConvertFrom-Json)
-    }catch{ Start-Sleep -Milliseconds 1500 }
-  }
-  return $null
-}
+# bodies live in lib/feed.ps1; the names stay so the call sites below read the same.
+# MI_INDEX returns the whole market for one day and is the slowest call in the repo, so this
+# script raises the shared timeout instead of quietly carrying its own copy of the fetcher
+# (which is how 45s here and 60s there drifted apart in the first place).
+$FeedTimeoutSec = 60
+function Num($s){ ConvertTo-FeedNum $s }
+function GetJson($url){ Get-FeedJson $url }
 
 $PANEL=200   # panel days kept (=> ~120 eval days after 60-day lookback + 20-day forward)
 

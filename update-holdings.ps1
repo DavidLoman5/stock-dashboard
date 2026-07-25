@@ -14,19 +14,12 @@ param(
 )
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $root 'lib/feed.ps1')       # Get-FeedJson / Get-FeedDailySeries / FeedCols
 . (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
 . (Join-Path $root 'lib/stance.ps1')     # Get-StanceGrade (the 判級 rule engine)
-function Num($s){ if($null -eq $s){return $null}; $t=("$s" -replace '[^0-9\.\-]',''); if($t -notmatch '[0-9]'){return $null}; try{ return [double]$t }catch{ return $null } }
-function GetJson($url){
-  for($i=0;$i -lt 3;$i++){
-    try{
-      $resp=Invoke-WebRequest -Uri $url -TimeoutSec 45 -UseBasicParsing
-      $txt=[System.Text.Encoding]::UTF8.GetString($resp.RawContentStream.ToArray())
-      return ($txt | ConvertFrom-Json)
-    }catch{ Start-Sleep -Milliseconds 1500 }
-  }
-  return $null
-}
+# bodies live in lib/feed.ps1; names kept so the call sites below read the same
+function Num($s){ ConvertTo-FeedNum $s }
+function GetJson($url){ Get-FeedJson $url }
 function SMAlast($a,$n){ if($a.Count -lt $n){return $null}; ($a[($a.Count-$n)..($a.Count-1)] | Measure-Object -Average).Average }
 # Quantities are shares. A `lots` key means the file predates that change (or came from an older
 # clone) - convert instead of rejecting, 1 lot = 1000 shares.
@@ -97,52 +90,16 @@ $otcCodes=@{}
 # break its DivSumSince/stale checks
 $klineCache=Join-Path $root 'kline-cache'
 if(-not (Test-Path $klineCache)){ New-Item -ItemType Directory -Path $klineCache | Out-Null }
-$curYM=(Get-Date).ToString('yyyyMM')
 foreach($c in $codes){
-  $serF=@()
-  foreach($mm in $months){
-    $ym=$mm.Substring(0,6)
-    $cf=Join-Path $klineCache "h-$c-$ym.json"
-    if($ym -lt $curYM -and (Test-Path $cf)){
-      try{
-        $hit=@()
-        # assign first, then enumerate via @(): version-agnostic (pwsh 7 unrolls, PS5.1 emits one item)
-        $cached=Get-Content $cf -Raw -Encoding UTF8 | ConvertFrom-Json
-        foreach($row in @($cached)){
-          if($null -eq $row){ continue }
-          $o=[ordered]@{}; foreach($pr in $row.PSObject.Properties){ $o[$pr.Name]=$pr.Value }
-          $hit += ,$o
-        }
-        if($hit.Count -ge 5){ $serF += $hit; continue }
-      }catch{}
-    }
-    $rowsM=@()
-    $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$c&response=json"
-    if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
-      $cv=Num $d[6]; if($cv -eq $null){ continue }   # no-trade day ("--"): skip, never let close become 0
-      $p="$($d[0])".Split('/')
-      $rowsM += [ordered]@{ d=("{0}/{1}" -f [int]$p[1],[int]$p[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double]$cv; chg=(Num $d[7]); v=[math]::Round((Num $d[1])/1000,0) }
-    } }
-    if($ym -lt $curYM -and $rowsM.Count -gt 0){
-      try{ ConvertTo-Json -InputObject $rowsM -Depth 3 -Compress | Out-File $cf -Encoding UTF8 }catch{}
-    }
-    $serF += $rowsM
-    Start-Sleep -Milliseconds 700
-  }
-  if($serF.Count -eq 0){
-    # not on TWSE -> OTC holding: fall back to TPEx tradingStock (ROC dates; volume already in lots)
-    foreach($mm in $months){
-      $ds="{0}/{1}/01" -f $mm.Substring(0,4),$mm.Substring(4,2)
-      $r=GetJson "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code=$c&date=$ds&response=json"
-      if($r -and $r.tables -and $r.tables[0].data){ foreach($d in $r.tables[0].data){
-        $cv=Num $d[6]; if($cv -eq $null){ continue }
-        $p="$($d[0])".Split('/')
-        $serF += [ordered]@{ d=("{0}/{1}" -f [int]$p[1],[int]$p[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double]$cv; chg=(Num $d[7]); v=[math]::Round([double](Num $d[1]),0) }
-      } }
-      Start-Sleep -Milliseconds 700
-    }
-    if($serF.Count -gt 0){ $otcCodes[$c]=$true; Write-Host "  $c routed to TPEx (OTC)" }
-  }
+  # 'auto': try TWSE for every month first and fall back to TPEx only if that produced nothing.
+  # Unlike screen.ps1 there is no whole-market table here to look the market up in, so the
+  # routing has to be discovered. The OTC branch is cached now too - the hand-written copy of
+  # this loop cached the TWSE months but not the TPEx fallback, so OTC holdings refetched four
+  # months of history on every single run.
+  $fs = Get-FeedDailySeries -Code $c -Months $months -Market 'auto' `
+                            -CacheDir $klineCache -CachePrefix 'h-'
+  $serF = $fs.Rows
+  if($fs.Market -eq 'o'){ $otcCodes[$c]=$true; Write-Host "  $c routed to TPEx (OTC)" }
   $DASH[$c]=[ordered]@{ series=$serF; inst=@(); margin=@() }
   Write-Host "  $c series=$($serF.Count)"
 }

@@ -3,18 +3,12 @@
 # v2: regime-aware scoring, 20-day auto-close tracking, dedupe, spark output
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $root 'lib/feed.ps1')       # Get-FeedJson / Get-FeedDailySeries / FeedCols
 . (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
-function Num($s){ if($null -eq $s){return $null}; $t=("$s" -replace '[^0-9\.\-]',''); if($t -notmatch '[0-9]'){return $null}; try{ return [double]$t }catch{ return $null } }
-function GetJson($url){
-  for($i=0;$i -lt 3;$i++){
-    try{
-      $resp=Invoke-WebRequest -Uri $url -TimeoutSec 45 -UseBasicParsing
-      $txt=[System.Text.Encoding]::UTF8.GetString($resp.RawContentStream.ToArray())
-      return ($txt | ConvertFrom-Json)
-    }catch{ Start-Sleep -Milliseconds 1500 }
-  }
-  return $null
-}
+# Num/GetJson keep their names so the ~30 call sites below read the same; the bodies live in
+# lib/feed.ps1 now, because there used to be three copies of each and the timeouts had drifted.
+function Num($s){ ConvertTo-FeedNum $s }
+function GetJson($url){ Get-FeedJson $url }
 function IsElec($ind){ foreach($k in @('半導體','電子','電腦','光電','通信','資訊')){ if("$ind" -like "*$k*"){ return $true } } return $false }
 function StripK($obj){ $o=[ordered]@{}; foreach($pr in $obj.PSObject.Properties){ if($pr.Name -ne 'kline'){ $o[$pr.Name]=$pr.Value } }; [pscustomobject]$o }
 # daily OHLCV series routed by market (TWSE STOCK_DAY / TPEx tradingStock); dt=yyyymmdd for date math
@@ -27,51 +21,11 @@ try{
   Get-ChildItem $klineCache -Filter '*.json' | Where-Object { $_.Name -match '-(\d{6})\.json$' -and $Matches[1] -lt $pruneYM } | Remove-Item -Force
 }catch{}
 function GetDailySeries($code,$mms){
-  $serX=@()
+  # market is known upfront here (the whole-market tables in [1/8] said so), so no 'auto' probe
   $isO = ($mkt.ContainsKey($code) -and $mkt[$code] -eq 'o')
-  $curYM=(Get-Date).ToString('yyyyMM')
-  foreach($mm in $mms){
-    $ym=$mm.Substring(0,6)
-    $cf=Join-Path $klineCache "$code-$ym.json"
-    if($ym -lt $curYM -and (Test-Path $cf)){
-      try{
-        $hit=@()
-        # assign first, then enumerate via @(): works whether ConvertFrom-Json enumerates the array
-        # (pwsh 7) or emits it as ONE Object[] pipeline item (Windows PS5.1); also handles 1-row files
-        $cached=Get-Content $cf -Raw -Encoding UTF8 | ConvertFrom-Json
-        foreach($row in @($cached)){
-          if($null -eq $row){ continue }
-          $o=[ordered]@{}; foreach($pr in $row.PSObject.Properties){ $o[$pr.Name]=$pr.Value }
-          $hit += ,$o
-        }
-        # sanity: a real month has >=5 trade days; anything less means corrupt cache -> refetch live
-        if($hit.Count -ge 5){ $serX += $hit; continue }
-      }catch{}
-    }
-    $rowsM=@()
-    if($isO){
-      $ds="{0}/{1}/01" -f $mm.Substring(0,4),$mm.Substring(4,2)
-      $r=GetJson "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code=$code&date=$ds&response=json"
-      if($r -and $r.tables -and $r.tables[0].data){ foreach($d in $r.tables[0].data){
-        $cv=Num $d[6]; if($cv -eq $null){ continue }   # no-trade day ("--"): skip, never let close become 0
-        $dp="$($d[0])".Split('/')
-        $rowsM += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); dt=("{0}{1:00}{2:00}" -f ([int]$dp[0]+1911),[int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double]$cv; chg=(Num $d[7]); v=[math]::Round([double](Num $d[1]),0) }
-      } }
-    } else {
-      $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=$mm&stockNo=$code&response=json"
-      if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
-        $cv=Num $d[6]; if($cv -eq $null){ continue }   # no-trade day ("--"): skip, never let close become 0
-        $dp="$($d[0])".Split('/')
-        $rowsM += [ordered]@{ d=("{0}/{1}" -f [int]$dp[1],[int]$dp[2]); dt=("{0}{1:00}{2:00}" -f ([int]$dp[0]+1911),[int]$dp[1],[int]$dp[2]); o=(Num $d[3]); h=(Num $d[4]); l=(Num $d[5]); c=[double]$cv; chg=(Num $d[7]); v=[math]::Round([double](Num $d[1])/1000,0) }
-      } }
-    }
-    if($ym -lt $curYM -and $rowsM.Count -gt 0){
-      try{ ConvertTo-Json -InputObject $rowsM -Depth 3 -Compress | Out-File $cf -Encoding UTF8 }catch{}
-    }
-    $serX += $rowsM
-    Start-Sleep -Milliseconds 700
-  }
-  return ,$serX
+  $r = Get-FeedDailySeries -Code $code -Months $mms -Market $(if($isO){'o'}else{'t'}) `
+                           -CacheDir $klineCache -WithDt
+  return ,$r.Rows
 }
 # strip the internal dt field before splicing kline into the page (saves bytes; JS only needs d/o/h/l/c/chg/v)
 function StripDt($rows){ $out=@(); foreach($r in $rows){ $o=[ordered]@{}; foreach($k in @('d','o','h','l','c','chg','v')){ $o[$k]=$r[$k] }; $out += ,$o }; return ,$out }
