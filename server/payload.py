@@ -252,6 +252,12 @@ def bootstrap(conn, cfg, user):
     if not isinstance(backtest, dict) or not backtest.get("rows"):
         backtest = None
 
+    # daily AI token usage (written by finish-daily-push.ps1, non-AI, cost transparency only -
+    # same figure already shown to everyone on the public GitHub Pages demo, so no tier gate here
+    token_usage = _read_json(_root("token-usage.json"), None)
+    if not isinstance(token_usage, dict) or not token_usage.get("date"):
+        token_usage = None
+
     # divNote lives in the daily meta export; reuse the owner run's values (they are per-code
     # ex-dividend facts, not personal)
     shared_meta = _read_json(os.path.join(data_dir, "holdings-meta.json"), {}) or {}
@@ -310,6 +316,7 @@ def bootstrap(conn, cfg, user):
         "picksNotes": picks_notes,
         "eval": eval_report,
         "backtest": backtest,
+        "tokenUsage": token_usage,
     }
 
 

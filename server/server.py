@@ -78,6 +78,7 @@ BLOCK_SOURCES = (
     ("pknotes", "picksNotes"),
     ("evaldata", "eval"),
     ("backtest", "backtest"),
+    ("tokenusage", "tokenUsage"),
 )
 
 
