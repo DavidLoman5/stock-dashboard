@@ -56,8 +56,8 @@ divNote 近期除息日。
 - tech: 技術面 2-3 句。要引用 ma20 / ma60 的實際數字說明價格位置與月線斜率。
 - chip: 籌碼面 2-3 句。外資連續買賣的方向與力道變化、融資是增是減，兩者合起來代表什麼。
 - fund: 基本面 2-3 句。個股講產業與獲利結構；ETF 講成分題材與產業景氣。
-- rec: 一句操作觀點，必須包含「若…則…」的條件句與至少一個取自 ma20/ma60 的具體價位，
-  結尾寫「非買賣指令。」禁用「酌量」「視情況」「保持關注」這類沒有觸發條件的模糊詞。
+- rec: 一句操作觀點，必須包含「若…則…」的條件句與至少一個取自 ma20/ma60 的具體價位。
+  禁用「酌量」「視情況」「保持關注」這類沒有觸發條件的模糊詞。
 
 硬性限制：
 - 只根據提供的數字寫，不要引用你記憶中的新聞、財報或目標價，也不要編造。
@@ -127,8 +127,6 @@ def parse_response(text, wanted_codes):
             label = _clean(sig[1])
             if kind in SIG_KINDS and label:
                 note["sigFund"] = [kind, label[:20]]
-        if note.get("rec") and not note["rec"].endswith("非買賣指令。"):
-            note["rec"] = (note["rec"].rstrip() + " 非買賣指令。")[:MAX_FIELD]
         if note:
             out[code] = note
     return out

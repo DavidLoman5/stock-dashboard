@@ -8,19 +8,19 @@
   :root{
     --bg:#f5f6f9;--surface:#fff;--surface-2:#eef0f5;--line:#dfe2ea;
     --ink:#1a1e27;--ink-soft:#545b6b;--ink-faint:#8b92a3;--accent:#b6842f;--accent-soft:#f2e7cf;
-    --up:#d0342c;--up-bg:#fbe9e7;--down:#12885e;--down-bg:#e2f3ec;--hold:#9a7a1e;--hold-bg:#f6edd6;--grid:#e6e9f0;
+    --up:#d0342c;--up-bg:#fbe9e7;--down:#12885e;--down-bg:#e2f3ec;--hold:#9a7a1e;--hold-bg:#f6edd6;--grid:#e6e9f0;--on-accent:#fff;
     --ma5:#e0902f;--ma20:#3f7fd0;--ma60:#8a5fc0;
     --shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);--radius:14px;
     --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",-apple-system,"Segoe UI",system-ui,sans-serif;
   }
   @media(prefers-color-scheme:dark){:root{
     --bg:#0e121b;--surface:#161c28;--surface-2:#1d2534;--line:#2a3346;--ink:#e7eaf1;--ink-soft:#a3abbd;--ink-faint:#6b7488;
-    --accent:#d9ad57;--accent-soft:#2a2413;--up:#ff5d51;--up-bg:#3a1c1a;--down:#34c48d;--down-bg:#123027;--hold:#e0b955;--hold-bg:#2e2712;--grid:#232c3d;
+    --accent:#d9ad57;--accent-soft:#2a2413;--up:#ff5d51;--up-bg:#3a1c1a;--down:#34c48d;--down-bg:#123027;--hold:#e0b955;--hold-bg:#2e2712;--grid:#232c3d;--on-accent:#0e121b;
     --ma5:#e8a94d;--ma20:#5b9be6;--ma60:#a884d8;
     --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
   }}
-  :root[data-theme="light"]{--bg:#f5f6f9;--surface:#fff;--surface-2:#eef0f5;--line:#dfe2ea;--ink:#1a1e27;--ink-soft:#545b6b;--ink-faint:#8b92a3;--accent:#b6842f;--accent-soft:#f2e7cf;--up:#d0342c;--up-bg:#fbe9e7;--down:#12885e;--down-bg:#e2f3ec;--hold:#9a7a1e;--hold-bg:#f6edd6;--grid:#e6e9f0;--ma5:#e0902f;--ma20:#3f7fd0;--ma60:#8a5fc0;--shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);}
-  :root[data-theme="dark"]{--bg:#0e121b;--surface:#161c28;--surface-2:#1d2534;--line:#2a3346;--ink:#e7eaf1;--ink-soft:#a3abbd;--ink-faint:#6b7488;--accent:#d9ad57;--accent-soft:#2a2413;--up:#ff5d51;--up-bg:#3a1c1a;--down:#34c48d;--down-bg:#123027;--hold:#e0b955;--hold-bg:#2e2712;--grid:#232c3d;--ma5:#e8a94d;--ma20:#5b9be6;--ma60:#a884d8;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);}
+  :root[data-theme="light"]{--bg:#f5f6f9;--surface:#fff;--surface-2:#eef0f5;--line:#dfe2ea;--ink:#1a1e27;--ink-soft:#545b6b;--ink-faint:#8b92a3;--accent:#b6842f;--accent-soft:#f2e7cf;--up:#d0342c;--up-bg:#fbe9e7;--down:#12885e;--down-bg:#e2f3ec;--hold:#9a7a1e;--hold-bg:#f6edd6;--grid:#e6e9f0;--on-accent:#fff;--ma5:#e0902f;--ma20:#3f7fd0;--ma60:#8a5fc0;--shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);}
+  :root[data-theme="dark"]{--bg:#0e121b;--surface:#161c28;--surface-2:#1d2534;--line:#2a3346;--ink:#e7eaf1;--ink-soft:#a3abbd;--ink-faint:#6b7488;--accent:#d9ad57;--accent-soft:#2a2413;--up:#ff5d51;--up-bg:#3a1c1a;--down:#34c48d;--down-bg:#123027;--hold:#e0b955;--hold-bg:#2e2712;--grid:#232c3d;--on-accent:#0e121b;--ma5:#e8a94d;--ma20:#5b9be6;--ma60:#a884d8;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.6;-webkit-font-smoothing:antialiased}
   .wrap{max-width:960px;margin:0 auto;padding:26px 16px 72px}
@@ -82,6 +82,15 @@
 
   .pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
   .pill.up{color:var(--up);background:var(--up-bg)}.pill.down{color:var(--down);background:var(--down-bg)}.pill.hold{color:var(--hold);background:var(--hold-bg)}
+  /* 判級六級：沿用同一組紅/綠 token（台股紅漲綠跌），靠「填滿程度」分強弱，所以六級在
+     淺色與深色下都各自可辨——加碼觀察/減碼觀察是淡底，減碼多一圈內框，兩端是實心反白。
+     實心那兩級的字色用 --on-accent（淺色=白、深色=頁面底色）：深色主題的 --up/--down 是
+     亮色，直接寫死白字對比只有 2~3:1，等於看不見。 */
+  .pill.add{color:var(--on-accent);background:var(--up)}
+  .pill.addwatch{color:var(--up);background:var(--up-bg)}
+  .pill.cutwatch{color:var(--down);background:var(--down-bg)}
+  .pill.cut{color:var(--down);background:var(--down-bg);box-shadow:inset 0 0 0 1.5px currentColor}
+  .pill.exit{color:var(--on-accent);background:var(--down)}
   .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
 
   .market{padding:18px 22px;display:grid;grid-template-columns:1.1fr 1fr;gap:6px 26px;align-items:center}
@@ -368,10 +377,16 @@
         籌碼閘門較寬（投信 ≥3 日且 &gt;20 萬股，或外資 ≥4 日且 &gt;100 萬股；成交值 ≥5000 萬）；只計籌碼 40＋技術 30（ETF 無 EPS/PE）；排除槓桿／反向／債券／期貨型（代碼尾碼 L/R/B/U）。<br><br>
         <b>⑥ 持股判級（規則引擎，同數據永遠同結論）</b><br>
         判級公式只有一份，在 <code>lib/stance.ps1</code>：每日流程算完，把 score 與四項分數隨 <code>HOLDINGS_META[代號].stance</code> 帶進頁面，頁面只負責把分數翻成文字。以前頁面自己再算一次同一套門檻，兩份已經漂移——分數 −1 在 stance-log 記為 trim、頁面卻顯示 hold，而 trim 是週歸因報告裡樣本最多的一格（46 筆中 23 筆）。引擎沒評到的代號（K 線不足 25 根）一律不顯示判級。<br>
-        四訊號各 ±1：<b>技術</b>（站上上揚月線 +1／跌破季線 −1）、<b>籌碼</b>（外資 5 日淨買且最新日買 +1／淨賣且最新日賣 −1）、<b>融資×法人</b>（融資增 &gt;3% 且法人賣 −1／融資減 &gt;2% 且法人買 +1）、<b>量價</b>（高檔爆量收弱 −1／量增價揚 +1）。總分 ≥2 加碼觀察、≥0 續抱、−1 減碼觀察、≤−2 防守。<br>
-        <b>判級轉變提醒</b>：每日比對前一交易日判級（stance-log），不同即在持股卡與 Hero 標示（例：續抱→防守）——轉變當天是檢視進退場的時點，判級本身的分數規則不變。<br>
+        四訊號加總（範圍 −8～+8）：<br>
+        <b>技術 ±3</b>（主導項）：收盤同時站上 5/10/20/60 均線 +3／站上 5/10/20 但季線未過 +2／站上上揚月線 +1；跌破季線 −1／跌破 10/20/60 −2／同時跌破 5/10/20/60 −3。K 線不足 60 根時季線未知，±2/±3 一律不觸發、退回 ±1 判斷。<br>
+        <b>籌碼 ±2</b>：外資 5 日合計與最新日同向 ±1；5 日「每一日」都同向再升為 ±2（看的是連續性、不是金額大小）。<br>
+        <b>融資×法人 ±1</b>：融資增 &gt;3% 且法人賣 −1／融資減 &gt;2% 且法人買 +1（只在籌碼項不為 0 時觸發）。<br>
+        <b>量價 ±2</b>：高檔爆量收弱 −1（量 ≥2×）／同條件量 ≥3× −2；量增價揚 +1（量 ≥1.5×）／量 ≥2.5× 且收在當日高檔 +2。<br>
+        <b>六級切點</b>：≥+3 <b>加碼</b>／+1～+2 <b>加碼觀察</b>／0 <b>續抱</b>／−1 <b>減碼觀察</b>／−2 <b>減碼</b>／≤−3 <b>清倉</b>。均線完全排列（±3）單獨就足以打到兩端；但因為是加總不是覆寫，籌碼或量價反向時會拉回一格——均線排列不會壓過壞掉的盤面。<br>
+        <b>兩日確認</b>：分數跨過切點後，同一個新級別要連續兩個交易日成立才真的換級，否則沿用前一交易日的級別（持股卡會標示「待確認」與今日原始判級）。六級比四級敏感，這是為了不讓單日雜訊天天翻牌。<br>
+        <b>判級轉變提醒</b>：每日比對前一交易日判級（stance-log），不同即在持股卡與 Hero 標示（例：續抱→減碼）——轉變當天是檢視進退場的時點，判級本身的分數規則不變。<br>
         <b>持股移動停利訊號</b>：已知成本價（輸入成本或交易均價）且獲利 ≥15%、收盤跌破 10 日線 → 顯示 🔔 訊號，與 ④ 選股引擎移動停利同一套規則；僅提示、不改判級。<br><br>
-        <span style="color:var(--ink-faint);font-size:11.5px">版本 2026-07-25（判級改由 lib/stance.ps1 單一實作，頁面只負責顯示）。選股規則以 screen.ps1 為準、判級以 lib/stance.ps1 為準；任何規則改動會同步更新本卡與 plan.md。權重調整鐵律：backtest 走前驗證樣本外顯著優於現行＋空頭區不劣化才動手，每月最多一次。以上為資訊整理與研究參考，非投資建議。</span>
+        <span style="color:var(--ink-faint);font-size:11.5px">版本 2026-07-28（判級改六級：加碼／加碼觀察／續抱／減碼觀察／減碼／清倉，評分細化為 −8～+8 並加入兩日確認）。選股規則以 screen.ps1 為準、判級以 lib/stance.ps1 為準；任何規則改動會同步更新本卡與 plan.md。權重調整鐵律：backtest 走前驗證樣本外顯著優於現行＋空頭區不劣化才動手，每月最多一次。以上為資訊整理與研究參考，非投資建議。</span>
       </div>
     </details>
   </div>
@@ -462,18 +477,28 @@ const H=HCODES.map((code,pi)=>{
   sig:{fund:n.sigFund||['neu','中性'],tech:['neu','資料不足'],chip:['neu','資料不足']},
   tech:n.tech||'（尚無分析，等待下次更新）',chip:n.chip||'（尚無分析，等待下次更新）',fund:n.fund||'（尚無分析，等待下次更新）',
   stance:'hold',stanceTxt:'續抱',
-  rec:n.rec||'尚無評論，等待下次更新。非買賣指令。',
+  rec:n.rec||'尚無評論，等待下次更新。',
   news:n.news||[]};
 });
 const HByCode={};H.forEach(h=>HByCode[h.code]=h);
 
 /* ---------- single source of truth: derive all numbers from official DASH data ---------- */
-/* 判級四級的顯示名與嚴重度排序（stance-log 同一套 key）；rank 小=更防禦 */
-const STANCE_NM={down:'防守',defend:'防守',trim:'減碼觀察',hold:'續抱',up:'加碼觀察'};
-const STANCE_RANK={defend:0,down:0,trim:1,hold:2,up:3};
+/* 判級六級的顯示名與嚴重度排序（stance-log 同一套 key）；rank 小=更防禦。
+   舊的四級 key（up/trim/defend/down）保留為唯讀相容：切換當天 prevStance 讀到的還是舊字串，
+   拿掉會讓當天整排「判級轉變」徽章靜靜消失。引擎已不再產生它們。 */
+const STANCE_NM={exit:'清倉',cut:'減碼',cutwatch:'減碼觀察',hold:'續抱',addwatch:'加碼觀察',add:'加碼',
+                 defend:'防守',down:'防守',trim:'減碼觀察',up:'加碼觀察'};
+const STANCE_RANK={exit:0,cut:1,cutwatch:2,hold:3,addwatch:4,add:5,
+                   defend:1,down:1,trim:2,up:4};
 /* 引擎 level -> [CSS class, 顯示文字]。必須宣告在 hydrate() 之前：adviseHolding 是函式宣告
    會提升，但 const 不會，放在後面會讓 hydrate 撞上 TDZ（整頁停在第一檔持股）。 */
-const LEVEL_VIEW={up:['up','加碼觀察'],hold:['hold','續抱'],trim:['hold','減碼觀察'],defend:['down','防守']};
+const LEVEL_VIEW={add:['add','加碼'],addwatch:['addwatch','加碼觀察'],hold:['hold','續抱'],
+                  cutwatch:['cutwatch','減碼觀察'],cut:['cut','減碼'],exit:['exit','清倉']};
+/* 過渡相容：切到六級的當下，已 splice 進頁面的 HOLDINGS_META 還是舊的四級字串。adviseHolding
+   會先把它正規化成新 key，否則整頁每一檔都查不到 LEVEL_VIEW、判級全部消失，要等隔天排程重跑
+   才恢復。舊 up=分數≥2、defend=分數≤−2，故各對到最接近的新級。正規化擺在單一入口，下游
+   （fillTop 計數、stanceKey、判級轉變）才只需要認得六個 key。每日流程跑過一次後即可刪除。 */
+const LEGACY_LEVEL={up:'addwatch',trim:'cutwatch',defend:'cut',down:'cut'};
 /* META arrives in its own data block (page-contract.json). Default it here so a blank block -
    the server shell before render_page fills it - degrades to dashes instead of throwing. */
 window.META=Object.assign({generated:'',lastTrade:''},window.META||{});
@@ -494,12 +519,15 @@ window.TOKEN_USAGE=window.TOKEN_USAGE||null;
    const t=h.auto.parts.tech[0],cA=h.auto.parts.chip[0]+h.auto.parts.extra[0];
    h.sig.tech=t>0?['bull','多方']:t<0?['bear','空方']:['neu','整理'];
    h.sig.chip=cA>0?['bull','多方']:cA<0?['bear','空方']:['neu','中性'];
-   /* 判級轉變：與 stance-log 同一套四級 key（up/hold/trim/defend），直接用引擎給的 level，
+   /* 判級轉變：與 stance-log 同一套六級 key（add/addwatch/hold/cutwatch/cut/exit），直接用引擎給的 level，
       不再由分數在頁面上重推一次門檻。轉變當天才是行動訊號——prevStance 由每日流程從
       stance-log 前一交易日帶入（第一天為 null 不顯示） */
    h.stanceKey=h.auto.level;
-   if(h.prevStance&&STANCE_NM[h.prevStance]&&h.prevStance!==h.stanceKey){
-    h.stanceChanged={from:h.prevStance,to:h.stanceKey,worse:STANCE_RANK[h.stanceKey]<STANCE_RANK[h.prevStance]};}}
+   /* prevStance 來自 stance-log，改制當天讀到的還是舊四級字串。先過同一張 LEGACY_LEVEL 再比，
+      否則「防守→減碼」這種純粹換名字的假轉變會在改制當天灑滿整頁。 */
+   const prevKey=h.prevStance?(LEGACY_LEVEL[h.prevStance]||h.prevStance):null;
+   if(prevKey&&STANCE_NM[prevKey]&&prevKey!==h.stanceKey){
+    h.stanceChanged={from:prevKey,to:h.stanceKey,worse:STANCE_RANK[h.stanceKey]<STANCE_RANK[prevKey]};}}
  });
  window.__totVal=tv;
 })();
@@ -512,20 +540,28 @@ window.TOKEN_USAGE=window.TOKEN_USAGE||null;
 function adviseHolding(h){
  const d=DASH[h.code];if(!d||!d.series||d.series.length<25)return null;
  const g=(HOLDINGS_META[h.code]||{}).stance;
- if(!g||!LEVEL_VIEW[g.level])return null;
+ if(!g)return null;
+ const lvKey=LEGACY_LEVEL[g.level]||g.level;
+ if(!LEVEL_VIEW[lvKey])return null;
  const s=d.series,cl=s.map(x=>x.c),L=cl.length,last=s[L-1];
  const ma=(n,i)=>{if(i==null)i=L-1;if(i<n-1)return null;let t=0;for(let k=i-n+1;k<=i;k++)t+=cl[k];return t/n;};
  const m20=ma(20),m60=ma(60);
  const tech=g.tech,chip=g.chip,extra=g.extra,vp=g.vp;
  let techTxt;
- if(tech>0)techTxt='站上上揚月線';
+ if(tech>=3)techTxt='同時站上 5/10/20/60 均線';
+ else if(tech===2)techTxt='站上 5/10/20 均線、季線未過';
+ else if(tech>0)techTxt='站上上揚月線';
+ else if(tech<=-3)techTxt='同時跌破 5/10/20/60 均線';
+ else if(tech===-2)techTxt='跌破 10/20/60 均線';
  else if(tech<0)techTxt='跌破季線';
  else if(m20&&last.c<m20)techTxt='月線下守季線（整理）';
  else techTxt='月線附近整理';
  const f=(d.inst||[]).map(x=>x.f);
  const f5=f.length?f.reduce((a,b)=>a+b,0):0;
  let chipTxt='法人買賣互見';
- if(chip>0)chipTxt=`外資5日淨買 ${fmtSignI(Math.round(f5))} 張`;
+ if(chip>=2)chipTxt=`外資連 ${f.length} 日淨買（合計 ${fmtSignI(Math.round(f5))} 張）`;
+ else if(chip>0)chipTxt=`外資5日淨買 ${fmtSignI(Math.round(f5))} 張`;
+ else if(chip<=-2)chipTxt=`外資連 ${f.length} 日淨賣（合計 ${fmtSignI(Math.round(f5))} 張）`;
  else if(chip<0)chipTxt=`外資5日淨賣 ${fmtSignI(Math.round(f5))} 張`;
  let extraTxt='';
  if(extra<0)extraTxt='融資增＋法人賣（籌碼轉亂）';
@@ -533,15 +569,17 @@ function adviseHolding(h){
  const vAvg=s.slice(-21,-1).reduce((a,x)=>a+x.v,0)/Math.max(1,Math.min(20,L-1));
  const vr=vAvg>0?last.v/vAvg:null;
  let vpTxt='';
- if(vp<0)vpTxt='高檔爆量收弱（出貨疑慮）';
+ if(vp<=-2)vpTxt='高檔爆天量收弱（出貨疑慮濃）';
+ else if(vp<0)vpTxt='高檔爆量收弱（出貨疑慮）';
+ else if(vp>=2)vpTxt='帶量長紅收高檔';
  else if(vp>0)vpTxt='量增價揚';
  else if(last.chg<0&&vr&&vr<0.8)vpTxt='量縮價跌（健康回檔）';
  const score=g.score;
- const lv=LEVEL_VIEW[g.level];
+ const lv=LEVEL_VIEW[lvKey];
  const trig=[];
  if(m60){if(last.c<m60)trig.push(`⚠ 已跌破季線 ${m60.toFixed(2)}——防守條件觸發`);else trig.push(`防守線＝季線 ${m60.toFixed(2)}`);}
  if(m20&&last.c<m20)trig.push(`月線 ${m20.toFixed(2)} 之下，站回前不宜加碼`);
- return {score,level:g.level,lv,parts:{tech:[tech,techTxt],chip:[chip,chipTxt],extra:[extra,extraTxt],vp:[vp,vpTxt]},trig};
+ return {score,level:lvKey,lv,raw:g.raw,pending:!!g.pending,parts:{tech:[tech,techTxt],chip:[chip,chipTxt],extra:[extra,extraTxt],vp:[vp,vpTxt]},trig};
 }
 function fillTop(){
  const tv=window.__totVal; let dp=0; H.forEach(h=>dp+=h.chg*SHARES[h.code]);
@@ -574,14 +612,15 @@ function fillTop(){
  /* 整體傾向：由規則引擎判級自動統計（永不與逐檔判級漂移）；HTML 內文字僅為 fallback */
  const hsEl=document.getElementById('heroStance');
  if(hsEl){
-  const NM={down:'防守',trim:'減碼觀察',hold:'續抱',up:'加碼觀察'};
-  const cnt={down:0,trim:0,hold:0,up:0};
-  H.forEach(h=>{if(!h.auto)return;const k=h.auto.lv[0],t=h.auto.lv[1];
-   cnt[k==='down'?'down':k==='up'?'up':(t==='減碼觀察'?'trim':'hold')]++;});
-  const tot=cnt.down+cnt.trim+cnt.hold+cnt.up;
+  /* 直接數引擎給的 level。以前這裡是拿顯示文字反推級別（t==='減碼觀察'），措辭一改就會靜默
+     失準——六級之後更禁不起，所以改成唯一真相 h.auto.level。順序＝由空到多。 */
+  const ORD=['exit','cut','cutwatch','hold','addwatch','add'];
+  const cnt={exit:0,cut:0,cutwatch:0,hold:0,addwatch:0,add:0};
+  H.forEach(h=>{if(!h.auto)return;if(cnt[h.auto.level]!=null)cnt[h.auto.level]++;});
+  const tot=ORD.reduce((a,k)=>a+cnt[k],0);
   if(tot>0){
-   const txt=['down','trim','hold','up'].filter(k=>cnt[k]>0).map(k=>`${NM[k]} ${cnt[k]} 檔`).join('・');
-   const c3={down:cnt.down,hold:cnt.trim+cnt.hold,up:cnt.up};
+   const txt=ORD.filter(k=>cnt[k]>0).map(k=>`${STANCE_NM[k]} ${cnt[k]} 檔`).join('・');
+   const c3={down:cnt.exit+cnt.cut,hold:cnt.cutwatch+cnt.hold,up:cnt.add+cnt.addwatch};
    let cls='hold';
    if(c3.down>c3.hold&&c3.down>c3.up)cls='down';else if(c3.up>c3.hold&&c3.up>c3.down)cls='up';
    hsEl.className='pill '+cls;
@@ -948,7 +987,9 @@ function openModal(i){
       const parts=[A.parts.tech[1],A.parts.chip[1],A.parts.extra[1],A.parts.vp[1]].filter(Boolean).join('＋');
       const chg=h.stanceChanged?`<br><b class="${h.stanceChanged.worse?'down-txt':'up-txt'}">⚠ 判級轉變：</b>前一交易日「${STANCE_NM[h.stanceChanged.from]}」→ 今日「${STANCE_NM[h.stanceChanged.to]}」——轉變當天是檢視進退場的時點`:'';
       const tr=h.trailSignal?`<br><b class="down-txt">🔔 移動停利訊號：</b>獲利 ${h.trailSignal.gain.toFixed(1)}%、收盤已回檔跌破 10 日線 ${h.trailSignal.ma10.toFixed(2)}（與選股引擎出場規則同步；非下單指令）`:'';
-      return `<div class="logicline"><b>🤖 規則引擎判定：</b>${parts} → <b>${A.lv[1]}</b>${chg}${tr}${A.trig.length?`<br><b>價位檢核：</b>${A.trig.join('；')}`:''}</div>`;})()}
+      /* 兩日確認：今日原始判級與確認級不同時要講出來，否則看起來像分數變了但級別卡住 */
+      const pend=A.pending?`<br><b>待確認：</b>今日原始判級為「${STANCE_NM[A.raw]||A.raw}」，需連續兩個交易日成立才改級——先維持「${A.lv[1]}」`:'';
+      return `<div class="logicline"><b>🤖 規則引擎判定：</b>${parts} → <b>${A.lv[1]}</b>${pend}${chg}${tr}${A.trig.length?`<br><b>價位檢核：</b>${A.trig.join('；')}`:''}</div>`;})()}
     <div class="rec" style="margin-top:8px"><span class="pill ${h.auto?h.auto.lv[0]:h.stance}"><span class="dot"></span>${h.auto?h.auto.lv[1]:h.stanceTxt}</span><span class="rtxt"><b>AI 觀點：</b>${esc(h.rec)}</span></div>
 
     <div class="subhd" style="margin-top:18px">近 24 小時新聞 · 國內外 · 附來源</div>
@@ -1173,9 +1214,9 @@ function buildEval(){
  let rows='';
  [['出場原因',E.byReason],['進場燈號',E.byLight],['籌碼分',E.byChip],['技術分',E.byTech],['基本分',E.byFund],['營收YoY',E.byYoy],['AI題材判讀',E.byAiTag],['產業',E.byInd]]
   .forEach(([t,o])=>{if(o&&Object.keys(o).length){rows+=`<tr><td colspan="4" style="color:var(--ink-faint);font-weight:700;padding-top:8px">${t}</td></tr>`;Object.entries(o).forEach(([k,v])=>{if(v)rows+=row(k,v);});}});
- const SN={up:'加碼觀察',hold:'續抱',trim:'減碼觀察',defend:'防守'};
+ /* 級別顯示名沿用 STANCE_NM（唯一一份），六級改版後這裡不必再維護第二份對照表 */
  const sf=E.stanceForward&&Object.keys(E.stanceForward).length?
-  `<div style="margin-top:7px;font-size:11.5px">持股判級驗證（判級後 20 筆平均報酬，以排程執行日為間隔、非嚴格 20 交易日）：${Object.entries(E.stanceForward).map(([k,v])=>`${SN[k]||k} <b class="num ${v.avgFwd20>=0?'up-txt':'down-txt'}">${fmtSign(v.avgFwd20)}%</b>（${v.n}）`).join('・')}——若「防守」明顯差於「續抱」，代表判級訊號有效。</div>`:'';
+  `<div style="margin-top:7px;font-size:11.5px">持股判級驗證（判級後 20 筆平均報酬，以排程執行日為間隔、非嚴格 20 交易日）：${Object.entries(E.stanceForward).map(([k,v])=>`${STANCE_NM[k]||k} <b class="num ${v.avgFwd20>=0?'up-txt':'down-txt'}">${fmtSign(v.avgFwd20)}%</b>（${v.n}）`).join('・')}——若「清倉／減碼」明顯差於「加碼」，代表判級訊號有效。六級改制後樣本重新累積，需約一個月才有數字。</div>`:'';
  box.innerHTML=`🧪 <b>歸因週報</b>（截至 ${E.generated}・已結案 ${E.closedN} 筆）：哪類進場條件真的贏大盤——樣本小時僅供方向、勿過度解讀。
   <div style="overflow-x:auto;margin-top:8px"><table class="tbl"><thead><tr><th style="text-align:left">分組</th><th>勝率(贏大盤)</th><th>平均超額</th><th>樣本</th></tr></thead><tbody>${rows}</tbody></table></div>${sf}`;
  box.style.display='';

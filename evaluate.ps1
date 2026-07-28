@@ -74,6 +74,12 @@ $stancePath=Join-Path $root 'stance-log.json'
 if(Test-Path $stancePath){
   try{
     $sl=@((Get-Content $stancePath -Raw -Encoding UTF8 | ConvertFrom-Json).rows)
+    # Only rows written under the six-level scheme are comparable: the old four levels came from a
+    # different score range (-4..+4, no two-day confirmation), so mixing them would average apples
+    # with pears. Presence of `raw` is the cutover marker - self-describing, no hard-coded date.
+    # Cost: ~21 new rows per code are needed before any forward return exists, so the weekly
+    # "持股判級驗證" block stays empty for about a month after the switch.
+    $sl=@($sl | Where-Object { $null -ne $_.raw })
     $byCode=@{}
     foreach($r in $sl){ $c="$($r.code)"; if(-not $byCode.ContainsKey($c)){ $byCode[$c]=@() }; $byCode[$c]+=,$r }
     $fw=@{}
@@ -90,7 +96,7 @@ if(Test-Path $stancePath){
       }
     }
     $stanceFw=[ordered]@{}
-    foreach($k in @('up','hold','trim','defend')){
+    foreach($k in @('add','addwatch','hold','cutwatch','cut','exit')){
       if($fw.ContainsKey($k)){ $v=$fw[$k]; $stanceFw[$k]=@{ n=$v.Count; avgFwd20=[math]::Round(($v|Measure-Object -Average).Average,2) } }
     }
     if($stanceFw.Keys.Count -gt 0){ $out.stanceForward=$stanceFw }

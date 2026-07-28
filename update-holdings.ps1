@@ -262,12 +262,18 @@ if(Test-Path $stancePath){
 # previous-trade-day stance per code (from history BEFORE today's append): the page compares
 # it against today's rule-engine stance and flags transitions - the transition day is the
 # actionable signal, not the standing level. Union codes so server mode can serve guests too.
+# The same row also carries `raw` (the unconfirmed reading), which Get-StanceGrade needs for the
+# two-day confirmation rule. Rows written before six levels shipped have no `raw` - fall back to
+# `stance` so the first run after the switch confirms against itself instead of throwing.
 $prevStanceMap=@{}
 if($slogOk){
   foreach($r in $slog){
     $rc="$($r.code)"; $rd="$($r.date)"
     if($rd -lt $lastDate -and ($null -ne $r.stance)){
-      if(-not $prevStanceMap.ContainsKey($rc) -or $rd -gt $prevStanceMap[$rc].d){ $prevStanceMap[$rc]=@{ d=$rd; s="$($r.stance)" } }
+      if(-not $prevStanceMap.ContainsKey($rc) -or $rd -gt $prevStanceMap[$rc].d){
+        $rw= if($null -ne $r.raw){ "$($r.raw)" } else { "$($r.stance)" }
+        $prevStanceMap[$rc]=@{ d=$rd; s="$($r.stance)"; raw=$rw }
+      }
     }
   }
 }
@@ -283,7 +289,8 @@ $HOLDINGS_META['_prevStance']=$psAll   # union-code map for server mode (page ig
 # formula in JavaScript, which is how the log and the page came to disagree about 'trim'.
 $grades=[ordered]@{}
 foreach($c in $codes){
-  $g = Get-StanceGrade $DASH[$c].series $DASH[$c].inst $DASH[$c].margin
+  $pv= if($prevStanceMap.ContainsKey($c)){ $prevStanceMap[$c] } else { $null }
+  $g = Get-StanceGrade $DASH[$c].series $DASH[$c].inst $DASH[$c].margin $(if($pv){$pv.s}) $(if($pv){$pv.raw})
   if($null -ne $g){ $grades[$c]=$g }
 }
 foreach($c in @($HOLDINGS_META.Keys)){
@@ -297,7 +304,10 @@ if($slogOk -and -not $already){
   foreach($c in $codes){
     if(-not $grades.Contains($c)){ continue }
     $g=$grades[$c]; $s=@($DASH[$c].series)
-    $slog += ,@{ date=$lastDate; code=$c; close=$s[$s.Count-1].c; score=$g.score; stance=$g.level }
+    # `stance` stays the *confirmed* level (what the page shows, what prevStance compares against);
+    # `raw` is today's unconfirmed reading, needed by tomorrow's confirmation check and used by
+    # evaluate.ps1 to tell new-scheme rows from the four-level history.
+    $slog += ,@{ date=$lastDate; code=$c; close=$s[$s.Count-1].c; score=$g.score; stance=$g.level; raw=$g.raw }
   }
   @{ rows=$slog } | ConvertTo-Json -Depth 4 | Out-File $stancePath -Encoding UTF8
   Write-Host "  stance-log: appended rows for $lastDate (total $($slog.Count))"

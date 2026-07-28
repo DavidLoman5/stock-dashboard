@@ -431,14 +431,14 @@ class TestTiers(Base):
     def test_guest_plus_budgeted_code_rec_is_shared_but_owners_own_rec_is_not(self):
         notes = {
             "0050": {"tech": "站上月線", "rec": "owner 專屬建議"},                          # owner's own
-            "2603": {"tech": "散裝景氣回升", "rec": "若站回月線則觀察轉多。非買賣指令。"},   # guest_plus code
+            "2603": {"tech": "散裝景氣回升", "rec": "若站回月線則觀察轉多。"},   # guest_plus code
         }
         got = payload.notes_for("guest", ["0050", "2603"], notes, private_codes={"0050"})
         self.assertNotIn("rec", got["0050"])
-        self.assertEqual(got["2603"]["rec"], "若站回月線則觀察轉多。非買賣指令。")
+        self.assertEqual(got["2603"]["rec"], "若站回月線則觀察轉多。")
 
     def test_guest_plus_code_rec_still_respects_the_other_holding_filter(self):
-        notes = {"2603": {"rec": "與 0050 同步操作。非買賣指令。"}}
+        notes = {"2603": {"rec": "與 0050 同步操作。"}}
         got = payload.notes_for("guest", ["2603"], notes, private_codes={"0050"})
         self.assertNotIn("rec", got.get("2603", {}))
 
@@ -470,9 +470,9 @@ class TestGuestNoteMerge(Base):
                        "fund": "Claude 基本", "rec": "owner 專屬建議", "news": [{"t": "x"}]}}
     GEMINI = {
         "0050": {"sigFund": ["bull", "偏多"], "tech": "Gemini 技術", "chip": "Gemini 籌碼",
-                 "fund": "Gemini 基本", "rec": "若跌破季線則減碼。非買賣指令。"},
+                 "fund": "Gemini 基本", "rec": "若跌破季線則減碼。"},
         "2330": {"sigFund": ["bear", "偏空"], "tech": "Gemini 技術", "chip": "Gemini 籌碼",
-                 "fund": "Gemini 基本", "rec": "若站回月線則加碼。非買賣指令。"},
+                 "fund": "Gemini 基本", "rec": "若站回月線則加碼。"},
     }
 
     def test_claude_wins_where_it_exists_and_rec_always_comes_from_gemini(self):
@@ -481,14 +481,14 @@ class TestGuestNoteMerge(Base):
         got = payload.notes_for("guest", ["0050"], self.CLAUDE, private_codes={"0050"}, guest_notes=self.GEMINI)
         self.assertEqual(got["0050"]["tech"], "Claude 技術")
         self.assertEqual(got["0050"]["sigFund"], ["neu", "中性"])
-        self.assertEqual(got["0050"]["rec"], "若跌破季線則減碼。非買賣指令。")
+        self.assertEqual(got["0050"]["rec"], "若跌破季線則減碼。")
         self.assertNotIn("owner 專屬建議", json.dumps(got, ensure_ascii=False))
         self.assertNotIn("news", got["0050"])
 
     def test_code_the_owner_does_not_hold_is_fully_covered_by_gemini(self):
         got = payload.notes_for("guest", ["2330"], self.CLAUDE, guest_notes=self.GEMINI)
         self.assertEqual(got["2330"]["tech"], "Gemini 技術")
-        self.assertEqual(got["2330"]["rec"], "若站回月線則加碼。非買賣指令。")
+        self.assertEqual(got["2330"]["rec"], "若站回月線則加碼。")
 
     def test_gemini_fills_a_field_that_the_privacy_filter_dropped(self):
         claude = {"0050": {"tech": "站上月線", "fund": "成分股與 00947 高度重疊"}}
@@ -513,9 +513,9 @@ class TestGeminiResponseParsing(Base):
     def test_good_reply_is_accepted(self):
         got = gnotes.parse_response(self._reply([{
             "code": "2330", "sigFund": ["bull", "偏多"], "tech": "t", "chip": "c", "fund": "f",
-            "rec": "若跌破月線則減碼。非買賣指令。"}]), ["2330"])
+            "rec": "若跌破月線則減碼。"}]), ["2330"])
         self.assertEqual(got["2330"]["sigFund"], ["bull", "偏多"])
-        self.assertEqual(got["2330"]["rec"], "若跌破月線則減碼。非買賣指令。")
+        self.assertEqual(got["2330"]["rec"], "若跌破月線則減碼。")
 
     def test_a_code_we_did_not_ask_about_is_refused(self):
         got = gnotes.parse_response(self._reply([{
@@ -532,7 +532,7 @@ class TestGeminiResponseParsing(Base):
         self.assertEqual(len(note["chip"]), gnotes.MAX_FIELD)       # capped
         self.assertNotIn("fund", note)                             # empty dropped
         self.assertNotIn("sigFund", note)                          # bad direction dropped
-        self.assertTrue(note["rec"].endswith("非買賣指令。"))        # disclaimer enforced
+        self.assertEqual(note["rec"], "沒有結尾")                   # rec passes through verbatim
 
     def test_garbage_reply_yields_nothing_rather_than_throwing(self):
         for bad in ("not json at all", "{}", '{"notes": "wrong type"}', '{"notes":[1,2]}'):

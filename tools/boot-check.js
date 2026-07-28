@@ -44,8 +44,8 @@ check('stance level comes from the engine', () => {
   const arr = JSON.parse(got);
   return arr.every(([, lvl, key]) => lvl && lvl === key) && got;
 });
-check('level is one of the four engine levels', () =>
-  w.eval('H.every(h => ["up","hold","trim","defend"].includes(h.auto.level))'));
+check('level is one of the six engine levels', () =>
+  w.eval('H.every(h => ["add","addwatch","hold","cutwatch","cut","exit"].includes(h.auto.level))'));
 check('score matches HOLDINGS_META.stance.score', () =>
   w.eval('H.every(h => h.auto.score === HOLDINGS_META[h.code].stance.score)'));
 check('stance badge text rendered', () => w.eval('H.every(h => h.auto.lv && h.auto.lv[1].length > 0)'));

@@ -290,7 +290,7 @@ try {
   Remove-Item $gateRepo -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# stance engine: the four levels and their boundaries, in one place
+# stance engine: the six levels and their boundaries, in one place
 $mkSer = {
   param($n,$closes)
   $out=@()
@@ -301,22 +301,52 @@ $flat = & $mkSer 70 (1..70 | ForEach-Object { 10.0 })
 Assert ($null -eq (Get-StanceGrade (& $mkSer 10 (1..10 | ForEach-Object { 10.0 })) @() @())) "stance: <25 bars is ungraded"
 $g0 = Get-StanceGrade $flat @() @()
 Assert ($g0.score -eq 0 -and $g0.level -eq 'hold') "stance: flat series scores 0 -> hold (got $($g0.score)/$($g0.level))"
-# score -1 must be 'trim'. This is the level the page used to render as 'hold' while
-# stance-log recorded 'trim' - 23 of 46 logged rows sat in that gap.
-# 70 bars, not 30: the tech=-1 branch compares against the 60-day line, so a shorter
-# fixture can never reach it and would silently grade everything 'hold'.
+# 70 bars, not 30: every +-2/+-3 tech rung compares against the 60-day line, so a shorter
+# fixture can never reach them and would silently grade everything on the +-1 rungs.
+# The two anchors of the six-level scheme: price below ALL of 5/10/20/60 is 'exit' on its own,
+# above all four is 'add' on its own. If either stops holding, the vocabulary is a lie.
 $down = & $mkSer 70 (1..70 | ForEach-Object { 40.0 - $_ * 0.3 })
 $gd = Get-StanceGrade $down @() @()
-Assert ($gd.tech -eq -1) "stance: below the 60-day line scores tech=-1"
-Assert ($gd.score -eq -1 -and $gd.level -eq 'trim') "stance: score -1 is 'trim' (got $($gd.score)/$($gd.level))"
-$gd2 = Get-StanceGrade $down @(@{f=-5},@{f=-5}) @()
-Assert ($gd2.score -eq -2 -and $gd2.level -eq 'defend') "stance: score -2 is 'defend' (got $($gd2.score)/$($gd2.level))"
+Assert ($gd.tech -eq -3) "stance: below all of 5/10/20/60 scores tech=-3 (got $($gd.tech))"
+Assert ($gd.score -eq -3 -and $gd.level -eq 'exit') "stance: score -3 alone is 'exit' (got $($gd.score)/$($gd.level))"
+$rise = & $mkSer 70 (1..70 | ForEach-Object { 10.0 + $_ * 0.3 })
+$gu = Get-StanceGrade $rise @() @()
+Assert ($gu.tech -eq 3) "stance: above all of 5/10/20/60 scores tech=+3 (got $($gu.tech))"
+Assert ($gu.score -eq 3 -and $gu.level -eq 'add') "stance: score +3 alone is 'add' (got $($gu.score)/$($gu.level))"
+# chip +-2 needs a run (every day agreeing), not just a net - and needs a full window.
+# These double as the middle-bucket boundary checks: the flat series scores tech=vp=extra=0,
+# so the chip term alone is the score, and -1/-2/+1/+2 must land on four different levels.
+$gc1 = Get-StanceGrade $flat @(@{f=-5},@{f=-5},@{f=-5},@{f=-5},@{f=-5}) @()
+Assert ($gc1.chip -eq -2 -and $gc1.score -eq -2 -and $gc1.level -eq 'cut') "stance: 5 straight sell days -> chip=-2, score -2 is 'cut' (got $($gc1.chip)/$($gc1.score)/$($gc1.level))"
+$gc2 = Get-StanceGrade $flat @(@{f=-9},@{f=1},@{f=1},@{f=1},@{f=-5}) @()
+Assert ($gc2.chip -eq -1 -and $gc2.level -eq 'cutwatch') "stance: net-sell but mixed days stays chip=-1, score -1 is 'cutwatch' (got $($gc2.chip)/$($gc2.level))"
+$gc3 = Get-StanceGrade $flat @(@{f=-5},@{f=-5}) @()
+Assert ($gc3.chip -eq -1) "stance: a 2-row partial feed must not earn chip=-2 (got $($gc3.chip))"
+$gc4 = Get-StanceGrade $flat @(@{f=5},@{f=5},@{f=5},@{f=5},@{f=5}) @()
+Assert ($gc4.chip -eq 2 -and $gc4.score -eq 2 -and $gc4.level -eq 'addwatch') "stance: 5 straight buy days -> chip=+2, score +2 is still 'addwatch' (got $($gc4.chip)/$($gc4.score)/$($gc4.level))"
+$gc5 = Get-StanceGrade $flat @(@{f=9},@{f=-1},@{f=-1},@{f=-1},@{f=5}) @()
+Assert ($gc5.chip -eq 1 -and $gc5.level -eq 'addwatch') "stance: score +1 is 'addwatch' (got $($gc5.chip)/$($gc5.level))"
+# two-day confirmation: a new reading has to repeat before it becomes the level we show/log
+$gp1 = Get-StanceGrade $down @() @() 'hold' 'hold'
+Assert ($gp1.raw -eq 'exit' -and $gp1.level -eq 'hold' -and $gp1.pending) "stance: first day at a new reading keeps the previous level (got $($gp1.level)/raw $($gp1.raw))"
+$gp2 = Get-StanceGrade $down @() @() 'hold' 'exit'
+Assert ($gp2.level -eq 'exit' -and -not $gp2.pending) "stance: the same reading two days running switches the level (got $($gp2.level))"
+$gp3 = Get-StanceGrade $down @() @() 'hold' 'cut'
+Assert ($gp3.level -eq 'hold') "stance: a different pending reading does not confirm (got $($gp3.level))"
 # the page's display map must cover exactly the levels the engine can emit
 $idxJs = $idxAll
-foreach($lvl in @('up','hold','trim','defend')){
+foreach($lvl in @('add','addwatch','hold','cutwatch','cut','exit')){
   Assert ($idxJs -match ("LEVEL_VIEW=\{[^}]*" + $lvl + ":")) "index.html LEVEL_VIEW maps '$lvl'"
 }
 Assert ($idxJs -notmatch "score>=2\?\['up'") "index.html no longer re-derives the stance thresholds"
+# retired four-level keys must not come back as engine output (STANCE_NM keeps them read-only
+# so the switchover day's prevStance still renders, but nothing may emit them)
+# (comments still discuss the old levels by name, so look at code lines only)
+$stanceCode = (Get-Content (Join-Path $root 'lib/stance.ps1') -Encoding UTF8 |
+  Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+foreach($old in @("'up'","'trim'","'defend'")){
+  Assert ($stanceCode -notmatch [regex]::Escape($old)) "lib/stance.ps1 no longer emits the retired level $old"
+}
 
 Write-Host ""
 if($fails.Count -eq 0){ Write-Host "ALL TESTS PASSED"; exit 0 }
