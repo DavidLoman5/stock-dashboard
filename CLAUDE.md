@@ -67,6 +67,8 @@ CSS／版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯�
 - `index.html` 要有 `<!DOCTYPE html>`＋`<meta charset="utf-8">`＋viewport；CSP `default-src 'none'` → 圖表 Canvas 手繪、零外部資源
 - **台股紅漲綠跌**（--up 紅、--down 綠）；證交所日期是民國年（西元−1911）
 - picks-log／stance-log 讀取失敗**絕不可用空資料覆寫**（FATAL/skip 防護勿移除）
+- **每天被重寫的 JSON 一律用 `[ordered]@{}` 建**（`picks-log.json`／`screen-summary.json`／`eval-report.json`／splice 進頁面的 `regime`/`meta`/`perf`）。pwsh 的 `@{}` 每個 process 的列舉順序都不同，`ConvertTo-Json` 會把 key 重新洗牌 → 每日 commit 整檔重寫（實測 4 筆新增造成 408 行 diff）。注意 `[ordered]@{}` 只有 `.Contains()`、**沒有 `.ContainsKey()`**；另外 `publish.ps1` 用 `Add-Member` 把 ai-tags 接在尾端，所以 `screen.ps1` normalize 的正規順序也必須把 `aiSust`/`aiRisk` 排最後，否則隔天又被搬動。`tests.ps1` [10] 驗證
+- **`picks-log.json` 有保留期**：只留全部 open ＋ 最近 120 筆已結案，更舊的由 `FoldPicksToArchive` append 進 `data/picks-archive.jsonl`（gitignored、只 append）。`evaluate.ps1` 讀 log ＋ archive 合併去重，統計不受保留期影響。折疊順序是安全性本身：**先 append 並整份讀回核對，全部確認在檔案裡才從 log 移除**；檔案操作要加 `-ErrorAction Stop`（腳本跑在 `$ErrorActionPreference='Continue'` 下，否則寫入失敗只會印訊息然後繼續刪）
 - **改選股/評分/出場（`screen.ps1`）或判級（`lib/stance.ps1`）規則 → 必須同步更新 index.html 的「📐 現行選股與評價邏輯」卡（`id="logicCard"`）與 plan.md**
 - **升降 guest_plus 一律走 `auth.set_tier`（網頁走 `/admin` 或 `python3 -m server.admin tier`），不要直接 `UPDATE users SET tier`**：那個函式是唯一做 Claude 代碼預算檢查（`cfg["guestPlusCodeBudget"]`）的地方，繞過它等於繞過每日 Claude 成本的唯一硬上限
 

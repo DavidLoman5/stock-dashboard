@@ -34,7 +34,7 @@ Write-Host "[3] extract functions from screen.ps1..."
 $tok=$null;$err=$null
 $ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'screen.ps1'),[ref]$tok,[ref]$err)
 $fns=$ast.FindAll({param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]},$true)
-foreach($n in @('DivSumSince','CheckRevCols')){
+foreach($n in @('DivSumSince','CheckRevCols','FoldPicksToArchive')){
   $fd=$fns | Where-Object { $_.Name -eq $n } | Select-Object -First 1
   Assert ($null -ne $fd) "function $n exists"
   if($fd){ Invoke-Expression $fd.Extent.Text }
@@ -347,6 +347,98 @@ $stanceCode = (Get-Content (Join-Path $root 'lib/stance.ps1') -Encoding UTF8 |
 foreach($old in @("'up'","'trim'","'defend'")){
   Assert ($stanceCode -notmatch [regex]::Escape($old)) "lib/stance.ps1 no longer emits the retired level $old"
 }
+
+Write-Host "[10] picks-log retention + JSON key stability..."
+# --- FoldPicksToArchive (extracted in [3]) -------------------------------------------------
+# The invariant that matters: log + archive must always be exactly the input set. Trimming a
+# published, daily-rewritten file is only safe if every failure mode keeps the rows.
+function MkPickRows([int]$closed,[int]$open){
+  $r=@()
+  for($i=0;$i -lt $closed;$i++){
+    $r += ,[ordered]@{ date=("2026{0:0000}" -f (1000+$i)); code=("A{0:0000}" -f $i); name="n$i"; price=10.0
+                       score=50; status='closed'; closedOn=("2026{0:0000}" -f (2000+$i)); retFinal=1.0; alphaFinal=0.5 }
+  }
+  for($i=0;$i -lt $open;$i++){
+    $r += ,[ordered]@{ date='20260728'; code=("B{0:0000}" -f $i); name="o$i"; price=20.0; score=60; status='open' }
+  }
+  return ,$r
+}
+function PickKeys($rows){ @($rows | ForEach-Object { "$($_.date)|$($_.code)" }) }
+function ArcPickKeys($p){
+  if(-not (Test-Path $p)){ return @() }
+  @(Get-Content $p -Encoding UTF8 | Where-Object { "$_".Trim() } | ForEach-Object { $o=$_|ConvertFrom-Json; "$($o.date)|$($o.code)" })
+}
+$tmpF=Join-Path ([IO.Path]::GetTempPath()) ("foldtest-"+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tmpF | Out-Null
+try{
+  $arc=Join-Path $tmpF 'a1.jsonl'
+  $out=FoldPicksToArchive (MkPickRows 5 3) 120 $arc
+  Assert ($out.Count -eq 8) "fold: under the retention limit nothing moves"
+  Assert (-not (Test-Path $arc)) "fold: under the limit no archive file is created"
+
+  $arc=Join-Path $tmpF 'a2.jsonl'
+  $rows=MkPickRows 10 3
+  $origKeys=(PickKeys $rows | Sort-Object -Unique) -join ','
+  $out=FoldPicksToArchive $rows 4 $arc
+  Assert ($out.Count -eq 7) "fold: retain=4 leaves 4 settled + 3 open"
+  Assert (@($out|Where-Object{$_.status -eq 'open'}).Count -eq 3) "fold: open rows are never archived"
+  Assert ((@(PickKeys $out)+@(ArcPickKeys $arc) | Sort-Object -Unique) -join ',' -eq $origKeys) "fold: log + archive equals the input set"
+  Assert ((@($out|Where-Object{$_.status -eq 'closed'}|ForEach-Object{$_.code}) -join ',') -eq 'A0006,A0007,A0008,A0009') "fold: the rows kept are the newest settled ones"
+
+  $out2=FoldPicksToArchive $out 4 $arc
+  Assert ($out2.Count -eq 7 -and (ArcPickKeys $arc).Count -eq 6) "fold: running twice changes nothing (idempotent)"
+
+  # crash between the append and the log rewrite: rows are in both files on the next run
+  $arc=Join-Path $tmpF 'a4.jsonl'
+  $rows=MkPickRows 10 0
+  Set-Content -Path $arc -Encoding UTF8 -Value @($rows[0..5] | ForEach-Object { $_ | ConvertTo-Json -Depth 4 -Compress })
+  $out=FoldPicksToArchive $rows 4 $arc
+  Assert ((ArcPickKeys $arc).Count -eq 6 -and (@(ArcPickKeys $arc)|Sort-Object -Unique).Count -eq 6) "fold: crash-then-retry appends no duplicates"
+  Assert ($out.Count -eq 4) "fold: crash-then-retry still converges to the retention limit"
+
+  # an unwritable archive must cost history nothing
+  $blocked=Join-Path $tmpF 'blocked'
+  Set-Content -Path $blocked -Value 'this is a file, not a directory' -Encoding UTF8
+  $out=FoldPicksToArchive (MkPickRows 10 2) 4 (Join-Path $blocked 'deeper/a5.jsonl')
+  Assert ($out.Count -eq 12) "fold: an unwritable archive drops nothing from the log"
+}finally{ Remove-Item $tmpF -Recurse -Force -ErrorAction SilentlyContinue }
+
+# --- key ordering ---------------------------------------------------------------------------
+# A plain @{} enumerates in per-process string-hash order, so ConvertTo-Json reshuffled every
+# record and the daily commit rewrote the whole file. These files are published and rewritten
+# daily; unstable key order is what makes them grow the repo without bound.
+$screenSrc = Get-Content (Join-Path $root 'screen.ps1') -Raw -Encoding UTF8
+foreach($pat in @('$o=[ordered]@{ date=','$perfSummary=[ordered]@{','$regimeObj=[ordered]@{','$metaObj=[ordered]@{','$summaryOut=[ordered]@{')){
+  Assert ($screenSrc.Contains($pat)) "screen.ps1 serializes with a stable key order: $pat"
+}
+Assert ((Get-Content (Join-Path $root 'evaluate.ps1') -Raw -Encoding UTF8).Contains('return [ordered]@{ n=$a.Count')) "evaluate.ps1 Grp() emits a stable key order"
+# proof rather than pattern-matching: same input, two fresh processes, identical bytes
+$stab=Join-Path ([IO.Path]::GetTempPath()) ("stab-"+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $stab | Out-Null
+try{
+  $mkPath=Join-Path $stab 'mk.ps1'
+  Set-Content -Path $mkPath -Encoding UTF8 -Value @(
+    'param($Out)'
+    '$o=[ordered]@{date="20260709";code="2890";name="x";price=40.45;score=89}'
+    '$o.status="closed"'
+    'foreach($f in @("light","chipS","ind")){$o[$f]="v"}'
+    '$o.exit=39.85; $o.retFinal=-1.48'
+    '@{picks=@($o)}|ConvertTo-Json -Depth 5|Out-File $Out -Encoding UTF8'
+  )
+  foreach($i in 1..2){ pwsh -NoProfile -File $mkPath (Join-Path $stab "s$i.json") }
+  $s1=Join-Path $stab 's1.json'; $s2=Join-Path $stab 's2.json'
+  # guard against a vacuous pass: two missing files also compare equal
+  Assert ((Test-Path $s1) -and (Test-Path $s2)) "key-order probe actually produced both files"
+  $a=Get-Content $s1 -Raw -Encoding UTF8
+  $b=Get-Content $s2 -Raw -Encoding UTF8
+  Assert ($a -and $b -and $a -eq $b) "picks-log JSON is byte-identical across separate pwsh processes"
+  Assert ($a -match '(?s)"date".*"code".*"name".*"price".*"score".*"status"') "picks-log keys come out in declaration order"
+}finally{ Remove-Item $stab -Recurse -Force -ErrorAction SilentlyContinue }
+
+# --- the archive must never become a published artifact --------------------------------------
+$giF = Get-Content (Join-Path $root '.gitignore') -Raw -Encoding UTF8
+Assert ($giF -match '(?m)^data/\s*$') ".gitignore still covers data/ (where picks-archive.jsonl lives)"
+Assert (-not (git -C $root ls-files --error-unmatch 'data/picks-archive.jsonl' 2>$null)) "picks-archive.jsonl is not git-tracked"
 
 Write-Host ""
 if($fails.Count -eq 0){ Write-Host "ALL TESTS PASSED"; exit 0 }

@@ -32,7 +32,7 @@ admin.py export-owner   owner 持股（holdings.json 同格式）    → data/ow
 update-holdings.ps1  抓聯集行情(上市/上櫃自動路由) → splice DASH/META/HOLDINGS_META
                        → data/quotes.json（全體共用）＋ holdings-context.json（**只有 owner 的**）＋ stance-log.json
       ↓ AI 讀 holdings-context.json + lessons.md → Write holdings-notes.json（含 _market 市場風向）
-screen.ps1           全市場篩選評分 → splice PICKS_KLINE/PICKS_DATA → data/picks.json、screen-summary.json、picks-log.json（20日結案、含息、移動停利）
+screen.ps1           全市場篩選評分 → splice PICKS_KLINE/PICKS_DATA → data/picks.json、screen-summary.json、picks-log.json（20日結案、含息、移動停利；保留最近 120 筆，更舊的移入 data/picks-archive.jsonl）
       ↓ AI 讀 screen-summary.json → Write picks-notes.json + ai-tags.json
 evaluate.ps1         （週五）歸因分組勝率 → eval-report.json → splice evaldata → AI 更新 lessons.md
 build-demo.ps1       用 demo holdings.json + data/*.json 重建**公開** index.html（把 owner 真實部位換掉）
@@ -61,6 +61,7 @@ server/test_server.py（改 server/ 後必跑）認證、權限、token 隔離
 | `holdings-notes.json`／`picks-notes.json`／`ai-tags.json` | AI 每日判讀與標籤 | ❌ 每天覆寫 |
 | `holdings-context.json`／`screen-summary.json` | 給 AI 讀的精簡數據（幾 KB）| ❌ 自動產生 |
 | `picks-log.json`／`stance-log.json` | 推薦追蹤與判級**歷史**（讀取失敗 FATAL 保護、絕不清空）| ❌ 引擎維護 |
+| `data/picks-archive.jsonl`（gitignored）| picks-log 保留期外的已結案部位，只 append 不重寫；`evaluate.ps1` 讀 log＋封存 | ❌ 引擎維護 |
 | `eval-report.json`／`backtest-result.json` | 歸因週報／回測輸出 | ❌ 自動產生 |
 | `lessons.md` | 歸因驗證過的教訓（週五更新，餵回每日分析）| ⚠️ 由週報流程管理 |
 | `plan.md` | 路線圖＋參數改動紀錄 | ✅ |

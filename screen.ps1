@@ -44,6 +44,56 @@ function DivSumSince($rows,$sinceDt){
   return $s
 }
 
+# picks-log.json is published, rewritten every day, and grows by ~2.6 rows per trade day
+# (~640/yr) forever. This keeps every open row plus the most recent $Retain settled ones and
+# moves older settled rows to an append-only JSONL archive under data/ (gitignored, never
+# rewritten). evaluate.ps1 reads log + archive, so lifetime attribution is unaffected.
+#
+# The order of operations IS the safety argument: append, read the archive back, and drop rows
+# from the log only once every folded row is provably in it. A crash in between simply re-folds
+# the same rows next run - the `date|code` key makes the append idempotent - so nothing is lost
+# and nothing is duplicated. Any failure returns the input untouched: same rule as the FATAL
+# guards below, history is never traded away for a tidier file.
+function FoldPicksToArchive($rows,[int]$Retain,$ArcPath){
+  $settled=@($rows | Where-Object { $_.status -ne 'open' })
+  if($settled.Count -le $Retain){ return ,@($rows) }
+  $sorted=@($settled | Sort-Object @{e={"$($_.closedOn)"}}, @{e={"$($_.date)"}}, @{e={"$($_.code)"}})
+  $fold=@($sorted[0..($sorted.Count-$Retain-1)])
+  try{
+    # -ErrorAction Stop throughout: the script runs with $ErrorActionPreference='Continue', so
+    # without it a failed write is merely printed and execution falls through to the drop step.
+    $arcDir=Split-Path -Parent $ArcPath
+    if($arcDir -and -not (Test-Path $arcDir)){ New-Item -ItemType Directory -Path $arcDir -ErrorAction Stop | Out-Null }
+    $have=@{}
+    if(Test-Path $ArcPath){
+      foreach($ln in (Get-Content $ArcPath -Encoding UTF8 -ErrorAction Stop)){
+        if(-not "$ln".Trim()){ continue }
+        try{ $ob=$ln | ConvertFrom-Json; $have["$($ob.date)|$($ob.code)"]=$true }catch{}
+      }
+    }
+    $lines=@()
+    foreach($o in $fold){ if(-not $have.ContainsKey("$($o.date)|$($o.code)")){ $lines += ($o | ConvertTo-Json -Depth 4 -Compress) } }
+    if($lines.Count -gt 0){ Add-Content -Path $ArcPath -Value $lines -Encoding UTF8 -ErrorAction Stop }
+    $back=@{}
+    foreach($ln in (Get-Content $ArcPath -Encoding UTF8 -ErrorAction Stop)){
+      if(-not "$ln".Trim()){ continue }
+      try{ $ob=$ln | ConvertFrom-Json; $back["$($ob.date)|$($ob.code)"]=$true }catch{}
+    }
+    $missing=@($fold | Where-Object { -not $back.ContainsKey("$($_.date)|$($_.code)") })
+    if($missing.Count -gt 0){
+      Write-Host "  WARNING: archive read-back missing $($missing.Count) rows - log left intact, nothing dropped"
+      return ,@($rows)
+    }
+    $drop=@{}; foreach($o in $fold){ $drop["$($o.date)|$($o.code)"]=$true }
+    $kept=@($rows | Where-Object { -not $drop.ContainsKey("$($_.date)|$($_.code)") })
+    Write-Host "  archived $($fold.Count) settled picks -> $ArcPath (log keeps $Retain settled + all open)"
+    return ,$kept
+  }catch{
+    Write-Host "  WARNING: archive step failed ($($_.Exception.Message)) - log left intact, nothing dropped"
+    return ,@($rows)
+  }
+}
+
 Write-Host "[1/8] STOCK_DAY_ALL..."
 $all = GetJson "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 if(-not $all){ Write-Host "FATAL: STOCK_DAY_ALL failed"; exit 1 }
@@ -107,17 +157,25 @@ $idxLast=$idxC[$idxC.Count-1]; $idxMA20=SMAlast $idxC 20; $idxMA60=SMAlast $idxC
 $last5=$tradeDates | Select-Object -Last 5
 
 Write-Host "[3/8] T86 x5 days: $($last5 -join ',')"
-$chip=@{}
+# Institutional net-buy series, collected per DATE and materialised aligned to the days that
+# actually came back. These tables only list codes that traded with institutions that day, so
+# appending as rows arrive silently shortens a quiet code's series - and then f[-1]/f[-2] (the
+# "外資連2日轉賣" exit rule further down) would be comparing two days that are not the last two,
+# and tPos>=3 could be 3-of-3 instead of 3-of-5. Absent from the table means zero net, so gaps
+# are zero-filled; the count of days a code really appeared is kept as .n for the sufficiency
+# gate that `$t.Count -lt 4` used to serve.
+$chipDay=@{}
 $t86ok=0
 $tpexOk=0
+$twDays=@(); $otcDays=@()
 foreach($d in $last5){
   $r=GetJson "https://www.twse.com.tw/rwd/zh/fund/T86?date=$d&selectType=ALL&response=json"
   if($r -and $r.stat -eq 'OK'){
-    $t86ok++
+    $t86ok++; $twDays += $d
     foreach($row in $r.data){
       $c="$($row[0])".Trim()
-      if(-not $chip.ContainsKey($c)){ $chip[$c]=@{f=@();t=@();tot=@()} }
-      $chip[$c].f += [double](Num $row[4]); $chip[$c].t += [double](Num $row[10]); $chip[$c].tot += [double](Num $row[18])
+      if(-not $chipDay.ContainsKey($c)){ $chipDay[$c]=@{} }
+      $chipDay[$c][$d]=@{ f=[double](Num $row[4]); t=[double](Num $row[10]); tot=[double](Num $row[18]) }
     }
   }
   Start-Sleep -Milliseconds 800
@@ -125,17 +183,30 @@ foreach($d in $last5){
   $dSlash="{0}/{1}/{2}" -f $d.Substring(0,4),$d.Substring(4,2),$d.Substring(6,2)
   $r2=GetJson "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade?type=Daily&sect=EW&date=$dSlash&response=json"
   if($r2 -and $r2.tables -and $r2.tables[0].data){
-    $tpexOk++
+    $tpexOk++; $otcDays += $d
     foreach($row in $r2.tables[0].data){
       $c="$($row[0])".Trim()
-      if(-not $chip.ContainsKey($c)){ $chip[$c]=@{f=@();t=@();tot=@()} }
-      $chip[$c].f += [double](Num $row[4]); $chip[$c].t += [double](Num $row[13]); $chip[$c].tot += [double](Num $row[23])
+      if(-not $chipDay.ContainsKey($c)){ $chipDay[$c]=@{} }
+      # a code listed on both boards keeps its TWSE row: same precedence as the $px build above
+      if(-not $chipDay[$c].ContainsKey($d)){ $chipDay[$c][$d]=@{ f=[double](Num $row[4]); t=[double](Num $row[13]); tot=[double](Num $row[23]) } }
     }
   }
   Start-Sleep -Milliseconds 800
 }
 if($t86ok -lt 5){ Write-Host "  WARNING: only $t86ok/5 T86 days fetched - chip screening degraded. Consider re-run later." }
 if($tpexOk -lt 5){ Write-Host "  WARNING: only $tpexOk/5 TPEx insti days fetched - OTC chip screening degraded. Consider re-run later." }
+# a code is aligned to the day list of ITS OWN market, so one failed TPEx day cannot zero-fill
+# every OTC stock (which would quietly push them under the tPos/fPos gates)
+$chip=@{}
+foreach($c in $chipDay.Keys){
+  $days = if($mkt.ContainsKey($c) -and $mkt[$c] -eq 'o'){ $otcDays } else { $twDays }
+  $fA=@(); $tA=@(); $totA=@(); $seen=0
+  foreach($d in $days){
+    if($chipDay[$c].ContainsKey($d)){ $e=$chipDay[$c][$d]; $fA+=$e.f; $tA+=$e.t; $totA+=$e.tot; $seen++ }
+    else { $fA+=0.0; $tA+=0.0; $totA+=0.0 }
+  }
+  $chip[$c]=@{ f=$fA; t=$tA; tot=$totA; n=$seen }
+}
 
 Write-Host "[4/8] BFI82U (market inst amount)..."
 $instNet=$null
@@ -195,7 +266,7 @@ foreach($c in $chip.Keys){
   if(-not $px.ContainsKey($c)){ continue }
   if($px[$c].val -lt 1e8){ continue }             # liquidity >= NT$100M/day
   $t=$chip[$c].t; $f=$chip[$c].f
-  if($t.Count -lt 4){ continue }
+  if($chip[$c].n -lt 4){ continue }               # .n = days the code actually appeared (gaps are zero-filled)
   $tPos=($t | Where-Object {$_ -gt 0}).Count
   $fPos=($f | Where-Object {$_ -gt 0}).Count
   $tSum=($t | Measure-Object -Sum).Sum; $fSum=($f | Measure-Object -Sum).Sum
@@ -301,7 +372,7 @@ foreach($c in $chip.Keys){
   if($c -notmatch '^00[0-9A-Z]+$'){ continue }
   if($c -match '[LRBU]$'){ continue }           # exclude leveraged/inverse/bond/futures ETFs
   $t=$chip[$c].t; $f=$chip[$c].f
-  if($t.Count -lt 4){ continue }
+  if($chip[$c].n -lt 4){ continue }
   $tPos=($t | Where-Object {$_ -gt 0}).Count
   $fPos=($f | Where-Object {$_ -gt 0}).Count
   $tSum=($t | Measure-Object -Sum).Sum; $fSum=($f | Measure-Object -Sum).Sum
@@ -380,11 +451,16 @@ if(Test-Path $logPath){
   }
   try{
     foreach($p in @($lg.picks)){
-      $o=@{ date="$($p.date)"; code="$($p.code)"; name="$($p.name)"; price=[double]$p.price; score=[int]$p.score }
+      # [ordered], not @{}: a plain hashtable enumerates in .NET string-hash order, which is
+      # randomised per process, so ConvertTo-Json shuffled every record's keys on every run and
+      # the daily commit rewrote the whole file (250 inserts / 158 deletes for 4 new picks).
+      # Insertion order here is a pure function of which fields the record has, so the file is
+      # now byte-stable and a day's diff is just that day's rows.
+      $o=[ordered]@{ date="$($p.date)"; code="$($p.code)"; name="$($p.name)"; price=[double]$p.price; score=[int]$p.score }
       if($px.ContainsKey($o.code) -and $px[$o.code].name){ $o.name="$($px[$o.code].name)" }   # heals legacy mojibake names
       $o.status = if($p.PSObject.Properties['status'] -and $p.status){ "$($p.status)" } else { 'open' }
-      # pass through factor snapshot + AI tags (added at entry; used by evaluate.ps1 attribution)
-      foreach($fld in @('light','chipS','techS','fundS','ret5','dist','yoy','pe','dy','ind','aiSust','aiRisk')){
+      # pass through the entry factor snapshot (used by evaluate.ps1 attribution)
+      foreach($fld in @('light','chipS','techS','fundS','ret5','dist','yoy','pe','dy','ind')){
         if($p.PSObject.Properties[$fld] -and $null -ne $p.$fld){ $o[$fld]=$p.$fld }
       }
       if($p.PSObject.Properties['exit'] -and $p.exit -ne $null){ $o.exit=[double]$p.exit }
@@ -393,6 +469,12 @@ if(Test-Path $logPath){
       if($p.PSObject.Properties['closedOn'] -and $p.closedOn){ $o.closedOn="$($p.closedOn)" }
       if($p.PSObject.Properties['days'] -and $p.days -ne $null){ $o.days=[int]$p.days }
       if($p.PSObject.Properties['reason'] -and $p.reason){ $o.reason="$($p.reason)" }
+      # AI tags last, because that is where publish.ps1's Add-Member puts them when it attaches
+      # them the same evening. Matching its position means the next morning's rewrite does not
+      # shuffle those rows back, which would reintroduce daily churn for every tagged pick.
+      foreach($fld in @('aiSust','aiRisk')){
+        if($p.PSObject.Properties[$fld] -and $null -ne $p.$fld){ $o[$fld]=$p.$fld }
+      }
       $norm += ,$o
     }
   }catch{
@@ -405,16 +487,28 @@ $perfRows=@()
 $histCache=@{}
 foreach($o in $norm){
   if($o.date -eq $lastDate -and $o.status -eq 'open'){ continue }   # logged today, no perf yet
+  if($o.status -eq 'void'){ continue }                              # settled without a price, see below
   if($o.status -eq 'closed'){
-    $al = if($o.ContainsKey('alphaFinal')){ $o.alphaFinal } else { $null }
-    $dy2 = if($o.ContainsKey('days')){ $o.days } else { 20 }
-    $rs = if($o.ContainsKey('reason')){ $o.reason } else { '20日到期' }
-    $lg2=$(if($o.ContainsKey('light')){$o.light}else{$null})
+    $al = if($o.Contains('alphaFinal')){ $o.alphaFinal } else { $null }
+    $dy2 = if($o.Contains('days')){ $o.days } else { 20 }
+    $rs = if($o.Contains('reason')){ $o.reason } else { '20日到期' }
+    $lg2=$(if($o.Contains('light')){$o.light}else{$null})
     $perfRows += [pscustomobject]@{ date=$o.date; code=$o.code; name=$o.name; entry=$o.price; cur=$o.exit; ret=$o.retFinal; alpha=$al; days=$dy2; status='closed'; reason=$rs; light=$lg2 }
     continue
   }
   $c=$o.code
-  if(-not $px.ContainsKey($c)){ continue }
+  if(-not $px.ContainsKey($c)){
+    # No quote today: delisted, suspended, or the market's fetch failed. Skipping forever left the
+    # row 'open' for good - invisible on the page, never closed, and permanently holding the dedupe
+    # key so the code could never be picked again. Give it the normal window, then settle it as
+    # 'void': out of the tracking stats (no price = no honest return) but no longer open.
+    $dGone=($tradeDates | Where-Object { $_ -gt $o.date -and $_ -le $lastDate }).Count
+    if($dGone -ge 25){
+      $o.status='void'; $o.days=$dGone; $o.closedOn=$lastDate; $o.reason='資料中斷'
+      Write-Host "  作廢(連續無報價): $c $($o.name) days=$dGone"
+    }
+    continue
+  }
   $cur=$px[$c].c
   if($o.price -le 0){ continue }
   $days=($tradeDates | Where-Object { $_ -gt $o.date -and $_ -le $lastDate }).Count
@@ -450,7 +544,7 @@ foreach($o in $norm){
       if($m10x -ne $null -and $curTr -lt $m10x){ $exitReason='移動停利（獲利15%+回檔破10日線）' }
     }
   }
-  $lg3=$(if($o.ContainsKey('light')){$o.light}else{$null})
+  $lg3=$(if($o.Contains('light')){$o.light}else{$null})
   if($exitReason -or $days -ge 20){
     $rs = if($exitReason){ $exitReason } else { '20日到期' }
     $o.status='closed'; $o.exit=$cur; $o.retFinal=$ret; $o.days=$days; $o.closedOn=$lastDate; $o.reason=$rs
@@ -467,7 +561,7 @@ $perfSummary=$null
 if($closedR.Count -gt 0 -or $openR.Count -gt 0){
   $cw=($closedR | Where-Object {$_.alpha -ne $null -and $_.alpha -gt 0}).Count
   $ct=($closedR | Where-Object {$_.alpha -ne $null}).Count
-  $perfSummary=@{
+  $perfSummary=[ordered]@{
     closedN=$closedR.Count
     winRate=$(if($ct -gt 0){[math]::Round($cw/$ct*100,0)}else{$null})
     avgRetClosed=$(if($closedR.Count -gt 0){[math]::Round(($closedR|Measure-Object -Property ret -Average).Average,2)}else{$null})
@@ -476,12 +570,12 @@ if($closedR.Count -gt 0 -or $openR.Count -gt 0){
     avgRetOpen=$(if($openR.Count -gt 0){[math]::Round(($openR|Measure-Object -Property ret -Average).Average,2)}else{$null})
   }
   # win rate grouped by regime light at entry (validates regime-aware scoring)
-  $byLight=@{}
+  $byLight=[ordered]@{}
   foreach($g in @('green','yellow','red')){
     $gr=@($closedR | Where-Object { $_.light -eq $g -and $_.alpha -ne $null })
     if($gr.Count -gt 0){
       $gw=($gr | Where-Object {$_.alpha -gt 0}).Count
-      $byLight[$g]=@{ n=$gr.Count; winRate=[math]::Round($gw/$gr.Count*100,0); avgAlpha=[math]::Round(($gr|Measure-Object -Property alpha -Average).Average,2) }
+      $byLight[$g]=[ordered]@{ n=$gr.Count; winRate=[math]::Round($gw/$gr.Count*100,0); avgAlpha=[math]::Round(($gr|Measure-Object -Property alpha -Average).Average,2) }
     }
   }
   if($byLight.Keys.Count -gt 0){ $perfSummary.byLight=$byLight }
@@ -493,16 +587,26 @@ $newLogged=0
 if(-not $dateLogged){
   foreach($p in $top5){
     if($openCodes.ContainsKey($p.code)){ continue }
-    $norm += ,@{ date=$lastDate; code=$p.code; name=$p.name; price=$p.close; score=$p.score; status='open'; light=$light
+    $norm += ,[ordered]@{ date=$lastDate; code=$p.code; name=$p.name; price=$p.close; score=$p.score; status='open'; light=$light
                  chipS=$p.chip; techS=$p.tech; fundS=$p.fund; ret5=$p.ret5; dist=$p.dist; yoy=$p.yoy; pe=$p.pe; dy=$p.dy; ind=$p.ind }
     $newLogged++
   }
 } else { Write-Host "  date $lastDate already logged - snapshot preserved, no append" }
+
+# ---- retention: this file is published, rewritten every day and grows by ~2.6 rows per trade
+# day (~640/yr). Keep every open row plus the most recent $RetainSettled settled ones; older
+# settled rows move to data/picks-archive.jsonl - gitignored, append-only, never rewritten.
+# evaluate.ps1 reads log + archive, so lifetime attribution is unchanged by the move.
+# Order of operations is the whole safety argument: append and READ BACK first, drop from the
+# log only once every folded row is provably in the archive. A crash in between re-folds the
+# same rows next run, and the `date|code` key makes the append idempotent, so nothing is lost
+# and nothing is duplicated. Any failure leaves the log exactly as it was.
+$norm = FoldPicksToArchive $norm 120 (Join-Path $root 'data/picks-archive.jsonl')
 @{ picks=$norm } | ConvertTo-Json -Depth 5 | Out-File $logPath -Encoding UTF8
 
-$regimeObj=@{ light=$light; idx=[math]::Round($idxLast,2); ma20=[math]::Round($idxMA20,2); ma60=[math]::Round($idxMA60,2); instNet=$instNet; up=$upN; down=$dnN }
-$metaObj=@{ candidates=$cands.Count; shortlist=@($short).Count; etfCand=$ecand.Count; newLogged=$newLogged; t86ok=$t86ok; tpexOk=$tpexOk; idxOk=$idxOk; revRows=$rev.Count }
-$out=@{
+$regimeObj=[ordered]@{ light=$light; idx=[math]::Round($idxLast,2); ma20=[math]::Round($idxMA20,2); ma60=[math]::Round($idxMA60,2); instNet=$instNet; up=$upN; down=$dnN }
+$metaObj=[ordered]@{ candidates=$cands.Count; shortlist=@($short).Count; etfCand=$ecand.Count; newLogged=$newLogged; t86ok=$t86ok; tpexOk=$tpexOk; idxOk=$idxOk; revRows=$rev.Count }
+$out=[ordered]@{
   date=$lastDate
   regime=$regimeObj
   picks=$allPicks
@@ -520,7 +624,7 @@ function SlimEtf($p){ [pscustomobject]@{ code=$p.code; name=$p.name; close=$p.cl
 # Only the codes the AI actually writes about: SKILL.md says short comments are for top:true
 # stocks plus the ETF board, and the non-top rows were ~60% of this file's bytes for nothing.
 # The page draws its picks from PICKS_DATA, not from here, so nothing visible is lost.
-$summaryOut=@{
+$summaryOut=[ordered]@{
   date=$lastDate
   regime=$regimeObj
   picks=@($allPicks | Where-Object { $_.top } | ForEach-Object { SlimPick $_ })
@@ -534,7 +638,7 @@ Write-Host "  wrote screen-summary.json (slim, for AI to read instead of screen-
 # build PICKS_KLINE + PICKS_DATA once, then (a) splice into index.html for the static page
 # and (b) export as JSON for server mode. Picks are market-wide, so every user shares them.
 $kd=[ordered]@{}
-foreach($p in @($allPicks)+@($etfTop)){ $kd[$p.code]=@{ chgPct=$p.chgPct; dist=$p.dist; kline=$p.kline } }
+foreach($p in @($allPicks)+@($etfTop)){ $kd[$p.code]=[ordered]@{ chgPct=$p.chgPct; dist=$p.dist; kline=$p.kline } }
 # cap page detail rows: all open + last 40 closed (full history stays in picks-log.json),
 # otherwise index.html grows without bound as closed picks accumulate
 $perfRowsPage=@($perfRows | Where-Object {$_.status -eq 'open'})+@(@($perfRows | Where-Object {$_.status -eq 'closed'}) | Select-Object -Last 40)

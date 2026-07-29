@@ -11,7 +11,9 @@ function Grp($rows){
   $a=@($rows | Where-Object { $_.PSObject.Properties['alphaFinal'] -and $null -ne $_.alphaFinal })
   if($a.Count -eq 0){ return $null }
   $w=@($a | Where-Object { $_.alphaFinal -gt 0 }).Count
-  return @{ n=$a.Count
+  # [ordered] so the emitted JSON is byte-stable across runs: a plain hashtable enumerates in
+  # per-process string-hash order, which made every daily commit rewrite the whole report.
+  return [ordered]@{ n=$a.Count
             winRate=[math]::Round($w/$a.Count*100,0)
             avgAlpha=[math]::Round(($a|Measure-Object -Property alphaFinal -Average).Average,2)
             avgRet=[math]::Round(($a|Measure-Object -Property retFinal -Average).Average,2) }
@@ -38,7 +40,30 @@ if($null -eq $lg -or -not $lg.PSObject.Properties['picks']){
   Write-Host 'FATAL: picks-log.json unreadable - aborting (would otherwise emit an empty/false report)'
   exit 1
 }
-$closed=@($lg.picks | Where-Object { $_.status -eq 'closed' })
+# screen.ps1 keeps only the most recent settled picks in picks-log.json (it is published and
+# rewritten daily); everything older was appended to this archive. Reading both back means the
+# retention window never changes what the attribution report says. A missing archive is normal
+# on a fresh clone and is NOT fatal - only an unreadable picks-log.json is.
+$arcPath = Join-Path $root 'data/picks-archive.jsonl'
+$arcRows=@()
+if(Test-Path $arcPath){
+  foreach($ln in (Get-Content $arcPath -Encoding UTF8)){
+    if(-not "$ln".Trim()){ continue }
+    try{ $arcRows += ,($ln | ConvertFrom-Json) }catch{ Write-Host "  skipped an unparsable archive line" }
+  }
+  Write-Host "archive rows: $($arcRows.Count)"
+}
+# de-dupe on date|code: a crash between the archive append and the log rewrite can leave a row
+# in both files, and double-counting it would quietly bias every bucket in the report.
+$seenKey=@{}
+$closed=@()
+foreach($p in (@($lg.picks)+$arcRows)){
+  if($p.status -ne 'closed'){ continue }
+  $k="$($p.date)|$($p.code)"
+  if($seenKey.ContainsKey($k)){ continue }
+  $seenKey[$k]=$true
+  $closed += ,$p
+}
 Write-Host "closed picks: $($closed.Count)"
 
 $out=[ordered]@{ generated=(Get-Date -Format 'yyyy-MM-dd'); closedN=$closed.Count; overall=(Grp $closed) }

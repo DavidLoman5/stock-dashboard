@@ -372,7 +372,9 @@
         <b>③ 大盤紅綠燈</b><br>
         三項各 1 分：指數 &gt; 月線／全市場法人淨買超／漲家數 &gt; 跌家數。3 分＝🟢 綠燈（積極）、2 分＝🟡 黃燈（中性）、其餘＝🔴 紅燈（防守）；<b>指數跌破季線一律紅燈</b>。綠燈時評分獎勵動能、非綠燈時獎勵防禦（見②）。<br><br>
         <b>④ 追蹤出場規則（模擬、非下單指令）</b><br>
-        進場＝入選日收盤價；出場四擇一：<b>20 交易日到期</b>／<b>跌破月線</b>／<b>外資連 2 日轉賣</b>／<b>移動停利</b>（獲利 15%+ 回檔破 10 日線）。報酬含息（除息自動還原；月線判斷亦用含息序列，除息跳空不誤觸）。勝率＝出場報酬贏過同期大盤的比率。<br><br>
+        進場＝入選日收盤價；出場四擇一：<b>20 交易日到期</b>／<b>跌破月線</b>／<b>外資連 2 日轉賣</b>／<b>移動停利</b>（獲利 15%+ 回檔破 10 日線）。報酬含息（除息自動還原；月線判斷亦用含息序列，除息跳空不誤觸）。勝率＝出場報酬贏過同期大盤的比率。<br>
+        法人買賣超以「近 5 個交易日」定位，當日無法人進出的日子計為 0（不是略過），所以「連 2 日轉賣」比的一定是最近兩個交易日。若標的連續 25 個交易日取不到報價（下市／長期停牌），該筆標記為<b>資料中斷</b>作廢：不列入勝率與報酬統計，但也不再佔用追蹤名額。<br>
+        追蹤明細保留最近 120 筆已結案（頁面顯示最近 40 筆），更早的移入本機封存檔；歸因週報仍讀完整歷史，統計不受保留期影響。<br><br>
         <b>⑤ ETF 動能榜（70 分制）</b><br>
         籌碼閘門較寬（投信 ≥3 日且 &gt;20 萬股，或外資 ≥4 日且 &gt;100 萬股；成交值 ≥5000 萬）；只計籌碼 40＋技術 30（ETF 無 EPS/PE）；排除槓桿／反向／債券／期貨型（代碼尾碼 L/R/B/U）。<br><br>
         <b>⑥ 持股判級（規則引擎，同數據永遠同結論）</b><br>
@@ -386,7 +388,7 @@
         <b>兩日確認</b>：分數跨過切點後，同一個新級別要連續兩個交易日成立才真的換級，否則沿用前一交易日的級別（持股卡會標示「待確認」與今日原始判級）。六級比四級敏感，這是為了不讓單日雜訊天天翻牌。<br>
         <b>判級轉變提醒</b>：每日比對前一交易日判級（stance-log），不同即在持股卡與 Hero 標示（例：續抱→減碼）——轉變當天是檢視進退場的時點，判級本身的分數規則不變。<br>
         <b>持股移動停利訊號</b>：已知成本價（輸入成本或交易均價）且獲利 ≥15%、收盤跌破 10 日線 → 顯示 🔔 訊號，與 ④ 選股引擎移動停利同一套規則；僅提示、不改判級。<br><br>
-        <span style="color:var(--ink-faint);font-size:11.5px">版本 2026-07-28（判級改六級：加碼／加碼觀察／續抱／減碼觀察／減碼／清倉，評分細化為 −8～+8 並加入兩日確認）。選股規則以 screen.ps1 為準、判級以 lib/stance.ps1 為準；任何規則改動會同步更新本卡與 plan.md。權重調整鐵律：backtest 走前驗證樣本外顯著優於現行＋空頭區不劣化才動手，每月最多一次。以上為資訊整理與研究參考，非投資建議。</span>
+        <span style="color:var(--ink-faint);font-size:11.5px">版本 2026-07-29（法人天數改按日期定位、無交易日補 0；新增「資料中斷」作廢狀態；追蹤明細加保留期＋本機封存。評分與出場門檻本次未動）。選股規則以 screen.ps1 為準、判級以 lib/stance.ps1 為準；任何規則改動會同步更新本卡與 plan.md。權重調整鐵律：backtest 走前驗證樣本外顯著優於現行＋空頭區不劣化才動手，每月最多一次。以上為資訊整理與研究參考，非投資建議。</span>
       </div>
     </details>
   </div>
@@ -1155,8 +1157,14 @@ let CATS={};
  }
  const rows=PM.perfRows||[];
  if(rows.length>0){
-  const tr=rows.map(r=>`<tr><td>${String(r.date).replace(/^(\d{4})(\d{2})(\d{2})$/,'$2/$3')}</td><td>${esc(r.name)} <span style="color:var(--ink-faint)">${r.code}</span></td><td class="num">${r.entry}</td><td class="num">${r.cur}</td><td class="num ${r.ret>=0?'up-txt':'down-txt'}">${fmtSign(r.ret)}%</td><td class="num ${r.alpha==null?'':(r.alpha>=0?'up-txt':'down-txt')}">${r.alpha==null?'—':fmtSign(r.alpha)+'%'}</td><td class="num">${r.days}</td><td>${r.status==='closed'?('已結案·'+esc(r.reason||'20日到期')):'持有中'}</td></tr>`).join('');
-  html+=`<details><summary>每筆明細（${rows.length}）</summary><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>進場日</th><th style="text-align:left">股票</th><th>進場價</th><th>現價/出場</th><th>報酬</th><th>超額</th><th>天數</th><th>狀態</th></tr></thead><tbody>${tr}</tbody></table></div></details>`;
+  /* 持有中與已結案分兩張表：混在一起時「現在還抱著什麼」會被愈積愈多的結案列淹掉。
+     已結案由引擎端限制在最近 40 筆（screen.ps1 的 perfRowsPage），完整歷史在 picks-log.json。 */
+  const rowHtml=r=>`<tr><td>${String(r.date).replace(/^(\d{4})(\d{2})(\d{2})$/,'$2/$3')}</td><td>${esc(r.name)} <span style="color:var(--ink-faint)">${r.code}</span></td><td class="num">${r.entry}</td><td class="num">${r.cur}</td><td class="num ${r.ret>=0?'up-txt':'down-txt'}">${fmtSign(r.ret)}%</td><td class="num ${r.alpha==null?'':(r.alpha>=0?'up-txt':'down-txt')}">${r.alpha==null?'—':fmtSign(r.alpha)+'%'}</td><td class="num">${r.days}</td><td>${r.status==='closed'?('已結案·'+esc(r.reason||'20日到期')):'持有中'}</td></tr>`;
+  const tbl=list=>`<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>進場日</th><th style="text-align:left">股票</th><th>進場價</th><th>現價/出場</th><th>報酬</th><th>超額</th><th>天數</th><th>狀態</th></tr></thead><tbody>${list.map(rowHtml).join('')}</tbody></table></div>`;
+  const open=rows.filter(r=>r.status!=='closed');
+  const done=rows.filter(r=>r.status==='closed').slice().reverse();
+  if(open.length)html+=`<details open><summary>持有中（${open.length}）</summary>${tbl(open)}</details>`;
+  if(done.length)html+=`<details><summary>已結案（顯示最近 ${done.length} 筆）</summary>${tbl(done)}</details>`;
  }
  pb.innerHTML=html;
 })();

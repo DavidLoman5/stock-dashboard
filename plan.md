@@ -209,6 +209,40 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## ✅ 已完成
 
+### 2026-07-29 推薦追蹤止血：JSON key 排序、保留期＋封存、法人天數對齊、殭屍部位
+
+使用者問「推薦追蹤會變無限長怎麼解決」。量完之後發現**體積不是主要問題，churn 才是**。
+
+`picks-log.json` 的每筆記錄在 `screen.ps1` 是用 `@{}` 建的。pwsh 7 的 .NET 字串雜湊每個 process 都重新隨機化，所以同一份資料連跑三次，key 順序三種：
+
+```
+retFinal,name,status,alphaFinal,score,closedOn,days,reason,code,exit,date,price
+code,score,name,retFinal,date,closedOn,days,status,price,exit,reason,alphaFinal
+exit,price,score,retFinal,status,closedOn,name,date,reason,alphaFinal,days,code
+```
+
+於是 `git show c452aec -- picks-log.json` 是 **250 insertions / 158 deletions**，那天實際只新增 4 筆。等於每天把整個歷史重寫一次推上去，diff 也完全沒法看。同樣問題在 `screen-summary.json`、`eval-report.json`、以及 index.html 內的 `regime`／`meta`／`perf` 三個子物件。
+
+做了四件事：
+
+1. **輸出一律 `[ordered]@{}`**（`screen.ps1` 的 `$o`／`$perfSummary`／`$byLight`／`$regimeObj`／`$metaObj`／`$out`／`$summaryOut`／`$kd`，`evaluate.ps1` 的 `Grp()`）。實測：同輸入、兩個獨立 process，輸出 byte-identical；新增一筆的 diff 從 408 行降到 **12 行**。
+   踩到的坑：`[ordered]@{}` 是 `OrderedDictionary`，**只有 `.Contains()` 沒有 `.ContainsKey()`**，`$o.ContainsKey('alphaFinal')` 那幾處會直接 InvalidOperation。
+   另一個坑：`publish.ps1` 的 ai-tags 是用 `Add-Member` 接在**尾端**，而 normalize 原本把 `aiSust`/`aiRisk` 排在 `ind` 後面 → 每個被標記的部位隔天都會被搬回去，churn 又回來。所以 normalize 的正規順序也把這兩個欄位移到最後，與 publish 對齊。已用「normalize → publish 掛標籤 → 隔天 normalize」三段模擬驗過 byte-identical（要先把現有標籤剝掉才測得到，否則 tagged=0 是假通過）。
+
+2. **保留期＋封存**：`FoldPicksToArchive`（抽成具名函式，好讓 `tests.ps1 [3]` 用 AST 抓出來測）。log 只留全部 open ＋ 最近 120 筆已結案，更舊的 append 進 `data/picks-archive.jsonl`（`data/` 已 gitignored，只 append 不重寫，不必動 allowlist）。`evaluate.ps1` 讀 log ＋ archive 並以 `date|code` 去重，所以**終身歸因統計完全不受保留期影響**。
+   安全性論證在順序：先 append、再把整個 archive 讀回來核對，**每一筆都確認在裡面了才**從 log 移除。中途死掉 → 下次重跑同樣那幾筆，`date|code` 讓 append 冪等，不重複也不遺失。任何一步失敗就原封不動回傳（`-ErrorAction Stop` 是必要的：腳本跑在 `$ErrorActionPreference='Continue'` 下，沒有它寫入失敗只會印訊息然後**繼續往下刪**）。
+
+3. **法人天數改按日期定位**（`screen.ps1` [3/8]）。T86／TPEx 只列出當天有法人進出的股票，原本用 `+=` 累積 → 冷門股的序列會**變短**，於是 `f[-1]`／`f[-2]`（「外資連 2 日轉賣」）比的可能不是最近兩天，`tPos>=3` 也可能是 3/3 而不是 3/5。改成先收成 `code→date→值`，再按**該股自己市場**的成功日清單展開、缺席補 0（`.n` 另存實際出現天數，接手原本 `$t.Count -lt 4` 的資料充足度守門）。按市場分開很重要：否則 TPEx 某天抓失敗會把全部上櫃股在那天補 0，悄悄壓到閘門以下。
+   **這會改變選股與出場輸出**——是資料對齊的 bug fix，不是參數調整，但 8/18 檢視時要記得這條在期間內生效。
+
+4. **殭屍部位**：`screen.ps1` 原本遇到查不到報價的代號直接 `continue`，該筆就**永遠停在 open**——頁面看不到、永遠不結案、還一直佔著去重鍵擋住重新進場（下市、長期停牌、或某天 TPEx 抓取失敗都會踩到）。改為超過 25 個交易日仍無報價則標記 `status='void'`／`reason='資料中斷'`：沒有價格就沒有誠實的報酬，所以不進勝率統計，但也不再佔名額。
+
+頁面端 `perfBox` 把「持有中」與「已結案」拆成兩張表（持有中預設展開、已結案收合且新到舊），以前 17 列混在一起、只靠最後一欄文字區分。
+
+測試：`tests.ps1` 新增 [10] 共 16 項——折疊的集合恆等（log＋archive == 輸入）、open 永不被封存、冪等、crash-then-retry 不產生重複、archive 寫不進去時一筆都不掉，加上「兩個 process 輸出 byte-identical」的實證（先斷言兩個檔案真的產生了，否則兩個 null 也會比對成功）。
+
+**本次未動任何選股／評分／出場參數**，`plan.md` 的每月儀式照舊 2026-08-18。
+
 ### 2026-07-28 判級引擎四級改六級（加碼／加碼觀察／續抱／減碼觀察／減碼／清倉）＋ rec 拿掉「非買賣指令。」
 
 使用者要的錨點：**股價同時站上 5/10/20/60 均線就加碼、反之清倉**，另外「評分可以更細」。
