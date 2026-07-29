@@ -5,6 +5,8 @@ $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $root 'lib/feed.ps1')       # Get-FeedJson / Get-FeedDailySeries / FeedCols
 . (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
+. (Join-Path $root 'lib/picks-log.ps1')  # Get-PicksLog / Set-PicksLog / Add-PicksLogTags
+. (Join-Path $root 'lib/score.ps1')      # the selection rules (shared with backtest.ps1)
 # Num/GetJson keep their names so the ~30 call sites below read the same; the bodies live in
 # lib/feed.ps1 now, because there used to be three copies of each and the timeouts had drifted.
 function Num($s){ ConvertTo-FeedNum $s }
@@ -13,13 +15,11 @@ function IsElec($ind){ foreach($k in @('半導體','電子','電腦','光電','�
 function StripK($obj){ $o=[ordered]@{}; foreach($pr in $obj.PSObject.Properties){ if($pr.Name -ne 'kline'){ $o[$pr.Name]=$pr.Value } }; [pscustomobject]$o }
 # daily OHLCV series routed by market (TWSE STOCK_DAY / TPEx tradingStock); dt=yyyymmdd for date math
 # completed months never change -> disk-cached under kline-cache/ (gitignored); current month always fetched live
-$klineCache = Join-Path $root 'kline-cache'
-if(-not (Test-Path $klineCache)){ New-Item -ItemType Directory -Path $klineCache | Out-Null }
-# prune cache months older than the 4-month window the engine ever reads (codes rotate daily; unbounded otherwise)
-try{
-  $pruneYM=(Get-Date).AddMonths(-5).ToString('yyyyMM')
-  Get-ChildItem $klineCache -Filter '*.json' | Where-Object { $_.Name -match '-(\d{6})\.json$' -and $Matches[1] -lt $pruneYM } | Remove-Item -Force
-}catch{}
+# creation + eviction belong to lib/feed.ps1: this directory has two tenants (see the note
+# there), and the prune used to sit here where a FATAL above it meant no eviction at all
+$klineCache = Get-FeedCacheDir $root
+$pruned = Invoke-FeedCachePrune $klineCache
+if($pruned -gt 0){ Write-Host "  cache: pruned $pruned stale month file(s)" }
 function GetDailySeries($code,$mms){
   # market is known upfront here (the whole-market tables in [1/8] said so), so no 'auto' probe
   $isO = ($mkt.ContainsKey($code) -and $mkt[$code] -eq 'o')
@@ -42,56 +42,6 @@ function DivSumSince($rows,$sinceDt){
     }
   }
   return $s
-}
-
-# picks-log.json is published, rewritten every day, and grows by ~2.6 rows per trade day
-# (~640/yr) forever. This keeps every open row plus the most recent $Retain settled ones and
-# moves older settled rows to an append-only JSONL archive under data/ (gitignored, never
-# rewritten). evaluate.ps1 reads log + archive, so lifetime attribution is unaffected.
-#
-# The order of operations IS the safety argument: append, read the archive back, and drop rows
-# from the log only once every folded row is provably in it. A crash in between simply re-folds
-# the same rows next run - the `date|code` key makes the append idempotent - so nothing is lost
-# and nothing is duplicated. Any failure returns the input untouched: same rule as the FATAL
-# guards below, history is never traded away for a tidier file.
-function FoldPicksToArchive($rows,[int]$Retain,$ArcPath){
-  $settled=@($rows | Where-Object { $_.status -ne 'open' })
-  if($settled.Count -le $Retain){ return ,@($rows) }
-  $sorted=@($settled | Sort-Object @{e={"$($_.closedOn)"}}, @{e={"$($_.date)"}}, @{e={"$($_.code)"}})
-  $fold=@($sorted[0..($sorted.Count-$Retain-1)])
-  try{
-    # -ErrorAction Stop throughout: the script runs with $ErrorActionPreference='Continue', so
-    # without it a failed write is merely printed and execution falls through to the drop step.
-    $arcDir=Split-Path -Parent $ArcPath
-    if($arcDir -and -not (Test-Path $arcDir)){ New-Item -ItemType Directory -Path $arcDir -ErrorAction Stop | Out-Null }
-    $have=@{}
-    if(Test-Path $ArcPath){
-      foreach($ln in (Get-Content $ArcPath -Encoding UTF8 -ErrorAction Stop)){
-        if(-not "$ln".Trim()){ continue }
-        try{ $ob=$ln | ConvertFrom-Json; $have["$($ob.date)|$($ob.code)"]=$true }catch{}
-      }
-    }
-    $lines=@()
-    foreach($o in $fold){ if(-not $have.ContainsKey("$($o.date)|$($o.code)")){ $lines += ($o | ConvertTo-Json -Depth 4 -Compress) } }
-    if($lines.Count -gt 0){ Add-Content -Path $ArcPath -Value $lines -Encoding UTF8 -ErrorAction Stop }
-    $back=@{}
-    foreach($ln in (Get-Content $ArcPath -Encoding UTF8 -ErrorAction Stop)){
-      if(-not "$ln".Trim()){ continue }
-      try{ $ob=$ln | ConvertFrom-Json; $back["$($ob.date)|$($ob.code)"]=$true }catch{}
-    }
-    $missing=@($fold | Where-Object { -not $back.ContainsKey("$($_.date)|$($_.code)") })
-    if($missing.Count -gt 0){
-      Write-Host "  WARNING: archive read-back missing $($missing.Count) rows - log left intact, nothing dropped"
-      return ,@($rows)
-    }
-    $drop=@{}; foreach($o in $fold){ $drop["$($o.date)|$($o.code)"]=$true }
-    $kept=@($rows | Where-Object { -not $drop.ContainsKey("$($_.date)|$($_.code)") })
-    Write-Host "  archived $($fold.Count) settled picks -> $ArcPath (log keeps $Retain settled + all open)"
-    return ,$kept
-  }catch{
-    Write-Host "  WARNING: archive step failed ($($_.Exception.Message)) - log left intact, nothing dropped"
-    return ,@($rows)
-  }
 }
 
 Write-Host "[1/8] STOCK_DAY_ALL..."
@@ -139,20 +89,14 @@ foreach($k in $px.Keys){ $g=$px[$k].chg; if($g -gt 0){$upN++} elseif($g -lt 0){$
 Write-Host "[2/8] FMTQIK (index history)..."
 $months=@(); $d0=[datetime]::ParseExact($lastDate,'yyyyMMdd',$null)
 for($m=3;$m -ge 0;$m--){ $months += $d0.AddMonths(-$m).ToString('yyyyMM01') }
-$idxC=@(); $tradeDates=@(); $idxOk=0
-foreach($mm in $months){
-  $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=$mm&response=json"
-  if($r -and $r.stat -eq 'OK'){
-    $idxOk++
-    foreach($d in $r.data){ $idxC += (Num $d[4]); $p="$($d[0])".Split('/'); $tradeDates += ("{0}{1:00}{2:00}" -f ([int]$p[0]+1911), [int]$p[1], [int]$p[2]) }
-  }
-  Start-Sleep -Milliseconds 700
-}
+$idxHist=Get-FeedIndexHistory -Months $months
+$idxC=@(); $tradeDates=@(); $idxOk=$idxHist.MonthsOk
+foreach($row in $idxHist.Rows){ $idxC += $row.c; $tradeDates += $row.dt }
 # total failure here would silently produce an empty-picks run indistinguishable from a real
 # no-qualifying-stocks day (regime defaults to red, screening loops never execute) -> abort instead
 if($idxC.Count -eq 0){ Write-Host "FATAL: FMTQIK failed for all $($months.Count) months - no index data, aborting to avoid overwriting good data with a silently-empty run"; exit 1 }
 if($idxOk -lt $months.Count){ Write-Host "  WARNING: only $idxOk/$($months.Count) FMTQIK months fetched - regime/index calc may be degraded" }
-function SMAlast($a,$n){ if($a.Count -lt $n){return $null}; ($a[($a.Count-$n)..($a.Count-1)] | Measure-Object -Average).Average }
+function SMAlast($a,$n){ Get-ScoreSma $a $n }   # one implementation, in lib/score.ps1
 $idxLast=$idxC[$idxC.Count-1]; $idxMA20=SMAlast $idxC 20; $idxMA60=SMAlast $idxC 60
 $last5=$tradeDates | Select-Object -Last 5
 
@@ -169,29 +113,29 @@ $t86ok=0
 $tpexOk=0
 $twDays=@(); $otcDays=@()
 foreach($d in $last5){
-  $r=GetJson "https://www.twse.com.tw/rwd/zh/fund/T86?date=$d&selectType=ALL&response=json"
-  if($r -and $r.stat -eq 'OK'){
+  # values stay in SHARES here (the exchange's own unit) - the chip gate below is written in
+  # shares, unlike update-holdings.ps1 which shows lots
+  $tw=Get-FeedInstitutional -Date $d -Market 't'
+  if($tw.Ok){
     $t86ok++; $twDays += $d
-    foreach($row in $r.data){
-      $c="$($row[0])".Trim()
+    foreach($c in $tw.Rows.Keys){
       if(-not $chipDay.ContainsKey($c)){ $chipDay[$c]=@{} }
-      $chipDay[$c][$d]=@{ f=[double](Num $row[4]); t=[double](Num $row[10]); tot=[double](Num $row[18]) }
+      $e=$tw.Rows[$c]
+      $chipDay[$c][$d]=@{ f=$e.f; t=$e.t; tot=$e.tot }
     }
   }
-  Start-Sleep -Milliseconds 800
-  # TPEx daily institutional trading (OTC): col[4]=foreign net, col[13]=trust net, col[23]=3-insti total
-  $dSlash="{0}/{1}/{2}" -f $d.Substring(0,4),$d.Substring(4,2),$d.Substring(6,2)
-  $r2=GetJson "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade?type=Daily&sect=EW&date=$dSlash&response=json"
-  if($r2 -and $r2.tables -and $r2.tables[0].data){
+  $otc=Get-FeedInstitutional -Date $d -Market 'o'
+  if($otc.Ok){
     $tpexOk++; $otcDays += $d
-    foreach($row in $r2.tables[0].data){
-      $c="$($row[0])".Trim()
+    foreach($c in $otc.Rows.Keys){
       if(-not $chipDay.ContainsKey($c)){ $chipDay[$c]=@{} }
       # a code listed on both boards keeps its TWSE row: same precedence as the $px build above
-      if(-not $chipDay[$c].ContainsKey($d)){ $chipDay[$c][$d]=@{ f=[double](Num $row[4]); t=[double](Num $row[13]); tot=[double](Num $row[23]) } }
+      if(-not $chipDay[$c].ContainsKey($d)){
+        $e=$otc.Rows[$c]
+        $chipDay[$c][$d]=@{ f=$e.f; t=$e.t; tot=$e.tot }
+      }
     }
   }
-  Start-Sleep -Milliseconds 800
 }
 if($t86ok -lt 5){ Write-Host "  WARNING: only $t86ok/5 T86 days fetched - chip screening degraded. Consider re-run later." }
 if($tpexOk -lt 5){ Write-Host "  WARNING: only $tpexOk/5 TPEx insti days fetched - OTC chip screening degraded. Consider re-run later." }
@@ -209,21 +153,18 @@ foreach($c in $chipDay.Keys){
 }
 
 Write-Host "[4/8] BFI82U (market inst amount)..."
-$instNet=$null
-$r=GetJson "https://www.twse.com.tw/rwd/zh/fund/BFI82U?dayDate=$lastDate&type=day&response=json"
-if($r -and $r.stat -eq 'OK' -and $r.data.Count -gt 0){ $lastRow=$r.data[$r.data.Count-1]; $instNet=[math]::Round([double](Num $lastRow[3])/1e8,0) }  # last row = total
+$instNet=Get-FeedMarketInstAmount -Date $lastDate
 Write-Host "  instNet = $instNet (yi NTD)"
 
 Write-Host "[5/8] MI_MARGN (margin)..."
 $fin=@{}
-$r=GetJson "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date=$lastDate&selectType=ALL&response=json"
-if($r){ $tbl=$r.tables | Where-Object { $_.data -and $_.data.Count -gt 100 } | Select-Object -First 1
-  if($tbl){ foreach($row in $tbl.data){ $c="$($row[0])".Trim(); $fin[$c]=@{ today=(Num $row[6]); prev=(Num $row[5]) } } } }
-# TPEx margin balance (OTC): col[2]=prev balance, col[6]=today balance
-$lastSlash="{0}/{1}/{2}" -f $lastDate.Substring(0,4),$lastDate.Substring(4,2),$lastDate.Substring(6,2)
-$r=GetJson "https://www.tpex.org.tw/www/zh-tw/margin/balance?date=$lastSlash&response=json"
-if($r -and $r.tables){ $tbl=$r.tables | Where-Object { $_.data -and $_.data.Count -gt 100 } | Select-Object -First 1
-  if($tbl){ foreach($row in $tbl.data){ $c="$($row[0])".Trim(); if(-not $fin.ContainsKey($c)){ $fin[$c]=@{ today=(Num $row[6]); prev=(Num $row[2]) } } } } }
+foreach($mkKind in @('t','o')){
+  $mg=Get-FeedMargin -Date $lastDate -Market $mkKind
+  foreach($c in $mg.Rows.Keys){
+    if($fin.ContainsKey($c)){ continue }   # TWSE row wins for a dual-listed code
+    $fin[$c]=@{ today=$mg.Rows[$c].fin; prev=$mg.Rows[$c].finPrev }
+  }
+}
 
 Write-Host "[6/8] BWIBBU_ALL + revenue..."
 $pe=@{}
@@ -249,34 +190,25 @@ if($r){ foreach($row in $r){ $p=@($row.PSObject.Properties); $c="$($p[2].Value)"
 Write-Host "  pe=$($pe.Count) rev=$($rev.Count) (TWSE+TPEx)"
 
 # ----- regime light (computed BEFORE scoring so weights can adapt) -----
-$pts=0
-if($idxLast -gt $idxMA20){ $pts++ }
-if($instNet -ne $null -and $instNet -gt 0){ $pts++ }
-if($upN -gt $dnN){ $pts++ }
-$light='red'
-if($idxMA60 -ne $null -and $idxLast -lt $idxMA60){ $light='red' }
-elseif($pts -eq 3){ $light='green' }
-elseif($pts -ge 2 -or ($idxMA60 -ne $null -and $idxLast -gt $idxMA60)){ $light='yellow' }
-Write-Host "  regime = $light (pts=$pts)"
+$light = Get-RegimeLight -IdxLast $idxLast -IdxMA20 $idxMA20 -IdxMA60 $idxMA60 `
+                        -InstNet $instNet -UpCount $upN -DownCount $dnN
+Write-Host "  regime = $light"
 
 Write-Host "[7/8] screening..."
+$ProfStock = Get-ScoreProfile 'stock'
+$ProfEtf   = Get-ScoreProfile 'etf'
 $cands=@()
 foreach($c in $chip.Keys){
   if($c -notmatch '^[1-9][0-9]{3}$'){ continue }
   if(-not $px.ContainsKey($c)){ continue }
   if($px[$c].val -lt 1e8){ continue }             # liquidity >= NT$100M/day
-  $t=$chip[$c].t; $f=$chip[$c].f
   if($chip[$c].n -lt 4){ continue }               # .n = days the code actually appeared (gaps are zero-filled)
-  $tPos=($t | Where-Object {$_ -gt 0}).Count
-  $fPos=($f | Where-Object {$_ -gt 0}).Count
-  $tSum=($t | Measure-Object -Sum).Sum; $fSum=($f | Measure-Object -Sum).Sum
-  $ok=$false
-  if($tPos -ge 3 -and $tSum -gt 300000){ $ok=$true }
-  if($fPos -ge 4 -and $fSum -gt 3000000){ $ok=$true }
-  if(-not $ok){ continue }
-  $chipScore = [math]::Min(25, $tPos*5) + [math]::Min(10, $fPos*2)
-  $fd=$fin[$c]; if($fd -and $fd.today -ne $null -and $fd.prev -ne $null -and $fd.today -lt $fd.prev){ $chipScore += 5 }
-  $cands += [pscustomobject]@{ code=$c; chip=$chipScore; tPos=$tPos; fPos=$fPos; tSum=$tSum; fSum=$fSum }
+  $st=Get-ChipStats -Trust $chip[$c].t -Foreign $chip[$c].f
+  if(-not (Test-ChipGate -Stats $st -Profile $ProfStock)){ continue }
+  $fd=$fin[$c]
+  $mDown = [bool]($fd -and $null -ne $fd.today -and $null -ne $fd.prev -and $fd.today -lt $fd.prev)
+  $cands += [pscustomobject]@{ code=$c; chip=(Get-ChipScore -Stats $st -MarginDown $mDown)
+                               tPos=$st.tPos; fPos=$st.fPos; tSum=$st.tSum; fSum=$st.fSum }
 }
 Write-Host "  candidates = $($cands.Count)"
 $short = $cands | Sort-Object -Property @{e='chip';Descending=$true}, @{e='tSum';Descending=$true} | Select-Object -First 16
@@ -296,44 +228,20 @@ foreach($s in $short){
   $ret5 = if($ser.Count -ge 6){ $cl/$ser[$ser.Count-6]-1 } else { 0 }
   $n40=[math]::Min(40,$ser.Count); $hi40=($ser[($ser.Count-$n40)..($ser.Count-1)] | Measure-Object -Maximum).Maximum
   $dist = $cl/$hi40-1
-  if($ret5 -gt 0.25){ Write-Host "  drop $c overheated ret5=$([math]::Round($ret5*100,1))%"; continue }
-  if($ma60 -ne $null -and $cl -lt $ma60){ Write-Host "  drop $c below MA60"; continue }
-  $tech=0
-  if($ma20 -ne $null -and $cl -gt $ma20){ $tech+=10 }
-  if($ma60 -ne $null -and $cl -gt $ma60){ $tech+=8 }
-  if($ma20p -ne $null -and $ma20 -gt $ma20p){ $tech+=5 }
-  if($dist -ge -0.08){ $tech+=4 }
-  # --- volume/price structure & candle patterns (user framework: price-volume is king) ---
+  # scoring lives in lib/score.ps1 so backtest.ps1 replays THIS, not a transcription of it
   $lb=$serF[$serF.Count-1]
   $vAvg20 = if($serF.Count -ge 21){ (@($serF[($serF.Count-21)..($serF.Count-2)] | ForEach-Object { $_.v }) | Measure-Object -Average).Average } else { $null }
   $vr = if($vAvg20 -and $vAvg20 -gt 0){ $lb.v/$vAvg20 } else { $null }
-  $rng=$lb.h-$lb.l
-  $upWick = if($rng -gt 0){ ($lb.h-[math]::Max($lb.o,$lb.c))/$rng } else { 0 }
-  $loWick = if($rng -gt 0){ ([math]::Min($lb.o,$lb.c)-$lb.l)/$rng } else { 0 }
-  $closePos = if($rng -gt 0){ ($lb.c-$lb.l)/$rng } else { 0.5 }
-  # distribution day at highs: huge volume + weak close = possible institutional dumping -> reject
-  if($dist -ge -0.03 -and $vr -ne $null -and $vr -ge 2 -and ($closePos -lt 0.35 -or $upWick -gt 0.6)){ Write-Host ("  drop $c distribution candle (vr={0})" -f [math]::Round($vr,1)); continue }
-  if($lb.chg -gt 0 -and $vr -ne $null -and $vr -ge 1.5){ $tech+=4 }                    # volume-backed advance
-  elseif($lb.chg -gt 0 -and $px[$c].val -gt 3e8){ $tech+=2 }
-  if($dist -ge -0.03 -and $upWick -gt 0.6 -and $vr -ne $null -and $vr -ge 1.2){ $tech-=5 }  # long upper wick at highs
-  if($dist -le -0.10 -and $loWick -gt 0.6){ $tech+=2 }                                  # hammer near lows = support
-  if($tech -lt 0){ $tech=0 }
-  # regime-aware: green light rewards momentum
-  if($light -eq 'green' -and $ret5 -ge 0.03 -and $ret5 -le 0.15){ $tech+=3 }
-  if($tech -gt 30){ $tech=30 }
-  $fund=0; $y=$null; $ind=''
+  $ts = Get-TechScore -Bar @{ c=$cl; o=$lb.o; h=$lb.h; l=$lb.l; chg=$lb.chg; vr=$vr; val=$px[$c].val } `
+                      -Ma @{ ma20=$ma20; ma20p=$ma20p; ma60=$ma60; ret5=$ret5; dist=$dist } `
+                      -Light $light -Profile $ProfStock
+  if($ts.Drop){ Write-Host "  drop $c $($ts.Reason)"; continue }
+  $tech=$ts.Score
+  $y=$null; $ind=''
   if($rev.ContainsKey($c)){ $y=$rev[$c].yoy; $ind=$rev[$c].ind }
-  if($y -ne $null){ if($y -ge 100){$fund+=15}elseif($y -ge 30){$fund+=12}elseif($y -ge 10){$fund+=8}elseif($y -gt 0){$fund+=4} }
   $peV=$null; $dyV=$null
   if($pe.ContainsKey($c)){ $peV=$pe[$c].pe; $dyV=$pe[$c].dy }
-  if($peV -ne $null -and $peV -gt 0){ if($peV -le 15){$fund+=10}elseif($peV -le 25){$fund+=7}elseif($peV -le 40){$fund+=4} }
-  if($dyV -ne $null -and $dyV -ge 3){ $fund+=5 }
-  # regime-aware: non-green rewards defensive traits
-  if($light -ne 'green'){
-    if($dyV -ne $null -and $dyV -ge 4){ $fund+=3 }
-    if($peV -ne $null -and $peV -gt 0 -and $peV -le 15){ $fund+=2 }
-  }
-  if($fund -gt 30){ $fund=30 }
+  $fund = Get-FundScore -YoY $y -PE $peV -DividendYield $dyV -Light $light
   $fd=$fin[$c]; $finDelta = if($fd -and $fd.today -ne $null -and $fd.prev -ne $null){ [int]($fd.today-$fd.prev) } else { $null }
   $spark=@(); $nS=[math]::Min(40,$ser.Count)
   foreach($v in $ser[($ser.Count-$nS)..($ser.Count-1)]){ $spark += [math]::Round($v,2) }
@@ -371,19 +279,14 @@ $ecand=@()
 foreach($c in $chip.Keys){
   if($c -notmatch '^00[0-9A-Z]+$'){ continue }
   if($c -match '[LRBU]$'){ continue }           # exclude leveraged/inverse/bond/futures ETFs
-  $t=$chip[$c].t; $f=$chip[$c].f
   if($chip[$c].n -lt 4){ continue }
-  $tPos=($t | Where-Object {$_ -gt 0}).Count
-  $fPos=($f | Where-Object {$_ -gt 0}).Count
-  $tSum=($t | Measure-Object -Sum).Sum; $fSum=($f | Measure-Object -Sum).Sum
-  if($px.ContainsKey($c) -and $px[$c].val -lt 5e7){ continue }
-  $ok=$false
-  if($tPos -ge 3 -and $tSum -gt 200000){ $ok=$true }
-  if($fPos -ge 4 -and $fSum -gt 1000000){ $ok=$true }
-  if(-not $ok){ continue }
-  $chipScore=[math]::Min(25,$tPos*5)+[math]::Min(10,$fPos*2)
-  $fd=$fin[$c]; if($fd -and $fd.today -ne $null -and $fd.prev -ne $null -and $fd.today -lt $fd.prev){ $chipScore+=5 }
-  $ecand += [pscustomobject]@{ code=$c; chip=$chipScore; tPos=$tPos; fPos=$fPos; tSum=$tSum; fSum=$fSum }
+  if($px.ContainsKey($c) -and $px[$c].val -lt $ProfEtf.minDayValue){ continue }
+  $st=Get-ChipStats -Trust $chip[$c].t -Foreign $chip[$c].f
+  if(-not (Test-ChipGate -Stats $st -Profile $ProfEtf)){ continue }
+  $fd=$fin[$c]
+  $mDown = [bool]($fd -and $null -ne $fd.today -and $null -ne $fd.prev -and $fd.today -lt $fd.prev)
+  $ecand += [pscustomobject]@{ code=$c; chip=(Get-ChipScore -Stats $st -MarginDown $mDown)
+                               tPos=$st.tPos; fPos=$st.fPos; tSum=$st.tSum; fSum=$st.fSum }
 }
 Write-Host "  etf candidates = $($ecand.Count)"
 $eshort=$ecand | Sort-Object -Property @{e='chip';Descending=$true}, @{e='fSum';Descending=$true} | Select-Object -First 6
@@ -401,18 +304,16 @@ foreach($s in $eshort){
   $ret5 = if($ser.Count -ge 6){ $cl/$ser[$ser.Count-6]-1 } else { 0 }
   $n40=[math]::Min(40,$ser.Count); $hi40=($ser[($ser.Count-$n40)..($ser.Count-1)] | Measure-Object -Maximum).Maximum
   $dist=$cl/$hi40-1
-  if($ret5 -gt 0.20){ Write-Host "  drop ETF $c overheated"; continue }
-  if($ma60 -ne $null -and $cl -lt $ma60){ Write-Host "  drop ETF $c below MA60"; continue }
-  $tech=0
-  if($ma20 -ne $null -and $cl -gt $ma20){ $tech+=10 }
-  if($ma60 -ne $null -and $cl -gt $ma60){ $tech+=8 }
-  if($ma20p -ne $null -and $ma20 -gt $ma20p){ $tech+=5 }
-  if($dist -ge -0.05){ $tech+=4 }
   $lbE=$serF[$serF.Count-1]; $lastChg=$lbE.chg
   $vAvgE = if($serF.Count -ge 21){ (@($serF[($serF.Count-21)..($serF.Count-2)] | ForEach-Object { $_.v }) | Measure-Object -Average).Average } else { $null }
   $vrE = if($vAvgE -and $vAvgE -gt 0){ $lbE.v/$vAvgE } else { $null }
-  if($lastChg -gt 0 -and $vrE -ne $null -and $vrE -ge 1.3){ $tech+=3 } elseif($lastChg -gt 0){ $tech+=1 }
-  if($tech -gt 30){ $tech=30 }
+  # same function as the stock loop, different profile - the ETF board used to be a 68-line
+  # copy of it with suffixed variable names
+  $tsE = Get-TechScore -Bar @{ c=$cl; o=$lbE.o; h=$lbE.h; l=$lbE.l; chg=$lastChg; vr=$vrE; val=$null } `
+                       -Ma @{ ma20=$ma20; ma20p=$ma20p; ma60=$ma60; ret5=$ret5; dist=$dist } `
+                       -Light $light -Profile $ProfEtf
+  if($tsE.Drop){ Write-Host "  drop ETF $c $($tsE.Reason)"; continue }
+  $tech=$tsE.Score
   $fd=$fin[$c]; $finDelta = if($fd -and $fd.today -ne $null -and $fd.prev -ne $null){ [int]($fd.today-$fd.prev) } else { $null }
   $nm = if($px.ContainsKey($c)){ $px[$c].name } else { $c }
   $spark=@(); $nS=[math]::Min(40,$ser.Count)
@@ -437,50 +338,14 @@ Write-Host "  etf picks = $($etfTop.Count)"
 
 Write-Host "[8/8] picks-log (20-day auto-close, dedupe) + output..."
 $logPath=Join-Path $root 'picks-log.json'
+# Read + normalise through lib/picks-log.ps1: the retry, the FATAL-before-any-write guard and
+# the [ordered] key order all live there now, so publish.ps1 (this file's second writer) gets
+# exactly the same treatment instead of a bare Get-Content.
 $norm=@()
-if(Test-Path $logPath){
-  # a transient read failure must NEVER cause history to be rebuilt from an unreadable file --
-  # retry, then hard-abort BEFORE any write so tracking history is never overwritten with empty
-  $lg=$null
-  for($try=0;$try -lt 3 -and $null -eq $lg;$try++){
-    try{ $lg=Get-Content $logPath -Raw -Encoding UTF8 | ConvertFrom-Json }catch{ Start-Sleep -Milliseconds 1500 }
-  }
-  if($null -eq $lg -or -not $lg.PSObject.Properties['picks']){
-    Write-Host "FATAL: picks-log.json exists but unreadable after 3 tries - aborting, nothing written"
-    exit 1
-  }
-  try{
-    foreach($p in @($lg.picks)){
-      # [ordered], not @{}: a plain hashtable enumerates in .NET string-hash order, which is
-      # randomised per process, so ConvertTo-Json shuffled every record's keys on every run and
-      # the daily commit rewrote the whole file (250 inserts / 158 deletes for 4 new picks).
-      # Insertion order here is a pure function of which fields the record has, so the file is
-      # now byte-stable and a day's diff is just that day's rows.
-      $o=[ordered]@{ date="$($p.date)"; code="$($p.code)"; name="$($p.name)"; price=[double]$p.price; score=[int]$p.score }
-      if($px.ContainsKey($o.code) -and $px[$o.code].name){ $o.name="$($px[$o.code].name)" }   # heals legacy mojibake names
-      $o.status = if($p.PSObject.Properties['status'] -and $p.status){ "$($p.status)" } else { 'open' }
-      # pass through the entry factor snapshot (used by evaluate.ps1 attribution)
-      foreach($fld in @('light','chipS','techS','fundS','ret5','dist','yoy','pe','dy','ind')){
-        if($p.PSObject.Properties[$fld] -and $null -ne $p.$fld){ $o[$fld]=$p.$fld }
-      }
-      if($p.PSObject.Properties['exit'] -and $p.exit -ne $null){ $o.exit=[double]$p.exit }
-      if($p.PSObject.Properties['retFinal'] -and $p.retFinal -ne $null){ $o.retFinal=[double]$p.retFinal }
-      if($p.PSObject.Properties['alphaFinal'] -and $p.alphaFinal -ne $null){ $o.alphaFinal=[double]$p.alphaFinal }
-      if($p.PSObject.Properties['closedOn'] -and $p.closedOn){ $o.closedOn="$($p.closedOn)" }
-      if($p.PSObject.Properties['days'] -and $p.days -ne $null){ $o.days=[int]$p.days }
-      if($p.PSObject.Properties['reason'] -and $p.reason){ $o.reason="$($p.reason)" }
-      # AI tags last, because that is where publish.ps1's Add-Member puts them when it attaches
-      # them the same evening. Matching its position means the next morning's rewrite does not
-      # shuffle those rows back, which would reintroduce daily churn for every tagged pick.
-      foreach($fld in @('aiSust','aiRisk')){
-        if($p.PSObject.Properties[$fld] -and $null -ne $p.$fld){ $o[$fld]=$p.$fld }
-      }
-      $norm += ,$o
-    }
-  }catch{
-    Write-Host "FATAL: picks-log.json normalization failed mid-way ($($_.Exception.Message)) - aborting, nothing written"
-    exit 1
-  }
+try{ $norm = Get-PicksLog -Path $logPath -NameMap $px }
+catch{
+  Write-Host "FATAL: $($_.Exception.Message)"
+  exit 1
 }
 $idxMap=@{}; for($i=0;$i -lt $tradeDates.Count;$i++){ $idxMap[$tradeDates[$i]]=$idxC[$i] }
 $perfRows=@()
@@ -520,30 +385,11 @@ foreach($o in $norm){
   $alpha=$null
   if($idxMap.ContainsKey($o.date)){ $alpha=[math]::Round($ret - (($idxLast/$idxMap[$o.date]-1)*100),2) }
   # ---- early-exit rules: foreign 2-day sell / close below MA20 / trailing take-profit ----
-  $exitReason=$null
-  if($chip.ContainsKey($c)){
-    $fArr=$chip[$c].f
-    if($fArr.Count -ge 2 -and $fArr[$fArr.Count-1] -lt 0 -and $fArr[$fArr.Count-2] -lt 0){ $exitReason='外資連2日轉賣' }
-  }
-  if(-not $exitReason -and $hs.Count -ge 20){
-    # MA rules on dividend-adjusted (total-return) closes: an ex-div gap-down is mechanical,
-    # not a technical break -- without this a fat dividend could fake a MA20/MA10 breach
-    $trS=@(); $cum=0.0
-    for($k2=0;$k2 -lt $hs.Count;$k2++){
-      if($k2 -gt 0 -and $hs[$k2].chg -ne $null -and $hs[$k2].c -ne $null -and $hs[$k2-1].c -ne $null){
-        $dv2=$hs[$k2].chg-($hs[$k2].c-$hs[$k2-1].c)
-        if($dv2 -gt 0.005 -and $hs[$k2-1].c -gt 0 -and ($dv2/$hs[$k2-1].c) -le 0.10){ $cum+=$dv2 }
-      }
-      $trS += ($hs[$k2].c+$cum)
-    }
-    $curTr=$cur+$cum
-    $m20x=SMAlast $trS 20
-    if($m20x -ne $null -and $curTr -lt $m20x){ $exitReason='跌破月線' }
-    elseif($ret -ge 15){
-      $m10x=SMAlast $trS 10
-      if($m10x -ne $null -and $curTr -lt $m10x){ $exitReason='移動停利（獲利15%+回檔破10日線）' }
-    }
-  }
+  # MA rules run on dividend-adjusted (total-return) closes: an ex-div gap-down is mechanical,
+  # not a technical break, and without the add-back a fat dividend fakes a MA20/MA10 breach.
+  $tr = Get-TotalReturnSeries $hs
+  $exitReason = Test-ExitRules -ForeignNet $(if($chip.ContainsKey($c)){ $chip[$c].f }else{ @() }) `
+                               -TotalReturnSeries $tr.Series -Current ($cur+$tr.Cum) -ReturnPct $ret
   $lg3=$(if($o.Contains('light')){$o.light}else{$null})
   if($exitReason -or $days -ge 20){
     $rs = if($exitReason){ $exitReason } else { '20日到期' }
@@ -593,16 +439,11 @@ if(-not $dateLogged){
   }
 } else { Write-Host "  date $lastDate already logged - snapshot preserved, no append" }
 
-# ---- retention: this file is published, rewritten every day and grows by ~2.6 rows per trade
-# day (~640/yr). Keep every open row plus the most recent $RetainSettled settled ones; older
-# settled rows move to data/picks-archive.jsonl - gitignored, append-only, never rewritten.
-# evaluate.ps1 reads log + archive, so lifetime attribution is unchanged by the move.
-# Order of operations is the whole safety argument: append and READ BACK first, drop from the
-# log only once every folded row is provably in the archive. A crash in between re-folds the
-# same rows next run, and the `date|code` key makes the append idempotent, so nothing is lost
-# and nothing is duplicated. Any failure leaves the log exactly as it was.
-$norm = FoldPicksToArchive $norm 120 (Join-Path $root 'data/picks-archive.jsonl')
-@{ picks=$norm } | ConvertTo-Json -Depth 5 | Out-File $logPath -Encoding UTF8
+# ---- retention + write. Both live in lib/picks-log.ps1: the fold's append-then-read-back
+# ordering, the [ordered] key stability and the -ErrorAction Stop on the write. Passing -Retain
+# is what opts this caller into archiving; publish.ps1 rewrites the same file without it.
+Set-PicksLog -Path $logPath -Rows $norm -Retain $PicksLogRetainSettled `
+             -ArchivePath (Join-Path $root 'data/picks-archive.jsonl')
 
 $regimeObj=[ordered]@{ light=$light; idx=[math]::Round($idxLast,2); ma20=[math]::Round($idxMA20,2); ma60=[math]::Round($idxMA60,2); instNet=$instNet; up=$upN; down=$dnN }
 $metaObj=[ordered]@{ candidates=$cands.Count; shortlist=@($short).Count; etfCand=$ecand.Count; newLogged=$newLogged; t86ok=$t86ok; tpexOk=$tpexOk; idxOk=$idxOk; revRows=$rev.Count }

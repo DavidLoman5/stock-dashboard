@@ -13,6 +13,12 @@
     "view and must never leave this machine. build-demo.ps1 filters to `guest`, the publication",
     "gate refuses on `ownerOnly`, and server/payload.py applies both.",
     "",
+    "`marketPublic` is the same idea for the pseudo-code `_market`: the fields there that are",
+    "genuinely market-wide. `wind` is deliberately absent - the daily prompt writes it as",
+    "commentary on the owner's portfolio ('投組今日明顯分化：00990A…'), so it names real",
+    "holdings; buildWind() renders fine from windLead alone. Allowlist, not blocklist: a field",
+    "added upstream stays private until it is named here.",
+    "",
     "One narrower exception, live server only (build-demo.ps1/publish-gate.ps1 are unaffected -",
     "the git-published demo has no guest_plus accounts, so `rec` there is still unconditionally",
     "ownerOnly): a guest_plus grant (server/auth.set_tier) buys a per-account budget of EXTRA",
@@ -38,6 +44,7 @@
   },
   "noteFields": {
     "guest": ["sigFund", "tech", "chip", "fund"],
-    "ownerOnly": ["rec", "news", "wind"]
+    "ownerOnly": ["rec", "news", "wind"],
+    "marketPublic": ["windLead", "sox", "mood", "moodK"]
   }
 }

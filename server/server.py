@@ -82,6 +82,34 @@ BLOCK_SOURCES = (
     ("tokenusage", "tokenUsage"),
 )
 
+# Blocks render_page fills by hand rather than from a bootstrap key.
+SPECIAL_BLOCKS = ("meta", "appuser")
+
+
+def _assert_every_block_has_a_source():
+    """A block declared in the contract but wired to nothing here renders blank, forever, with
+    no error - build_shell() empties every block and then nobody refills this one. That is not
+    hypothetical: tokenusage shipped exactly that way to every self-hosted user until 6fc268a.
+    Checking at import turns the next occurrence into a startup failure."""
+    covered = {block_id for block_id, _ in BLOCK_SOURCES} | set(SPECIAL_BLOCKS)
+    declared = set(pagedata.block_ids())
+    unwired = declared - covered
+    if unwired:
+        raise RuntimeError(
+            "page-contract.json declares block(s) %s that server.py never fills; add them to "
+            "BLOCK_SOURCES (and to payload.bootstrap) or the page ships them blank"
+            % ", ".join(sorted(unwired))
+        )
+    unknown = covered - declared
+    if unknown:
+        raise RuntimeError(
+            "server.py fills block(s) %s that page-contract.json does not declare"
+            % ", ".join(sorted(unknown))
+        )
+
+
+_assert_every_block_has_a_source()
+
 
 def render_page(template, boot):
     """Splice one user's payload into the template.
@@ -92,9 +120,13 @@ def render_page(template, boot):
     """
     html = template
     for block_id, key in BLOCK_SOURCES:
-        value = boot.get(key)
+        if key not in boot:
+            raise KeyError(
+                "payload.bootstrap() returned no %r key for block %r" % (key, block_id)
+            )
+        value = boot[key]
         if value is None:
-            continue
+            continue   # artifact legitimately absent today (no eval report, no backtest card)
         html = pagedata.set_block(html, block_id, value)
     meta = boot.get("meta") or {}
     html = pagedata.set_block(html, "meta", {

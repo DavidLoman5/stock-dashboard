@@ -81,15 +81,19 @@ foreach($h in $demo.holdings){
 # with, so the published page and a logged-in guest can never disagree about what is factual.
 $guestFields = @((Get-PageContract).noteFields.guest)
 if($guestFields.Count -eq 0){ Write-Host "FATAL: page-contract.json has no noteFields.guest"; exit 1 }
+$marketFields = @((Get-PageContract).noteFields.marketPublic)
+if($marketFields.Count -eq 0){ Write-Host "FATAL: page-contract.json has no noteFields.marketPublic"; exit 1 }
 $allNotes = ReadJson (Join-Path $root 'holdings-notes.json')
 $NOTES=[ordered]@{}
 if($allNotes){
-  # _market: allowlist only. `wind` is written as commentary on the OWNER's portfolio
-  # ("投組今日明顯分化：00990A...") and names real holdings - publishing it would leak the very
-  # thing this script exists to hide. buildWind() renders correctly from windLead alone.
+  # _market: allowlist only, from page-contract.json's `noteFields.marketPublic` - the same list
+  # server/payload.py slims _market with. `wind` is deliberately not on it: it is written as
+  # commentary on the OWNER's portfolio ("投組今日明顯分化：00990A...") and names real holdings,
+  # so publishing it would leak the very thing this script exists to hide. buildWind() renders
+  # correctly from windLead alone.
   if($allNotes.PSObject.Properties['_market']){
     $mk=[ordered]@{}
-    foreach($f in @('windLead','sox','mood','moodK')){
+    foreach($f in $marketFields){
       if($allNotes._market.PSObject.Properties[$f]){ $mk[$f]=$allNotes._market.$f }
     }
     if($mk.Count){ $NOTES['_market']=$mk }

@@ -38,14 +38,19 @@
 | `lib/pagedata.ps1` | `Set-PageBlocks` / `Get-PageBlockText`：唯一的 splice 實作 | 六支 .ps1 全部 |
 | `lib/publish-gate.ps1` | `Invoke-PublishGate`：唯一的對外出口（allowlist 上架＋內容掃描＋commit/push） | `publish.ps1` |
 | `lib/stance.ps1` | `Get-StanceGrade`：唯一的判級公式 | `update-holdings.ps1`；頁面只顯示結果 |
-| `lib/feed.ps1` | `Get-FeedJson`／`Get-FeedDailySeries`／`$FeedCols`：唯一的抓取、快取與欄位索引 | `screen.ps1`、`update-holdings.ps1`、`backtest.ps1` |
-| `tools/boot-check.js` | jsdom 實跑 index.html 並斷言（含 `window.ANALYTICS` 純函式） | 改前端後手動跑 |
-| `server/pagedata.py` | 同一份 `page-contract.json` 的 Python 端 | `server/server.py`、`payload.py` |
+| `lib/feed.ps1` | 唯一的抓取／快取／欄位索引／民國日期／politeness。**九個端點都在這裡解析**（`Get-FeedIndexHistory`／`Get-FeedInstitutional`／`Get-FeedMargin`／`Get-FeedMarketInstAmount`／`Get-FeedMarketQuotes`／`Get-FeedDailySeries`），快取目錄的建立與清理也是（`Get-FeedCacheDir`／`Invoke-FeedCachePrune`） | `screen.ps1`、`update-holdings.ps1`、`backtest.ps1` |
+| `lib/score.ps1` | **唯一的選股規則**：`Get-RegimeLight`／`Get-ChipStats`／`Test-ChipGate`／`Get-ChipScore`／`Get-TechScore`／`Get-FundScore`／`Get-TotalReturnSeries`／`Test-ExitRules`。股票與 ETF 是同一組函式的兩個 **profile**（`$ScreenProfiles`），不是兩份程式 | `screen.ps1`、`backtest.ps1`（回測直接呼叫生產規則，不再手抄） |
+| `lib/picks-log.ps1` | `picks-log.json` 的唯一讀寫者：retry＋FATAL 保護、`[ordered]` key 順序、保留期封存、`-ErrorAction Stop` | `screen.ps1`、`publish.ps1` |
+| `lib/stance-log.ps1` | `stance-log.json` 的唯一讀寫者＋`Get-PrevStanceMap`（純函式） | `update-holdings.ps1` |
+| `tools/boot-check.js` | jsdom 實跑 index.html 並斷言（27 項：`window.ANALYTICS` 純函式、三個 modal、圖表投影往返、boot 冪等、逸出） | 改前端後手動跑 |
+| `server/pagedata.py` | 同一份 `page-contract.json` 的 Python 端（含 `noteFields` 隱私政策，`payload.py` 實際讀它） | `server/server.py`、`payload.py` |
 
 - **splice 一律用 `Set-PageBlocks`**，別再手寫 `IndexOf('<script id=...')`。找不到 marker 或不認識的 block id 都會 throw（以前只警告然後照樣寫檔）
 - **`window.META` 是一般 block**，不再是對 HTML 做正則取代；報告日期由頁面從 META 帶出
 - **判級公式只改 `lib/stance.ps1`**，頁面 `adviseHolding` 只把分數翻成文字、不得再寫一份門檻
-- **抓官方資料一律走 `lib/feed.ps1`**：`Get-FeedJson`（重試＋UTF-8 手動解碼）、`Get-FeedDailySeries`（含完成月快取與 TWSE/TPEx 路由）。欄位索引在 `$FeedCols`——**T86（上市）與 TPEx dailyTrade（上櫃）欄位不同**（trust/total 是 10/18 vs 13/23），別混用。測試用 `Set-FeedTransport` 換掉傳輸層即可離線驗真正的解析路徑
+- **抓官方資料一律走 `lib/feed.ps1`**，包括**解析**：呼叫端不可以再自己寫 `$row[10]` 這種位置索引。欄位索引全部在 `$FeedCols`——**T86（上市）與 TPEx dailyTrade（上櫃）欄位不同**（trust/total 是 10/18 vs 13/23），別混用。民國年轉換只有 `ConvertFrom-FeedRocDate` 一份（以前五份，其中兩份靠 API 自己補零）。測試用 `Set-FeedTransport` 換掉傳輸層即可離線驗真正的解析路徑
+- **選股／評分／出場規則只改 `lib/score.ps1`**，且股票與 ETF 用 profile 區分而不是複製一份。`backtest.ps1` 直接呼叫同一組函式，所以「回測跟生產一致」是結構保證、不再是註解裡的承諾。單位注意：`Get-FeedInstitutional` 回傳**股**（交易所原始單位），頁面顯示的**張**由呼叫端自己除 1000
+- **`picks-log.json`／`stance-log.json` 一律經各自的 lib 模組讀寫**，別再自己 `Get-Content`＋`Out-File`：retry、FATAL 保護、`[ordered]` key 順序、封存與 `-ErrorAction Stop` 都在模組裡
 - **頁面的財務計算放在 `computeEquity()`**（純函式、不碰 DOM，掛在 `window.ANALYTICS`）；`buildEquity()` 只負責畫。新增計算照這個分法，才驗得動
 - **新增每日產出檔 → 預設不會被發佈**。要公開必須明確加進 `lib/publish-gate.ps1` 的 `$PublishAllowlist`；`tests.ps1` [8] 會擋下「已被 git 追蹤但不在 allowlist」的檔案
 
@@ -58,7 +63,7 @@
 CSS／版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯、渲染器、`screen.ps1` 選股演算法、`holdings.json`
 
 ## 硬性慣例（違反會壞）
-- `screen.ps1`／`update-holdings.ps1`／`publish.ps1`／`build-demo.ps1`／`finish-daily-push.ps1`／`lib/*.ps1` 存 **UTF-8 with BOM**（pwsh 7 不需要，保留是為了在 Windows PS5.1 也能解析中文字面值；`tests.ps1` [2] 驗證）
+- **任何含非 ASCII 位元組的 `.ps1` 都必須存 UTF-8 with BOM**（pwsh 7 不需要，保留是為了在 Windows PS5.1 也能解析中文字面值）。`tests.ps1` [2] 是**算出來的**不變式（「有非 ASCII → 必須有 BOM」），不再是手寫檔名清單——舊清單早就漏了 `evaluate.ps1`
 - **repo 只放 `$PublishAllowlist` 列出的檔案**（`lib/publish-gate.ps1`；`tests.ps1` [8] 驗證「每個被追蹤的檔案都在 allowlist 上」）。`data/`、`*.db`、`config.json`、`holdings-notes.json`、`holdings-context.json`、`stance-log.json` 都不在上面——前三個一直如此，後三個是 2026-07-25 才停止外洩的（見 plan.md）；推上 GitHub 的 `index.html` 一律由 `build-demo.ps1` 用 demo 持股重建，**不可**直接推 `update-holdings.ps1` 產出的版本——那裡面是 owner 的真實部位
 - **`$PublishAllowlist` 的項目要逐項個別 `git add`，不可合成一次 `git add -A -- $PublishAllowlist`**：清單裡任何一個 pathspec（含萬用字元）當下若一個檔案都沒對到，git 會整包 fatal、什麼都不 stage——`Invoke-PublishGate` 接著會誤判「沒東西可 commit」而回報成功，等於當天整個發佈悄悄失敗（2026-07-25 加 `token-usage.json` 時差點踩到，見 plan.md；`tests.ps1` [9] 有防回歸測試）。新增 allowlist 項目時留意這點
 - 伺服器只綁 `127.0.0.1`，對外一律經 tunnel（目前 Tailscale Funnel）；不要改成 `0.0.0.0` 或在路由器開埠

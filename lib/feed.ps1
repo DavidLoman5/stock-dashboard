@@ -34,6 +34,18 @@ $FeedCols = @{
   # total sit at 13 and 23, not 10 and 18. Keeping them as one entry was exactly the mistake
   # hand-copying these indices invites.
   TpexInsti = @{ code=0; foreign=4; trust=13; total=23 }
+  # TWSE MI_MARGN (margin balances, in lots)
+  Margin     = @{ code=0; finPrev=5; fin=6; shortPrev=11; short=12 }
+  # TPEx margin/balance: same idea, different layout - prev balance is col 2, not col 5, and the
+  # short-sale columns are not verified, so callers get 0 rather than a guess.
+  TpexMargin = @{ code=0; finPrev=2; fin=6 }
+  # TWSE BFI82U (market-wide institutional amount). Last row is the total; col 3 is net.
+  MarketInst = @{ net=3 }
+  # TWSE MI_INDEX ALLBUT0999 (whole-market OHLCV for one day). col 9 is the +/- direction and
+  # may arrive as an HTML fragment; col 10 is the UNSIGNED change against the (dividend-adjusted)
+  # reference price - the same convention STOCK_DAY uses, which is what makes the dividend
+  # add-back possible.
+  MiIndex    = @{ code=0; volume=2; value=4; open=5; high=6; low=7; close=8; dir=9; change=10 }
 }
 
 # Swap the transport. $Transport is a scriptblock taking a url and returning parsed JSON
@@ -59,11 +71,247 @@ function Get-FeedJson([string]$Url){
 # fixture transport is installed, or a 200-code test run would sit here for two minutes.
 function Wait-FeedPolite { if(Test-FeedIsLive){ Start-Sleep -Milliseconds $FeedPolitePauseMs } }
 
+# ------------------------------------------------------------------ the month cache
+# Completed months never change, so they live on disk under kline-cache/ (gitignored).
+#
+# The directory has TWO tenants: screen.ps1's rows carry a `dt` field and update-holdings.ps1's
+# do not, so the latter prefixes its files 'h-' to keep the schemas apart. Creation and eviction
+# used to belong to the callers, which made the arrangement quietly wrong: screen.ps1 pruned
+# with a regex that matched BOTH prefixes, so it evicted update-holdings' files too - and if
+# screen.ps1 FATAL'd early (it has two such guards before the prune) nothing was evicted at all.
+# One owner, called by both, so the shared tenancy is deliberate rather than accidental.
+$FeedCacheRetainMonths = 5
+
+function Get-FeedCacheDir {
+  param([string]$Root, [string]$Name='kline-cache')
+  $dir = Join-Path $Root $Name
+  if(-not (Test-Path $dir)){ New-Item -ItemType Directory -Path $dir -ErrorAction Stop | Out-Null }
+  return $dir
+}
+
+function Invoke-FeedCachePrune {
+  <#  Drop month files older than the window any caller reads. Deliberately prunes every tenant:
+      both use the same 4-month window, and whichever script runs today keeps the directory
+      bounded for the other. Returns how many files were removed. #>
+  param([string]$CacheDir, [int]$RetainMonths=$FeedCacheRetainMonths)
+  if(-not (Test-Path $CacheDir)){ return 0 }
+  $cut=(Get-Date).AddMonths(-$RetainMonths).ToString('yyyyMM')
+  $n=0
+  try{
+    foreach($f in (Get-ChildItem $CacheDir -Filter '*.json' -File)){
+      if($f.Name -match '-(\d{6})\.json$' -and $Matches[1] -lt $cut){
+        Remove-Item $f.FullName -Force -ErrorAction Stop; $n++
+      }
+    }
+  }catch{ Write-Host "  WARN: cache prune stopped early ($($_.Exception.Message))" }
+  return $n
+}
+
 function ConvertTo-FeedNum($s){
   if($null -eq $s){ return $null }
   $t=("$s" -replace '[^0-9\.\-]','')
   if($t -notmatch '[0-9]'){ return $null }
   try{ return [double]$t }catch{ return $null }
+}
+
+# ------------------------------------------------------------------ dates
+# Exchange dates are ROC (民國): year =西元 - 1911. Both forms appear - "115/06/01" from the
+# rwd JSON endpoints and "1150601" from the OpenAPI ones. There were five hand-written copies of
+# this conversion across the scripts, two of which used "{0}{1}{2}" and so depended on the API
+# zero-padding the month; the other two padded defensively. One conversion, padded, here.
+function ConvertFrom-FeedRocDate([string]$Roc){
+  $t="$Roc".Trim()
+  if(-not $t){ return $null }
+  if($t -match '^(\d{2,3})/(\d{1,2})/(\d{1,2})$'){
+    return ("{0}{1:00}{2:00}" -f ([int]$Matches[1]+1911),[int]$Matches[2],[int]$Matches[3])
+  }
+  if($t -match '^(\d{3})(\d{2})(\d{2})$'){
+    return ("{0}{1}{2}" -f ([int]$Matches[1]+1911),$Matches[2],$Matches[3])
+  }
+  return $null
+}
+
+# yyyymmdd -> yyyy/MM/dd, the form the TPEx endpoints want in their query string.
+function ConvertTo-FeedSlashDate([string]$Ymd){
+  $t="$Ymd".Trim()
+  if($t -notmatch '^\d{8}$'){ return $null }
+  return ("{0}/{1}/{2}" -f $t.Substring(0,4),$t.Substring(4,2),$t.Substring(6,2))
+}
+
+# yyyymmdd -> M/D, the short label the page shows on chart axes.
+function ConvertTo-FeedShortDate([string]$Ymd){
+  $t="$Ymd".Trim()
+  if($t -notmatch '^\d{8}$'){ return $null }
+  return ("{0}/{1}" -f [int]$t.Substring(4,2),[int]$t.Substring(6,2))
+}
+
+# ------------------------------------------------------------------ whole-market endpoints
+# Each of these used to be parsed inline in screen.ps1 / update-holdings.ps1 / backtest.ps1 with
+# the column numbers written out by hand - which is why $FeedCols had no production callers at
+# all and the module's "one edit here is the whole fix" promise was not true. Routing them
+# through here also puts them behind Set-FeedTransport, so their parsing is testable offline.
+
+function Get-FeedIndexHistory {
+  <#  TAIEX daily history (FMTQIK) across several yyyymm01 months, oldest first.
+
+      Returns @{ Rows=@([ordered]@{ dt; d; c; chg; amt }); MonthsOk=<int> }. `amt` is turnover in
+      億 (1e8 NTD). Callers project what they need: screen.ps1 wants dt+c, update-holdings wants
+      d/c/chg/amt. MonthsOk lets each keep its own "how degraded is too degraded" rule. #>
+  param([string[]]$Months)
+  $c=$FeedCols.Index
+  $rows=@(); $ok=0
+  foreach($mm in $Months){
+    $r=Get-FeedJson "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=$mm&response=json"
+    if($r -and $r.stat -eq 'OK'){
+      $ok++
+      foreach($d in $r.data){
+        $dt=ConvertFrom-FeedRocDate $d[$c.date]
+        if(-not $dt){ continue }
+        $rows += ,[ordered]@{
+          dt  = $dt
+          d   = (ConvertTo-FeedShortDate $dt)
+          c   = [double](ConvertTo-FeedNum $d[$c.close])
+          chg = (ConvertTo-FeedNum $d[$c.change])
+          amt = [math]::Round((ConvertTo-FeedNum $d[$c.value])/1e8,0)
+        }
+      }
+    }
+    Wait-FeedPolite
+  }
+  return @{ Rows=$rows; MonthsOk=$ok }
+}
+
+function Get-FeedInstitutional {
+  <#  One day of institutional net buying, for a whole market.
+
+      $Market 't' = TWSE T86, 'o' = TPEx dailyTrade EW. Returns
+      @{ Ok=<bool>; Rows=@{ code -> @{ f; t; de; tot } } } in SHARES, the exchange's own unit -
+      divide by 1000 for lots. TPEx publishes no dealer column, so `de` is derived as tot-f-t
+      rather than guessed from an unverified position. #>
+  param([string]$Date, [string]$Market='t')
+  $out=@{}
+  if($Market -eq 'o'){
+    $c=$FeedCols.TpexInsti
+    $ds=ConvertTo-FeedSlashDate $Date
+    $r=Get-FeedJson "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade?type=Daily&sect=EW&date=$ds&response=json"
+    if(-not ($r -and $r.tables -and $r.tables[0].data)){ return @{ Ok=$false; Rows=$out } }
+    foreach($row in $r.tables[0].data){
+      $code="$($row[$c.code])".Trim()
+      if(-not $code){ continue }
+      $f=[double](ConvertTo-FeedNum $row[$c.foreign])
+      $t=[double](ConvertTo-FeedNum $row[$c.trust])
+      $tot=[double](ConvertTo-FeedNum $row[$c.total])
+      $out[$code]=@{ f=$f; t=$t; de=($tot-$f-$t); tot=$tot }
+    }
+    Wait-FeedPolite
+    return @{ Ok=$true; Rows=$out }
+  }
+  $c=$FeedCols.T86
+  $r=Get-FeedJson "https://www.twse.com.tw/rwd/zh/fund/T86?date=$Date&selectType=ALL&response=json"
+  if(-not ($r -and $r.stat -eq 'OK')){ return @{ Ok=$false; Rows=$out } }
+  foreach($row in $r.data){
+    $code="$($row[$c.code])".Trim()
+    if(-not $code){ continue }
+    $out[$code]=@{
+      f   = [double](ConvertTo-FeedNum $row[$c.foreign])
+      t   = [double](ConvertTo-FeedNum $row[$c.trust])
+      de  = [double](ConvertTo-FeedNum $row[$c.dealer])
+      tot = [double](ConvertTo-FeedNum $row[$c.total])
+    }
+  }
+  Wait-FeedPolite
+  return @{ Ok=$true; Rows=$out }
+}
+
+function Select-FeedCodeTable {
+  <#  Pick the code-level table out of a multi-table rwd response.
+
+      screen.ps1 looked for "a table with more than 100 rows"; update-holdings.ps1 looked for
+      "fields[0] is 代號". Two predicates for the same table in the same response. This tries the
+      semantic one first and falls back to the size heuristic, so it is at least as robust as
+      either was. #>
+  param($Response, [int]$MinRows=100)
+  if(-not ($Response -and $Response.tables)){ return $null }
+  $byName = $Response.tables | Where-Object { $_.fields -and "$($_.fields[0])" -eq '代號' } | Select-Object -First 1
+  if($byName -and $byName.data){ return $byName }
+  return ($Response.tables | Where-Object { $_.data -and $_.data.Count -gt $MinRows } | Select-Object -First 1)
+}
+
+function Get-FeedMargin {
+  <#  One day of margin balances, for a whole market.
+
+      Returns @{ Ok=<bool>; Rows=@{ code -> @{ fin; finPrev; shrt; shrtPrev } } }, in lots.
+      TPEx's short-sale columns are not verified, so they come back 0 - the stance engine and
+      adviseHolding only read fin/finPrev. #>
+  param([string]$Date, [string]$Market='t')
+  $out=@{}
+  if($Market -eq 'o'){
+    $c=$FeedCols.TpexMargin
+    $ds=ConvertTo-FeedSlashDate $Date
+    $r=Get-FeedJson "https://www.tpex.org.tw/www/zh-tw/margin/balance?date=$ds&response=json"
+    $tbl=Select-FeedCodeTable $r
+    if(-not $tbl){ return @{ Ok=$false; Rows=$out } }
+    foreach($row in $tbl.data){
+      $code="$($row[$c.code])".Trim()
+      if(-not $code){ continue }
+      $out[$code]=@{
+        fin=(ConvertTo-FeedNum $row[$c.fin]); finPrev=(ConvertTo-FeedNum $row[$c.finPrev])
+        shrt=0; shrtPrev=0
+      }
+    }
+    Wait-FeedPolite
+    return @{ Ok=$true; Rows=$out }
+  }
+  $c=$FeedCols.Margin
+  $r=Get-FeedJson "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date=$Date&selectType=ALL&response=json"
+  $tbl=Select-FeedCodeTable $r
+  if(-not $tbl){ return @{ Ok=$false; Rows=$out } }
+  foreach($row in $tbl.data){
+    $code="$($row[$c.code])".Trim()
+    if(-not $code){ continue }
+    $out[$code]=@{
+      fin=(ConvertTo-FeedNum $row[$c.fin]); finPrev=(ConvertTo-FeedNum $row[$c.finPrev])
+      shrt=(ConvertTo-FeedNum $row[$c.short]); shrtPrev=(ConvertTo-FeedNum $row[$c.shortPrev])
+    }
+  }
+  Wait-FeedPolite
+  return @{ Ok=$true; Rows=$out }
+}
+
+function Get-FeedMarketInstAmount {
+  <#  Market-wide institutional net amount for one day (BFI82U), in 億 NTD, or $null. #>
+  param([string]$Date)
+  $r=Get-FeedJson "https://www.twse.com.tw/rwd/zh/fund/BFI82U?dayDate=$Date&type=day&response=json"
+  if(-not ($r -and $r.stat -eq 'OK' -and $r.data.Count -gt 0)){ return $null }
+  $lastRow=$r.data[$r.data.Count-1]     # last row is the all-institutions total
+  return [math]::Round([double](ConvertTo-FeedNum $lastRow[$FeedCols.MarketInst.net])/1e8,0)
+}
+
+function Get-FeedMarketQuotes {
+  <#  Whole-market OHLCV for one past day (MI_INDEX ALLBUT0999), keyed by code. Used by the
+      backtest to replay a day it has no per-code series for. Four-digit common stocks only. #>
+  param([string]$Date)
+  $c=$FeedCols.MiIndex
+  $out=@{}
+  $r=Get-FeedJson "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=$Date&type=ALLBUT0999&response=json"
+  $tbl=Select-FeedCodeTable $r -MinRows 500
+  if(-not $tbl){ return @{ Ok=$false; Rows=$out } }
+  foreach($row in $tbl.data){
+    $code="$($row[$c.code])".Trim()
+    if($code -notmatch '^[1-9][0-9]{3}$'){ continue }
+    $cl=ConvertTo-FeedNum $row[$c.close]
+    if($null -eq $cl){ continue }
+    $chg=ConvertTo-FeedNum $row[$c.change]
+    if($null -eq $chg){ $chg=0.0 }
+    if("$($row[$c.dir])" -like '*-*'){ $chg=-$chg }
+    $out[$code]=@{
+      o=(ConvertTo-FeedNum $row[$c.open]); h=(ConvertTo-FeedNum $row[$c.high])
+      l=(ConvertTo-FeedNum $row[$c.low]);  c=$cl
+      v=(ConvertTo-FeedNum $row[$c.volume]); val=(ConvertTo-FeedNum $row[$c.value]); chg=$chg
+    }
+  }
+  Wait-FeedPolite
+  return @{ Ok=$true; Rows=$out }
 }
 
 # One code, one month, one market. Returns bar rows oldest-first; an empty array means the code

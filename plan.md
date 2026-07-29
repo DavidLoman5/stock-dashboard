@@ -209,6 +209,111 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## ✅ 已完成
 
+### 2026-07-29 架構整理第二輪（`/improve-codebase-architecture` 八個候選全做）
+
+起點是第二次架構檢視。這輪的主題不是「同一件事寫很多份」（那是 7/25 那輪），而是
+**7/25 建好的模組沒有被真正接上**——接縫做出來了，呼叫端還是繞過去走。
+
+**① 行情解析真的收進 `lib/feed.ps1`（候選 1）** — `$FeedCols` 當時只被自己的
+`Get-FeedMonthBars` 讀，**生產端零呼叫者**：T86/TPEx 法人、MI_MARGN/TPEx 融資、FMTQIK、
+BFI82U、MI_INDEX 共九個端點仍在三支腳本裡各自手寫 `$row[10]`、`$row[18]`。
+模組註解寫的「欄位一改，改這裡就好」當時是**假的**。現在九個端點都是具名函式
+（`Get-FeedIndexHistory` / `Get-FeedInstitutional` / `Get-FeedMargin` /
+`Get-FeedMarketInstAmount` / `Get-FeedMarketQuotes`），民國年轉換從五份收成一份
+（其中兩份原本靠 API 自己補零才對），politeness 從 11 個 `Start-Sleep`（兩種常數）
+收進模組。**因為 `Set-FeedTransport` 已經存在，這些解析路徑一次全變成可離線測試**——
+新增 20 項 fixture 斷言，另以真實網路對 7/28 驗過七個端點（2330 的
+`tot-f-t-de = 0`，確認 T86 欄位對齊）。
+
+**② 選股規則收成 `lib/score.ps1`（候選 3）** — 同一套漏斗原本有三份：`screen.ps1` 個股迴圈、
+`screen.ps1` ETF 迴圈（同樣 68 行、變數加後綴）、`backtest.ps1` 的重放（註解寫
+"same order and thresholds as production"）。**驗證策略的回測驗的是生產規則的手抄本**。
+現在股票／ETF 是同一組函式的兩個 profile，`backtest.ps1` 直接呼叫生產函式。
+**這是純重構**：用 135,000 組隨機輸入把「舊的 inline 版」與新模組逐一比對，
+含 15,995 次 drop 路徑，**零差異**。
+- 已知且刻意保留的差異：回測傳 `-Light 'na'`，所以綠燈日的 +3 動能獎勵在回測裡仍不生效
+  （原本手抄版就沒有這段）。現在打開只要改一個字，但那會改動回測數字，**留給月度參數檢視決定**。
+- `backtest.ps1` 的**出場模擬**沒有併過去：它是容忍缺漏的滾動重放（`n20>=15`／`n10>=8`），
+  與 `Test-ExitRules` 需要連續序列的形狀不同，硬合併會改變行為。
+
+**③ 兩個歷史檔各有自己的模組（候選 2）** — `picks-log.json` 原本有**兩個寫入者**，而
+`publish.ps1` 那個用裸 `Get-Content` 讀、沒有 retry／沒有 `[ordered]`／沒有 `-ErrorAction Stop`
+就寫回去；那個檔寫壞會讓隔天早上的選股直接 FATAL。現在兩邊都走 `lib/picks-log.ps1`。
+`stance-log.json` 則是**當場抓到規則已經被違反**：`update-holdings.ps1:310` append 的是
+plain `@{}`，磁碟上的檔案當時有**六種 key 順序**（只因為它是 gitignore 才沒有天天洗 diff——
+而那也代表 git 沒有幫它留備份）。已收進 `lib/stance-log.ps1` 並把 70 筆就地正規化成一種順序
+（值逐欄比對完全相同）。`Get-PrevStanceMap` 順手變成可測的純函式。
+
+**④ `page-contract.json` 在 Python 端變成真的（候選 5）** — `server/pagedata.py` 宣告了
+`guest_note_fields()` / `owner_only_fields()` 但**全 repo 零呼叫者**，`payload.py` 另外硬寫同一份
+清單；契約檔裡「server/payload.py applies both」是**假敘述**。`MARKET_PUBLIC_FIELDS` 更是
+`build-demo.ps1` 與 `payload.py` 各一份、契約裡根本沒有。後果：往 `noteFields.guest` 加一個
+欄位會改變 demo 產出與發佈閘門，**對線上伺服器卻毫無作用**。現在契約是雙語唯一來源
+（新增 `noteFields.marketPublic`），並補上三道以前沒有的失敗：
+- `splice()` 找不到 marker 改成 **throw**（PowerShell 端一直是 fail-closed，Python 移植時退化成
+  fail-open——正是 `6fc268a` 那個 tokenusage 空白的失敗模式）
+- `BLOCK_SOURCES` 與契約在 **import 時**互相校驗，漏接一個 block 直接起不來
+- `render_page` 對「宣告要渲染卻沒拿到的 key」改成 raise，不再靜默跳過
+
+**⑤ 隱私接縫：`notes_for` 不可能忘記（候選 4）** — 簽名是
+`notes_for(tier, codes, all_notes, private_codes=(), ...)`，而 `private_codes=()` 的語意是
+**「沒有東西是私密的」**：`code not in ()` 恆真、`_mentions_other_holding` 掃空集合恆偽，
+兩道檢查同時放行。生產端當時是對的，但**整份測試沒有任何一項在守它**——1,057 行裡
+`holdingsNotes` 出現 0 次。根因是 `payload.bootstrap()` 用 `config.ROOT` 直接解析
+`holdings-notes.json`，測試沒辦法餵 fixture。
+做法：先加 `notesDir` 設定把路徑變成可注入的接縫，**先補上那個缺了的測試**，再把
+`private_codes` 改成必填、並提供 `notes_for_reader(conn, reader, ...)` 自己去查 owner 持股。
+新測試經反向驗證：把接線改回 `()`，它會紅。
+
+**⑥ 頁面：`window.ANALYTICS` 從 1 個成員變成 8 個，`boot()` 真的成為進入點（候選 6）** —
+`computeEquity` 證明了這個分法可行，但 heroStance 六級收三群、過期平日數、集中度 40/80、
+今日訊號 44 行、移動停利全都還熔在 DOM builder 裡。更根本的問題是**`boot()` 根本不是進入點**：
+七個 top-level IIFE 在 parse 時就把持股卡、權重條、整個選股區塊畫完了，`renderAll()` 只重畫
+canvas——所以這個頁面**沒辦法用第二份資料再渲染一次**，測試自然餵不進去。
+現在計算是純函式、渲染只負責畫，七個 IIFE 變成 `boot()` 依序呼叫的函式（每段獨立 try/catch，
+一段爆掉不會靜默吃掉後面全部）。驗證：新舊兩版在 jsdom 跑完後**28 個渲染區塊逐字元相同**。
+
+**⑦ 圖表自己擁有投影（候選 8）** — `priceChart`／`candleChart` 原本只共用 `setup()`；
+scale、grid、crosshair 是逐字元重複，overlay 只差變數名。兩者都回傳 `{padL,padR}`，
+然後由 `attachChartHover` **自己反推 X(i)**，還帶一個 `curMode` 分支和一行把正向投影再抄一次的
+註解。現在圖表回傳 `indexAt()`，hover 不必知道自己在跟哪張圖說話；boot-check 新增
+往返斷言（對每個 i 驗 `indexAt(X(i)) === i`，兩張圖都過）。`openModal`／`openPickModal`
+之間 ~25 行相同的圖表接線收成 `maChipsHtml()`＋`wireModalChart()`——兩個 modal 的產出
+markup 逐字元相同（4511／1825 字元）。
+
+**⑧ 逸出只有一種寫法（候選 7）** — 十二個 `${...name}` 插值裡**有一個沒逸出**：
+`buildCostPanel`（`index.html:649`）。在伺服器模式那是別的使用者自己打的字串，而
+`server/validate.py` 只剝控制字元、上限 30 字（`<img src=x onerror=alert(1)>` 是 28 字），
+逸出責任明確委託給頁面。已修，並加入預設就逸出的 `` html`` `` tagged template
+（要插入自製 markup 才用 `raw()`），`tests.ps1` 加了「每個 `${...name}` 不是 `esc()` 就是在
+`` html`` `` 裡」的來源斷言。
+**沒做的部分（受既有硬性設計限制，刻意不動）**：三個 HTML 檔的 design token 與 `call()`
+各一份。四個頁面的 CSP 都是 `script-src 'unsafe-inline'` 且沒有 `'self'`，外部 JS/CSS 一律被擋；
+`index.html` 更必須維持單檔自足。要共用就得放寬 CSP，那是拿一條真實的安全邊界換
+重複度，不划算——留作已知重複並記在這裡。
+
+**其他一併修掉的**：
+- `api.change_password` **完全沒有節流**：帶著 session 可以無限次猜當前密碼，不留紀錄
+  （`set_password` 的 audit 只在成功時寫）。改走 `auth.verify_current_password`，與登入同一套預算
+- `api.py:52` 的裸 `DELETE FROM users` 改走 `auth.rollback_registration`（只肯刪 pending 的 guest）
+- `FakeCtx` 原本是 `server.Ctx` 授權邏輯的**手抄複本**，所以每個「guest 不能進 admin」的測試
+  驗的都是那份複本。改成真的子類別後，把 `require_owner` 反向改寫會有 2 個測試轉紅（原本 0 個）
+- `tests.ps1` [2] 的 BOM 檢查從手寫檔名清單改成**算出來的不變式**，第一次跑就抓到
+  `evaluate.ps1`（18 個非 ASCII 位元組、無 BOM，而它自己的檔頭寫著 "ASCII source only"）
+- `kline-cache/` 有兩個房客（`h-` 前綴與否）卻只有 `screen.ps1` 會清，而它的 regex 兩種都刪，
+  且 `screen.ps1` 若提早 FATAL 就完全不清。改由 `lib/feed.ps1` 擁有建立與清理
+- `index.html:867` 的 `catch(e){}` 會把 load 那一輪 buildEquity 的例外完全消音，改成記進
+  `__bootFailed`
+- `tools/boot-check.js` 的 block id→global 對照表原本是契約 11 個裡的手抄 3 個，
+  `node boot-check.js index.html pkdata '{}'` 會寫出 `window.pkdata=...` 這種**靜默 no-op 然後 PASS**。
+  改讀 `page-contract.json`，不認識的 block 直接報錯
+
+**測試**：`tests.ps1` 從 91 項增至 **239 項**（新增 feed 解析、score 規則、picks-log／stance-log
+行為、cache、逸出、BOM 不變式）；`server/test_server.py` 從 83 增至 **93**；
+`tools/boot-check.js` 從 19 增至 **27** 項斷言，且新增的變體（無 stance／空投組／pkdata）
+四種都 BOOT OK。三個等價性證明：scoring 135k 組零差異、DOM 28 區塊逐字元相同、
+兩個 modal markup 逐字元相同。
+
 ### 2026-07-29 iOS 主畫面圖示（apple-touch-icon）
 
 使用者把儀表板加到 iPhone 主畫面，想換掉那個「網頁截圖」預設圖示。

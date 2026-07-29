@@ -49,8 +49,7 @@ def register(ctx):
             auth.consume_invite(ctx.conn, body.get("invite"), user_id)
         except auth.AuthError:
             # do not leave a half-registered account behind when the invite is rejected
-            ctx.conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
-            ctx.conn.commit()
+            auth.rollback_registration(ctx.conn, user_id)
             raise
     return 201, {"ok": True, "status": "pending",
                  "message": "註冊完成，等待管理者核准後即可使用。"}
@@ -72,10 +71,9 @@ def logout(ctx):
 
 def change_password(ctx):
     user = ctx.require_user(allow_pending=True)
-    if not auth.verify_password(
-        ctx.body.get("current") or "", user["pw_salt"], user["pw_hash"]
-    ):
-        raise ApiError("目前密碼不正確", 403)
+    # throttled inside auth, on the same budget as login - an authenticated session must not be
+    # an unlimited oracle for the account's current password
+    auth.verify_current_password(ctx.conn, ctx.cfg, user, ctx.body.get("current"), ctx.ip)
     auth.set_password(ctx.conn, user["id"], ctx.body.get("new"))
     ctx.clear_session_cookie()   # set_password drops all sessions, including this one
     return 200, {"ok": True, "message": "密碼已更新，請重新登入。"}

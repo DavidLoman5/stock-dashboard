@@ -17,6 +17,7 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $root 'lib/feed.ps1')       # Get-FeedJson / Get-FeedDailySeries / FeedCols
 . (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
 . (Join-Path $root 'lib/stance.ps1')     # Get-StanceGrade (the 判級 rule engine)
+. (Join-Path $root 'lib/stance-log.ps1') # Get-StanceLog / Get-PrevStanceMap / Set-StanceLog
 # bodies live in lib/feed.ps1; names kept so the call sites below read the same
 function Num($s){ ConvertTo-FeedNum $s }
 function GetJson($url){ Get-FeedJson $url }
@@ -70,13 +71,10 @@ $today = Get-Date
 $months=@(); for($m=3;$m -ge 0;$m--){ $months += $today.AddMonths(-$m).ToString('yyyyMM01') }
 $DASH=[ordered]@{}
 $tx=@(); $tradeDates=@()
-foreach($mm in $months){
-  $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=$mm&response=json"
-  if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
-    $p="$($d[0])".Split('/'); $tradeDates += ("{0}{1}{2}" -f ([int]$p[0]+1911),$p[1],$p[2])
-    $tx += [ordered]@{ d=("{0}/{1}" -f [int]$p[1],[int]$p[2]); c=[double](Num $d[4]); chg=(Num $d[5]); amt=[math]::Round((Num $d[2])/1e8,0) }
-  } }
-  Start-Sleep -Milliseconds 700
+$idxHist=Get-FeedIndexHistory -Months $months
+foreach($row in $idxHist.Rows){
+  $tradeDates += $row.dt
+  $tx += [ordered]@{ d=$row.d; c=$row.c; chg=$row.chg; amt=$row.amt }
 }
 $DASH['TAIEX']=$tx
 # FATAL guard: without index history we would splice a broken DASH and blank the whole page
@@ -88,8 +86,11 @@ $otcCodes=@{}
 # completed months never change -> disk-cached like screen.ps1, but with an "h-" prefix:
 # row schema differs (no dt field here), sharing files with screen's cache would silently
 # break its DivSumSince/stale checks
-$klineCache=Join-Path $root 'kline-cache'
-if(-not (Test-Path $klineCache)){ New-Item -ItemType Directory -Path $klineCache | Out-Null }
+# same directory screen.ps1 uses; the 'h-' prefix below keeps the two row schemas apart and
+# lib/feed.ps1 owns creation + eviction for both
+$klineCache = Get-FeedCacheDir $root
+$pruned = Invoke-FeedCachePrune $klineCache
+if($pruned -gt 0){ Write-Host "  cache: pruned $pruned stale month file(s)" }
 foreach($c in $codes){
   # 'auto': try TWSE for every month first and fall back to TPEx only if that produced nothing.
   # Unlike screen.ps1 there is no whole-market table here to look the market up in, so the
@@ -110,72 +111,55 @@ if($empty.Count -gt 0){ Write-Host "FATAL: series too short for $($empty -join '
 Write-Host "[3/6] T86 (5 days) + MI_MARGN (3 days)..."
 $last5 = $tradeDates | Select-Object -Last 5
 foreach($d in $last5){
-  $r=GetJson "https://www.twse.com.tw/rwd/zh/fund/T86?date=$d&selectType=ALL&response=json"
-  if($r -and $r.stat -eq 'OK'){
-    foreach($row in $r.data){
-      $c="$($row[0])".Trim()
-      if($codes -contains $c){
-        $dd=("{0}/{1}" -f [int]$d.Substring(4,2),[int]$d.Substring(6,2))
-        $DASH[$c].inst += [ordered]@{ d=$dd; f=[math]::Round((Num $row[4])/1000,0); t=[math]::Round((Num $row[10])/1000,0); de=[math]::Round((Num $row[11])/1000,0); tot=[math]::Round((Num $row[18])/1000,0) }
-      }
+  # the feed returns shares; the page shows lots
+  $tw=Get-FeedInstitutional -Date $d -Market 't'
+  if($tw.Ok){
+    $dd=ConvertTo-FeedShortDate $d
+    foreach($c in $codes){
+      if(-not $tw.Rows.ContainsKey($c)){ continue }
+      $e=$tw.Rows[$c]
+      $DASH[$c].inst += [ordered]@{ d=$dd
+        f=[math]::Round($e.f/1000,0); t=[math]::Round($e.t/1000,0)
+        de=[math]::Round($e.de/1000,0); tot=[math]::Round($e.tot/1000,0) }
     }
   }
-  Start-Sleep -Milliseconds 800
 }
 if($otcCodes.Count -gt 0){
   # OTC institutional trades (TPEx dailyTrade EW): f=col4, t=col13, tot=col23 (indexes proven in screen.ps1);
   # dealer net derived as tot-f-t instead of guessing an unverified column
   foreach($d in $last5){
-    $dSlash="{0}/{1}/{2}" -f $d.Substring(0,4),$d.Substring(4,2),$d.Substring(6,2)
-    $r=GetJson "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade?type=Daily&sect=EW&date=$dSlash&response=json"
-    if($r -and $r.tables -and $r.tables[0].data){
-      foreach($row in $r.tables[0].data){
-        $c="$($row[0])".Trim()
-        if($otcCodes.ContainsKey($c)){
-          $dd=("{0}/{1}" -f [int]$d.Substring(4,2),[int]$d.Substring(6,2))
-          $f=[math]::Round((Num $row[4])/1000,0); $t=[math]::Round((Num $row[13])/1000,0); $tot=[math]::Round((Num $row[23])/1000,0)
-          $DASH[$c].inst += [ordered]@{ d=$dd; f=$f; t=$t; de=($tot-$f-$t); tot=$tot }
-        }
-      }
+    $otc=Get-FeedInstitutional -Date $d -Market 'o'
+    if(-not $otc.Ok){ continue }
+    $dd=ConvertTo-FeedShortDate $d
+    foreach($c in @($otcCodes.Keys)){
+      if(-not $otc.Rows.ContainsKey($c)){ continue }
+      $e=$otc.Rows[$c]
+      $f=[math]::Round($e.f/1000,0); $t=[math]::Round($e.t/1000,0); $tot=[math]::Round($e.tot/1000,0)
+      $DASH[$c].inst += [ordered]@{ d=$dd; f=$f; t=$t; de=($tot-$f-$t); tot=$tot }
     }
-    Start-Sleep -Milliseconds 800
   }
 }
 $last3 = $tradeDates | Select-Object -Last 3
 foreach($d in $last3){
-  $r=GetJson "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date=$d&selectType=ALL&response=json"
-  if($r){
-    $tbl=$r.tables | Where-Object { $_.fields -and $_.fields[0] -eq '代號' } | Select-Object -First 1
-    if($tbl){
-      foreach($row in $tbl.data){
-        $c="$($row[0])".Trim()
-        if($codes -contains $c){
-          $dd=("{0}/{1}" -f [int]$d.Substring(4,2),[int]$d.Substring(6,2))
-          $DASH[$c].margin += [ordered]@{ d=$dd; fin=[int](Num $row[6]); finPrev=[int](Num $row[5]); shrt=[int](Num $row[12]); shrtPrev=[int](Num $row[11]) }
-        }
-      }
-    }
+  $dd=ConvertTo-FeedShortDate $d
+  $mg=Get-FeedMargin -Date $d -Market 't'
+  foreach($c in $codes){
+    if(-not $mg.Rows.ContainsKey($c)){ continue }
+    $e=$mg.Rows[$c]
+    $DASH[$c].margin += [ordered]@{ d=$dd; fin=[int]$e.fin; finPrev=[int]$e.finPrev
+                                    shrt=[int]$e.shrt; shrtPrev=[int]$e.shrtPrev }
   }
   if($otcCodes.Count -gt 0){
-    # OTC margin balance (TPEx): finPrev=col2, fin=col6 (indexes proven in screen.ps1);
-    # short-sale columns unverified there -> 0 (adviseHolding/stance only use fin/finPrev)
-    $dSlash="{0}/{1}/{2}" -f $d.Substring(0,4),$d.Substring(4,2),$d.Substring(6,2)
-    $r=GetJson "https://www.tpex.org.tw/www/zh-tw/margin/balance?date=$dSlash&response=json"
-    if($r -and $r.tables){
-      $tbl=$r.tables | Where-Object { $_.data -and $_.data.Count -gt 100 } | Select-Object -First 1
-      if($tbl){
-        foreach($row in $tbl.data){
-          $c="$($row[0])".Trim()
-          if($otcCodes.ContainsKey($c)){
-            $dd=("{0}/{1}" -f [int]$d.Substring(4,2),[int]$d.Substring(6,2))
-            $DASH[$c].margin += [ordered]@{ d=$dd; fin=[int](Num $row[6]); finPrev=[int](Num $row[2]); shrt=0; shrtPrev=0 }
-          }
-        }
-      }
+    # TPEx publishes no verified short-sale columns, so those arrive 0 - adviseHolding and the
+    # stance engine only read fin/finPrev
+    $mgO=Get-FeedMargin -Date $d -Market 'o'
+    foreach($c in @($otcCodes.Keys)){
+      if(-not $mgO.Rows.ContainsKey($c)){ continue }
+      $e=$mgO.Rows[$c]
+      $DASH[$c].margin += [ordered]@{ d=$dd; fin=[int]$e.fin; finPrev=[int]$e.finPrev
+                                      shrt=0; shrtPrev=0 }
     }
-    Start-Sleep -Milliseconds 800
   }
-  Start-Sleep -Milliseconds 800
 }
 
 Write-Host "[4/6] TWT48U_ALL (ex-dividend)..."
@@ -253,12 +237,9 @@ Write-Host "  wrote data/codes-context.json ($($allContext.Count) codes, union o
 
 Write-Host "[5b/6] stance-log.json (rule-engine stance per holding; mirrors page adviseHolding, for evaluate.ps1 validation)..."
 $stancePath=Join-Path $root 'stance-log.json'
-$slog=@(); $slogOk=$true
-if(Test-Path $stancePath){
-  $sj=ReadJsonRetry $stancePath
-  if($null -eq $sj){ $slogOk=$false; Write-Host "  WARN: stance-log.json unreadable after retries - skipping today's append (history never overwritten)" }
-  else{ $slog=@($sj.rows) }
-}
+$sl = Get-StanceLog -Path $stancePath
+$slog = @($sl.Rows); $slogOk = $sl.Ok
+if(-not $slogOk){ Write-Host "  WARN: stance-log.json unreadable after retries - skipping today's append (history never overwritten)" }
 # previous-trade-day stance per code (from history BEFORE today's append): the page compares
 # it against today's rule-engine stance and flags transitions - the transition day is the
 # actionable signal, not the standing level. Union codes so server mode can serve guests too.
@@ -266,17 +247,7 @@ if(Test-Path $stancePath){
 # two-day confirmation rule. Rows written before six levels shipped have no `raw` - fall back to
 # `stance` so the first run after the switch confirms against itself instead of throwing.
 $prevStanceMap=@{}
-if($slogOk){
-  foreach($r in $slog){
-    $rc="$($r.code)"; $rd="$($r.date)"
-    if($rd -lt $lastDate -and ($null -ne $r.stance)){
-      if(-not $prevStanceMap.ContainsKey($rc) -or $rd -gt $prevStanceMap[$rc].d){
-        $rw= if($null -ne $r.raw){ "$($r.raw)" } else { "$($r.stance)" }
-        $prevStanceMap[$rc]=@{ d=$rd; s="$($r.stance)"; raw=$rw }
-      }
-    }
-  }
-}
+if($slogOk){ $prevStanceMap = Get-PrevStanceMap -Rows $slog -Before $lastDate }
 foreach($c in @($HOLDINGS_META.Keys)){
   if($c -like '_*'){ continue }
   $HOLDINGS_META[$c]['prevStance']=$(if($prevStanceMap.ContainsKey($c)){ $prevStanceMap[$c].s } else { $null })
@@ -307,9 +278,9 @@ if($slogOk -and -not $already){
     # `stance` stays the *confirmed* level (what the page shows, what prevStance compares against);
     # `raw` is today's unconfirmed reading, needed by tomorrow's confirmation check and used by
     # evaluate.ps1 to tell new-scheme rows from the four-level history.
-    $slog += ,@{ date=$lastDate; code=$c; close=$s[$s.Count-1].c; score=$g.score; stance=$g.level; raw=$g.raw }
+    $slog += ,[ordered]@{ date=$lastDate; code=$c; close=$s[$s.Count-1].c; score=$g.score; stance=$g.level; raw=$g.raw }
   }
-  @{ rows=$slog } | ConvertTo-Json -Depth 4 | Out-File $stancePath -Encoding UTF8
+  Set-StanceLog -Path $stancePath -Rows $slog
   Write-Host "  stance-log: appended rows for $lastDate (total $($slog.Count))"
 } elseif($already){ Write-Host "  stance-log: $lastDate already logged" }
 

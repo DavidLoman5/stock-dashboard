@@ -47,6 +47,14 @@ DEFAULTS = {
     "proxyHeader": "CF-Connecting-IP",
     "dbPath": "data/app.db",
     "dataDir": "data",
+    # Where the daily run drops the artifacts that live at the repo root rather than in data/
+    # (holdings-notes.json, guest-notes.json, picks-notes.json, eval-report.json,
+    # backtest-card.json, token-usage.json). payload.bootstrap() used to resolve these against
+    # config.ROOT directly, which meant no test could give it a fixture - and the privacy
+    # filtering that happens on the way out was therefore never exercised end to end.
+    # Absolute by default so `dict(DEFAULTS)` (what the tests build on) is already resolved and
+    # cannot silently become CWD-relative.
+    "notesDir": ROOT,
     # Gemini writes the per-code analysis guests read (see server/gnotes.py). It is deliberately
     # a different provider from the owner's daily Claude run: guests must never cost Claude
     # tokens. Empty key = the step skips itself and guests fall back to the owner's shared notes.
@@ -70,4 +78,5 @@ def load(path=None):
         cfg.update(user_cfg)
     cfg["dbPath"] = os.path.join(ROOT, cfg["dbPath"])
     cfg["dataDir"] = os.path.join(ROOT, cfg["dataDir"])
+    cfg["notesDir"] = os.path.normpath(os.path.join(ROOT, cfg["notesDir"]))
     return cfg

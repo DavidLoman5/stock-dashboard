@@ -460,6 +460,16 @@ const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).tri
 /* AI-authored text (notes/news) goes through innerHTML — escape it; news href must be http(s) only */
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeUrl=u=>/^https?:\/\//i.test(String(u||''))?esc(u):'#';
+/* html`…` — tagged template that escapes every ${} by default, so the safe form is the short
+   form. Escaping used to be opt-in per interpolation: 11 of 12 holding-name sites called esc()
+   and one (the cost panel) did not, which in server mode is a name another user typed. Wrap a
+   value in raw() only when it is markup you built yourself. */
+const raw=s=>({__html:String(s==null?'':s)});
+const html=(strings,...vals)=>strings.reduce((out,s,i)=>{
+  if(i===0)return s;
+  const v=vals[i-1];
+  return out+(v&&v.__html!==undefined?v.__html:esc(v))+s;
+},'');
 const LS='tw_cost_v1';
 const getCosts=()=>{try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return {}}};
 const setCost=(c,v)=>{const o=getCosts();if(v>0)o[c]=v;else delete o[c];localStorage.setItem(LS,JSON.stringify(o));};
@@ -511,7 +521,7 @@ const LEGACY_LEVEL={up:'addwatch',trim:'cutwatch',defend:'cut',down:'cut'};
    the server shell before render_page fills it - degrades to dashes instead of throwing. */
 window.META=Object.assign({generated:'',lastTrade:''},window.META||{});
 window.TOKEN_USAGE=window.TOKEN_USAGE||null;
-(function hydrate(){
+function hydrate(){
  let tv=0;
  H.forEach(h=>{
   const s=DASH[h.code].series,l=s[s.length-1];
@@ -538,7 +548,7 @@ window.TOKEN_USAGE=window.TOKEN_USAGE||null;
     h.stanceChanged={from:prevKey,to:h.stanceKey,worse:STANCE_RANK[h.stanceKey]<STANCE_RANK[prevKey]};}}
  });
  window.__totVal=tv;
-})();
+}
 /* ---------- rule-based advice engine（規則引擎：同數據永遠同結論，不漂移） ----------
    判級公式只有一份，在 lib/stance.ps1；每日流程算完隨 HOLDINGS_META[code].stance 帶進來
    （score / level / tech / chip / extra / vp）。這裡只把分數翻成文字。
@@ -590,51 +600,40 @@ function adviseHolding(h){
  return {score,level:lvKey,lv,raw:g.raw,pending:!!g.pending,parts:{tech:[tech,techTxt],chip:[chip,chipTxt],extra:[extra,extraTxt],vp:[vp,vpTxt]},trig};
 }
 function fillTop(){
- const tv=window.__totVal; let dp=0; H.forEach(h=>dp+=h.chg*SHARES[h.code]);
- const hv=document.getElementById('heroVal'); if(hv) hv.textContent=fmt(Math.round(tv));
+ const pf=computePortfolio(H,SHARES);
+ const hv=document.getElementById('heroVal'); if(hv) hv.textContent=fmt(Math.round(pf.totalValue));
  const hd=document.getElementById('heroDay'),hp=document.getElementById('heroDayPct');
- if(hd){const base=tv-dp;               /* 空投組（新帳號還沒加股票）時 0/0 會變 NaN% */
-  if(!H.length){hd.textContent='—'; hd.className='v2 num'; hp.textContent='尚未加入持股'; hp.className='sub';}
-  else{const pct=base>0?dp/base*100:0;
-   hd.textContent=fmtSignI(Math.round(dp)); hd.className='v2 num '+plColor(dp);
-   hp.textContent=fmtSign(pct,2)+'%'; hp.className='sub num '+plColor(dp);}}
- const tx=DASH.TAIEX,tl=tx[tx.length-1];
+ if(hd){
+  if(pf.empty){hd.textContent='—'; hd.className='v2 num'; hp.textContent='尚未加入持股'; hp.className='sub';}
+  else{
+   hd.textContent=fmtSignI(Math.round(pf.dayPL)); hd.className='v2 num '+plColor(pf.dayPL);
+   hp.textContent=fmtSign(pf.dayPct,2)+'%'; hp.className='sub num '+plColor(pf.dayPL);}}
+ const ix=computeIndexStats(DASH.TAIEX);
  const iv=document.getElementById('idxVal'),ic=document.getElementById('idxChg');
- if(iv){iv.textContent=fmt(tl.c,2); iv.className='idx-val num '+(tl.chg>=0?'up-txt':'down-txt');
-  ic.textContent=(tl.chg>=0?'▲ ':'▼ ')+fmt(Math.abs(tl.chg),2)+'　'+fmtSign(tl.chg/(tl.c-tl.chg)*100,2)+'%';
+ if(iv&&ix){const tl=ix.last;
+  iv.textContent=fmt(tl.c,2); iv.className='idx-val num '+(tl.chg>=0?'up-txt':'down-txt');
+  ic.textContent=(tl.chg>=0?'▲ ':'▼ ')+fmt(Math.abs(tl.chg),2)+'　'+fmtSign(ix.pct,2)+'%';
   ic.className='idx-chg num '+(tl.chg>=0?'up-txt':'down-txt');}
- const ma=document.getElementById('mAmt'); if(ma) ma.textContent=fmt(tl.amt)+' 億';
- const mx=Math.max(...tx.map(d=>d.c)); const ddI=(tl.c/mx-1)*100;
- const md=document.getElementById('mDist'); if(md){md.textContent=fmtSign(ddI,1)+'%'; md.className='num '+plColor(ddI);}
+ const ma=document.getElementById('mAmt'); if(ma&&ix) ma.textContent=fmt(ix.last.amt)+' 億';
+ const md=document.getElementById('mDist'); if(md&&ix){md.textContent=fmtSign(ix.drawdownPct,1)+'%'; md.className='num '+plColor(ix.drawdownPct);}
  const bd=document.getElementById('baseDate'); if(bd&&META.lastTrade) bd.textContent=META.lastTrade.replace(/-/g,'/')+' 收盤（證交所）';
  /* 報告日期同樣由 META 帶出（過去是 update-holdings.ps1 對 HTML 做正則取代，改行版面就靜默失效） */
  const gd=document.getElementById('genDate'); if(gd&&META.generated) gd.textContent=META.generated;
  /* 過期警示：算 lastTrade 之後到今天的「平日數」≥2 就亮（原本 >5 天才亮，排程漏跑要一週後才發現）。
     2 天以上連假會誤亮，文案已涵蓋——寧可誤亮也不要漏亮 */
- if(META.lastTrade){const lt=new Date(META.lastTrade+'T14:00:00+08:00'),now=new Date();let wd=0;
-  const d=new Date(lt);d.setDate(d.getDate()+1);
-  for(let g=0;d<=now&&g<30;d.setDate(d.getDate()+1),g++){const w=d.getDay();if(w>0&&w<6)wd++;}
-  const sw=document.getElementById('staleWarn');
-  if(sw&&wd>=2){sw.hidden=false;
-   sw.textContent=`⚠ 資料可能未更新：行情基準（${META.lastTrade.replace(/-/g,'/')}）已落後 ${wd} 個平日——排程可能未執行或連續假期，請確認電腦上的 Claude App 有開啟。`;}}
+ const st=computeStaleness(META.lastTrade,new Date());
+ const sw=document.getElementById('staleWarn');
+ if(sw&&st.stale){sw.hidden=false;
+  sw.textContent=`⚠ 資料可能未更新：行情基準（${META.lastTrade.replace(/-/g,'/')}）已落後 ${st.weekdays} 個平日——排程可能未執行或連續假期，請確認電腦上的 Claude App 有開啟。`;}
  /* 整體傾向：由規則引擎判級自動統計（永不與逐檔判級漂移）；HTML 內文字僅為 fallback */
  const hsEl=document.getElementById('heroStance');
  if(hsEl){
-  /* 直接數引擎給的 level。以前這裡是拿顯示文字反推級別（t==='減碼觀察'），措辭一改就會靜默
-     失準——六級之後更禁不起，所以改成唯一真相 h.auto.level。順序＝由空到多。 */
-  const ORD=['exit','cut','cutwatch','hold','addwatch','add'];
-  const cnt={exit:0,cut:0,cutwatch:0,hold:0,addwatch:0,add:0};
-  H.forEach(h=>{if(!h.auto)return;if(cnt[h.auto.level]!=null)cnt[h.auto.level]++;});
-  const tot=ORD.reduce((a,k)=>a+cnt[k],0);
-  if(tot>0){
-   const txt=ORD.filter(k=>cnt[k]>0).map(k=>`${STANCE_NM[k]} ${cnt[k]} 檔`).join('・');
-   const c3={down:cnt.exit+cnt.cut,hold:cnt.cutwatch+cnt.hold,up:cnt.add+cnt.addwatch};
-   let cls='hold';
-   if(c3.down>c3.hold&&c3.down>c3.up)cls='down';else if(c3.up>c3.hold&&c3.up>c3.down)cls='up';
-   hsEl.className='pill '+cls;
+  const hs=computeHeroStance(H);
+  if(hs.total>0){
+   const txt=STANCE_ORDER.filter(k=>hs.counts[k]>0).map(k=>`${STANCE_NM[k]} ${hs.counts[k]} 檔`).join('・');
+   hsEl.className='pill '+hs.cls;
    /* 判級轉變摘要：轉變當天才是行動時點，直接在 Hero 點名是哪幾檔 */
-   const chgs=H.filter(h=>h.stanceChanged);
-   const chgTxt=chgs.length?`　⚠ 今日判級轉變：${chgs.map(h=>`${esc(h.name)} ${STANCE_NM[h.stanceChanged.from]}→${STANCE_NM[h.stanceChanged.to]}`).join('、')}`:'';
+   const chgTxt=hs.changes.length?`　⚠ 今日判級轉變：${hs.changes.map(h=>`${esc(h.name)} ${STANCE_NM[h.stanceChanged.from]}→${STANCE_NM[h.stanceChanged.to]}`).join('、')}`:'';
    hsEl.innerHTML=`<span class="dot"></span>整體傾向（規則引擎）：${txt}${chgTxt}`;
   }else{                                 /* 沒持股就不能沿用 HTML 裡那句「全數觸發防守」的 fallback */
    hsEl.className='pill hold';
@@ -646,7 +645,7 @@ function fillTop(){
 function buildCostPanel(){
  const p=document.getElementById('costPanel'); if(!p) return;
  const costs=getCosts();
- p.innerHTML=H.map(h=>`<label>${h.code} ${h.name}<input class="cin" type="number" step="0.01" inputmode="decimal" data-c="${h.code}" value="${costs[h.code]||''}" placeholder="平均成本價"></label>`).join('');
+ p.innerHTML=H.map(h=>html`<label>${h.code} ${h.name}<input class="cin" type="number" step="0.01" inputmode="decimal" data-c="${h.code}" value="${costs[h.code]||''}" placeholder="平均成本價"></label>`).join('');
  p.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>{const v=parseFloat(inp.value);setCost(inp.dataset.c,v>0?v:0);updatePL();}));
 }
 (function(){const b=document.getElementById('costBtn');if(b)b.addEventListener('click',()=>{const p=document.getElementById('costPanel');p.hidden=!p.hidden;if(!p.hidden)buildCostPanel();});})();
@@ -719,7 +718,130 @@ function computeEquity(holdings,dash,trades,shares,lastTrade){
  return {dates,pn,inx,pRet,iRet,vol,mdd,beta,hasWinTrades,contrib,contribTotal};
 }
 /* 讓 jsdom/node 測試不必開瀏覽器就能餵 fixture 驗算（CSP 無關，純物件） */
-window.ANALYTICS={computeEquity};
+/* ---------- pure derivations（純函式：吃資料、吐資料，完全不碰 DOM） ----------
+   computeEquity 證明了這個分法可行——它是全站唯一驗得動的財務邏輯。以下把原本熔在
+   fillTop/buildConc/buildSignals/updatePL 裡的計算也搬出來：判級統計、過期天數、集中度、
+   今日訊號、移動停利。門檻只寫一次（以前 40/80 這種數字在同一行裡出現兩次：一次當數字、
+   一次當文案），渲染端只負責把結果變成畫面。 */
+
+/* 投組市值與當日損益。空投組時 0/0 會變 NaN%，所以 base<=0 一律當 0。 */
+function computePortfolio(holdings,shares){
+ let tv=0,dp=0;
+ holdings.forEach(h=>{tv+=h.mv;dp+=h.chg*shares[h.code];});
+ const base=tv-dp;
+ return {totalValue:tv,dayPL:dp,dayPct:base>0?dp/base*100:0,empty:!holdings.length};
+}
+
+/* 大盤：最新一根、當日%、距波段高點的回檔 */
+function computeIndexStats(taiex){
+ const tx=taiex||[];
+ if(!tx.length)return null;
+ const tl=tx[tx.length-1],denom=tl.c-tl.chg;
+ return {last:tl,pct:denom!==0?tl.chg/denom*100:0,
+         drawdownPct:(tl.c/Math.max(...tx.map(d=>d.c))-1)*100};
+}
+
+/* 過期警示：行情基準日之後過了幾個「平日」。>=2 就亮（原本 >5 天才亮，排程漏跑要一週後
+   才發現）。2 天以上連假會誤亮，文案已涵蓋——寧可誤亮也不要漏亮。 */
+const STALE_WEEKDAYS=2;
+function computeStaleness(lastTrade,now){
+ if(!lastTrade)return {weekdays:0,stale:false};
+ const lt=new Date(lastTrade+'T14:00:00+08:00');
+ const d=new Date(lt);d.setDate(d.getDate()+1);
+ let wd=0;
+ for(let g=0;d<=(now||new Date())&&g<30;d.setDate(d.getDate()+1),g++){const w=d.getDay();if(w>0&&w<6)wd++;}
+ return {weekdays:wd,stale:wd>=STALE_WEEKDAYS};
+}
+
+/* 整體傾向：直接數引擎給的 level（唯一真相），六級收成三群後取多數。
+   以前這段夾在 hsEl.className= 和 hsEl.innerHTML= 中間，非開瀏覽器不能驗。 */
+const STANCE_ORDER=['exit','cut','cutwatch','hold','addwatch','add'];
+function computeHeroStance(holdings){
+ const counts={exit:0,cut:0,cutwatch:0,hold:0,addwatch:0,add:0};
+ holdings.forEach(h=>{if(!h.auto)return;if(counts[h.auto.level]!=null)counts[h.auto.level]++;});
+ const total=STANCE_ORDER.reduce((a,k)=>a+counts[k],0);
+ const groups={down:counts.exit+counts.cut,hold:counts.cutwatch+counts.hold,up:counts.add+counts.addwatch};
+ let cls='hold';
+ if(groups.down>groups.hold&&groups.down>groups.up)cls='down';
+ else if(groups.up>groups.hold&&groups.up>groups.down)cls='up';
+ return {counts,total,groups,cls,changes:holdings.filter(h=>h.stanceChanged)};
+}
+
+/* 集中度警示。門檻是資料不是文案——渲染端從 limit 印出來，所以改一個數字不會再出現
+   「數字改了、括號裡的說明沒改」。 */
+const CONC_SINGLE_MAX=40,CONC_THEME_MAX=80;
+function computeConcentration(holdings,meta){
+ const m=meta||{},flags=[];
+ const top=[...holdings].sort((a,b)=>b.weight-a.weight)[0];
+ const themeW=holdings.filter(h=>(m[h.code]||{}).techLike).reduce((s,h)=>s+h.weight,0);
+ if(top&&top.weight>CONC_SINGLE_MAX)flags.push({kind:'single',code:top.code,name:top.name,weight:top.weight,limit:CONC_SINGLE_MAX});
+ if(themeW>CONC_THEME_MAX)flags.push({kind:'theme',weight:themeW,limit:CONC_THEME_MAX});
+ return flags;
+}
+
+/* 移動停利：與選股引擎出場規則同款（獲利>=15% 且收盤跌破 10 日線）。
+   規則的唯一定義在 lib/score.ps1 的 Test-ExitRules；這裡是給持股卡用的同款判斷，
+   需要成本價才算得出獲利，所以吃 cost 參數而非掛在 adviseHolding。 */
+const TRAIL_MIN_GAIN=15,TRAIL_MA=10;
+function computeTrailingStop(price,cost,series){
+ if(!(cost>0)||!series||series.length<TRAIL_MA)return null;
+ const pct=(price-cost)/cost*100;
+ if(pct<TRAIL_MIN_GAIN)return null;
+ const cl=series.map(x=>x.c);
+ let t=0;for(let k=cl.length-TRAIL_MA;k<cl.length;k++)t+=cl[k];
+ const ma=t/TRAIL_MA;
+ return price<ma?{gain:pct,ma10:ma}:null;
+}
+
+/* 今日訊號。回傳 [{k,t}]，t 已是可安全插入的 HTML（名稱經 esc）。
+   純粹相對於 DOM——給定一份資料就能斷言「這組資料會產生這些訊號」，以前做不到。 */
+const MARGIN_JUMP_PCT=5,DIV_NOTICE_DAYS=5;
+function computeSignals(holdings,dash,meta,shares){
+ const out=[];
+ const smaAt=(a,n,i)=>{if(i<n-1)return null;let s=0;for(let k=i-n+1;k<=i;k++)s+=a[k];return s/n;};
+ const cross=(name,cl,n,label)=>{const L=cl.length;const t=smaAt(cl,n,L-1),y=smaAt(cl,n,L-2);
+  if(t==null||y==null)return null;
+  const nowAbove=cl[L-1]>=t,prevAbove=cl[L-2]>=y;
+  if(nowAbove&&!prevAbove)return{k:'bull',t:`${name} 站回${label}（${t.toFixed(2)}）——短線轉強訊號`};
+  if(!nowAbove&&prevAbove)return{k:'bear',t:`${name} 跌破${label}（${t.toFixed(2)}）——短線轉弱訊號`};
+  return null;};
+ const LINES=[[20,'月線'],[60,'季線']];
+ const tcl=((dash||{}).TAIEX||[]).map(d=>d.c);
+ if(tcl.length)LINES.forEach(([n,l])=>{const s=cross('加權指數',tcl,n,l);if(s)out.push(s);});
+ holdings.forEach(h=>{
+  const d=(dash||{})[h.code];if(!d)return;
+  const cl=(d.series||[]).map(x=>x.c),nm=`${h.code} ${esc(h.name)}`;
+  LINES.forEach(([n,l])=>{const s=cross(nm,cl,n,l);if(s)out.push(s);});
+  const ins=d.inst;
+  if(ins&&ins.length>=2){
+   const a=ins[ins.length-2].f,b=ins[ins.length-1].f;
+   if(a<0&&b>0)out.push({k:'bull',t:`${nm} 外資由賣轉買（${fmtSignI(b)} 張）`});
+   if(a>0&&b<0)out.push({k:'bear',t:`${nm} 外資由買轉賣（${fmtSignI(b)} 張）`});
+  }
+  const mg=d.margin;
+  if(mg&&mg.length){
+   const m=mg[mg.length-1];
+   if(m.finPrev>0){const r=(m.fin-m.finPrev)/m.finPrev*100;
+    if(r>=MARGIN_JUMP_PCT)out.push({k:'bear',t:`${nm} 融資單日大增 ${r.toFixed(1)}%（散戶湧入，籌碼轉亂）`});
+    if(r<=-MARGIN_JUMP_PCT)out.push({k:'bull',t:`${nm} 融資單日大減 ${Math.abs(r).toFixed(1)}%（散戶退場，籌碼沉澱）`});}
+  }
+  if(h.divNote&&(meta||{}).generated){
+   const m2=h.divNote.match(/(\d+)\/(\d+)/);
+   if(m2){const base=new Date(meta.generated.replace(/\//g,'-'));
+    const ex=new Date(base.getFullYear(),+m2[1]-1,+m2[2]);
+    if(base-ex>180*86400000)ex.setFullYear(ex.getFullYear()+1); /* 12月看到1月除息＝明年，非過去 */
+    const dd2=Math.round((ex-base)/86400000);
+    if(dd2===0)out.push({k:'info',t:`${nm} 今日除息——當日跌幅含配息因素，非真跌`});
+    else if(dd2>0&&dd2<=DIV_NOTICE_DAYS)out.push({k:'info',t:`${nm} ${dd2} 天後除息（${m2[1]}/${m2[2]}）——除息日跳空屬機械性，勿誤判為利空`});}
+  }
+ });
+ let top=null;holdings.forEach(h=>{const c=h.chg*shares[h.code];if(!top||Math.abs(c)>Math.abs(top.c))top={h,c};});
+ if(top&&top.c!==0)out.push({k:'info',t:`最近交易日損益主要來自 ${top.h.code} ${esc(top.h.name)}（${fmtSignI(Math.round(top.c))} 元）`});
+ return out;
+}
+
+window.ANALYTICS={computeEquity,computePortfolio,computeIndexStats,computeStaleness,
+                  computeHeroStance,computeConcentration,computeTrailingStop,computeSignals};
 
 function buildEquity(){
  const cv=document.getElementById('eqChart'),rr=document.getElementById('riskRow');
@@ -741,17 +863,21 @@ function buildEquity(){
   rc.innerHTML='<b>風險貢獻排序</b>（若要降波動，先動貢獻大者效果最大）：'+contrib.map(c=>`${c.code} <b class="num">${(Math.abs(c.v)/e.contribTotal*100).toFixed(0)}%</b>`).join('・');
  }
 }
-/* riskContrib 偶發首次載入空白（載入時序）——window load 後重跑一次，冪等安全 */
-window.addEventListener('load',()=>{try{buildEquity();}catch(e){}});
+/* riskContrib 偶發首次載入空白（載入時序）——window load 後重跑一次，冪等安全。
+   以前這裡是 `catch(e){}`：buildEquity/computeEquity 在 load 這一輪拋錯會完全消音，
+   window.onerror 收不到，boot-check 也看不見。改成記進 __bootFailed，跟 boot() 同一條線。 */
+window.addEventListener('load',()=>{try{buildEquity();}catch(e){
+ (window.__bootFailed=window.__bootFailed||[]).push('equity-onload');console.error('buildEquity on load failed',e);}});
 
 /* ---------- auto concentration warning（每日自動計算，非手寫文字） ---------- */
 function buildConc(){
  const el=document.getElementById('concWarn');if(!el)return;
- const top=[...H].sort((a,b)=>b.weight-a.weight)[0];
- const techW=H.filter(h=>(HOLDINGS_META[h.code]||{}).techLike).reduce((s,h)=>s+h.weight,0);
- const msgs=[];
- if(top&&top.weight>40)msgs.push(`單檔 <b>${top.code} ${esc(top.name)}</b> 權重 <b class="num">${top.weight}%</b>（&gt;40%）——單一標的的波動對投組影響過大`);
- if(techW>80)msgs.push(`科技／AI 相關持股合計 <b class="num">${techW.toFixed(0)}%</b>（&gt;80%）——高相關性：題材一起漲也一起跌，系統性回檔時分散效果有限`);
+ /* 門檻由 computeConcentration 帶出來（flag.limit），不再是「數字寫一次、括號裡的說明再寫
+    一次」——改一個門檻只要改 CONC_* 常數 */
+ const msgs=computeConcentration(H,HOLDINGS_META).map(f=>
+  f.kind==='single'
+   ? `單檔 <b>${f.code} ${esc(f.name)}</b> 權重 <b class="num">${f.weight}%</b>（&gt;${f.limit}%）——單一標的的波動對投組影響過大`
+   : `科技／AI 相關持股合計 <b class="num">${f.weight.toFixed(0)}%</b>（&gt;${f.limit}%）——高相關性：題材一起漲也一起跌，系統性回檔時分散效果有限`);
  if(msgs.length){el.hidden=false;el.innerHTML=`<span class="ic">⚠ 集中度警示（自動偵測）</span><span>${msgs.join('；')}。再平衡屬長期配置決策、非短線訊號、非買賣指令。</span>`;}
  else el.hidden=true;
 }
@@ -770,57 +896,25 @@ function buildWind(){
 /* ---------- today's auto-detected signals ---------- */
 function buildSignals(){
  const box=document.getElementById('signalsBox');if(!box)return;
- const out=[];
- const smaAt=(a,n,i)=>{if(i<n-1)return null;let s=0;for(let k=i-n+1;k<=i;k++)s+=a[k];return s/n;};
- const cross=(name,cl,n,label)=>{const L=cl.length;const t=smaAt(cl,n,L-1),y=smaAt(cl,n,L-2);
-  if(t==null||y==null)return null;
-  const nowAbove=cl[L-1]>=t,prevAbove=cl[L-2]>=y;
-  if(nowAbove&&!prevAbove)return{k:'bull',t:`${name} 站回${label}（${t.toFixed(2)}）——短線轉強訊號`};
-  if(!nowAbove&&prevAbove)return{k:'bear',t:`${name} 跌破${label}（${t.toFixed(2)}）——短線轉弱訊號`};
-  return null;};
- const tcl=DASH.TAIEX.map(d=>d.c);
- [[20,'月線'],[60,'季線']].forEach(([n,l])=>{const s=cross('加權指數',tcl,n,l);if(s)out.push(s);});
- H.forEach(h=>{
-  const d=DASH[h.code],cl=d.series.map(x=>x.c),nm=`${h.code} ${esc(h.name)}`;
-  [[20,'月線'],[60,'季線']].forEach(([n,l])=>{const s=cross(nm,cl,n,l);if(s)out.push(s);});
-  const ins=d.inst;
-  if(ins&&ins.length>=2){
-   const a=ins[ins.length-2].f,b=ins[ins.length-1].f;
-   if(a<0&&b>0)out.push({k:'bull',t:`${nm} 外資由賣轉買（${fmtSignI(b)} 張）`});
-   if(a>0&&b<0)out.push({k:'bear',t:`${nm} 外資由買轉賣（${fmtSignI(b)} 張）`});
-  }
-  const mg=d.margin;
-  if(mg&&mg.length){
-   const m=mg[mg.length-1];
-   if(m.finPrev>0){const r=(m.fin-m.finPrev)/m.finPrev*100;
-    if(r>=5)out.push({k:'bear',t:`${nm} 融資單日大增 ${r.toFixed(1)}%（散戶湧入，籌碼轉亂）`});
-    if(r<=-5)out.push({k:'bull',t:`${nm} 融資單日大減 ${Math.abs(r).toFixed(1)}%（散戶退場，籌碼沉澱）`});}
-  }
-  if(h.divNote){
-   const m2=h.divNote.match(/(\d+)\/(\d+)/);
-   if(m2){const base=new Date(META.generated.replace(/\//g,'-'));
-    const ex=new Date(base.getFullYear(),+m2[1]-1,+m2[2]);
-    if(base-ex>180*86400000)ex.setFullYear(ex.getFullYear()+1); /* 12月看到1月除息＝明年，非過去 */
-    const dd2=Math.round((ex-base)/86400000);
-    if(dd2===0)out.push({k:'info',t:`${nm} 今日除息——當日跌幅含配息因素，非真跌`});
-    else if(dd2>0&&dd2<=5)out.push({k:'info',t:`${nm} ${dd2} 天後除息（${m2[1]}/${m2[2]}）——除息日跳空屬機械性，勿誤判為利空`});}
-  }
- });
- let top=null;H.forEach(h=>{const c=h.chg*SHARES[h.code];if(!top||Math.abs(c)>Math.abs(top.c))top={h,c};});
- if(top&&top.c!==0)out.push({k:'info',t:`最近交易日損益主要來自 ${top.h.code} ${esc(top.h.name)}（${fmtSignI(Math.round(top.c))} 元）`});
+ const out=computeSignals(H,DASH,META,SHARES);
  const icon={bull:'▲ 多',bear:'▼ 空',info:'ℹ 提醒'};
+ /* s.t 是 computeSignals 已經逸出好的字串（名稱過 esc），這裡只負責包版 */
  box.innerHTML=out.length?out.map(s=>`<div class="sg"><span class="tag ${s.k}">${icon[s.k]}</span><span>${s.t}</span></div>`).join(''):
   '<div class="sg"><span class="tag info">✓</span><span>今日無特別訊號（無均線穿越、法人轉向或融資急變）</span></div>';
 }
 
 /* ---------- allocation ---------- */
-(function(){const bar=document.getElementById('allocBar'),leg=document.getElementById('legend');
+function buildAlloc(){const bar=document.getElementById('allocBar'),leg=document.getElementById('legend');
+ if(!bar||!leg)return;
+ bar.replaceChildren();leg.replaceChildren();
  H.forEach(h=>{const s=document.createElement('span');s.style.width=h.weight+'%';s.style.background=h.color;s.title=h.code;bar.appendChild(s);
-  const li=document.createElement('div');li.className='li';li.innerHTML=`<span class="sw" style="background:${h.color}"></span><span class="nm">${h.code} ${esc(h.name)}</span><span class="pc num">${h.weight}%</span>`;leg.appendChild(li);});})();
+  const li=document.createElement('div');li.className='li';li.innerHTML=`<span class="sw" style="background:${h.color}"></span><span class="nm">${h.code} ${esc(h.name)}</span><span class="pc num">${h.weight}%</span>`;leg.appendChild(li);});}
 
 /* ---------- cards ---------- */
 function plColor(v){return v>0?'up-txt':v<0?'down-txt':'';}
-(function(){const wrap=document.getElementById('holdings');
+function buildCards(){const wrap=document.getElementById('holdings');
+ if(!wrap)return;
+ wrap.replaceChildren();
  H.forEach((h,i)=>{const up=h.chg>=0;const el=document.createElement('div');
   el.className='h-card';el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',h.name+' 詳細分析');
   el.innerHTML=`<div class="h-accent" style="background:${h.color}"></div><div class="h-body">
@@ -840,11 +934,38 @@ function plColor(v){return v>0?'up-txt':v<0?'down-txt':'';}
     <span class="h-more">三面分析 ›</span></div></div>`;
   el.addEventListener('click',()=>openModal(i));
   el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openModal(i);}});
-  wrap.appendChild(el);});})();
+  wrap.appendChild(el);});}
 
 /* ---------- charts ---------- */
 function setup(cv){const r=devicePixelRatio||1,w=cv.clientWidth,hh=cv.clientHeight;cv.width=w*r;cv.height=hh*r;const x=cv.getContext('2d');x.setTransform(r,0,0,r,0,0);x.clearRect(0,0,w,hh);return{x,w,h:hh};}
 function sma(arr,n){const o=arr.map((_,i)=>{if(i<n-1)return null;let s=0;for(let k=i-n+1;k<=i;k++)s+=arr[k];return s/n;});return o;}
+/* ---------- shared chart internals ----------
+   priceChart and candleChart used to share only setup() and sma(): the scale maths, the grid
+   loop and the crosshair were byte-identical copies, and the overlay loop differed only in a
+   variable name. Worse, both returned {padL,padR} and left the CALLER to invert X(i) - with a
+   curMode branch and a comment restating the forward projection, because the two charts index
+   differently. The chart owns its projection now: it returns indexAt(), so attachChartHover
+   does not need to know which chart it is talking to. */
+function chartGrid(x,w,h,pad){
+  x.strokeStyle=cssv('--grid');x.lineWidth=1;
+  for(let g=0;g<=3;g++){const yy=pad.t+(h-pad.t-pad.b)*g/3;x.beginPath();x.moveTo(pad.l,yy);x.lineTo(w-pad.r,yy);x.stroke();}
+}
+function chartOverlays(x,overlays,X,Y){
+  overlays.forEach(o=>{x.beginPath();let started=false;
+    o.vals.forEach((v,i)=>{if(v==null){started=false;return;}if(!started){x.moveTo(X(i),Y(v));started=true;}else x.lineTo(X(i),Y(v));});
+    x.strokeStyle=o.color;x.lineWidth=1.4;x.lineJoin='round';x.stroke();});
+}
+function chartCrosshair(x,hover,X,pad,h){
+  if(hover==null)return;
+  x.strokeStyle=cssv('--ink-faint');x.setLineDash([3,3]);
+  x.beginPath();x.moveTo(X(hover),pad.t);x.lineTo(X(hover),h-pad.b);x.stroke();x.setLineDash([]);
+}
+/* Geometry the caller can use without re-deriving the forward projection. `width` lets the
+   hover handler pass the element's measured rect, which is what it has. */
+function chartGeom(pad,w,inverse){
+  return {padL:pad.l,padR:pad.r,
+          indexAt:(cx,width)=>inverse(cx,(width==null?w:width))};
+}
 function priceChart(cv,vals,color,opts={}){
   const {x,w,h}=setup(cv);if(!vals.length)return;const pad=opts.pad||{t:8,r:6,b:8,l:6};
   const overlays=opts.overlays||[];
@@ -852,15 +973,16 @@ function priceChart(cv,vals,color,opts={}){
   let mn=Math.min(...all),mx=Math.max(...all);const sp=(mx-mn)||1;mn-=sp*.08;mx+=sp*.12;
   const X=i=>pad.l+(w-pad.l-pad.r)*(i/(vals.length-1));
   const Y=v=>pad.t+(h-pad.t-pad.b)*(1-(v-mn)/(mx-mn));
-  if(opts.grid){x.strokeStyle=cssv('--grid');x.lineWidth=1;for(let g=0;g<=3;g++){const yy=pad.t+(h-pad.t-pad.b)*g/3;x.beginPath();x.moveTo(pad.l,yy);x.lineTo(w-pad.r,yy);x.stroke();}}
+  if(opts.grid)chartGrid(x,w,h,pad);
   const grad=x.createLinearGradient(0,pad.t,0,h);grad.addColorStop(0,color+'44');grad.addColorStop(1,color+'00');
   x.beginPath();x.moveTo(X(0),Y(vals[0]));vals.forEach((v,i)=>x.lineTo(X(i),Y(v)));x.lineTo(X(vals.length-1),h-pad.b);x.lineTo(X(0),h-pad.b);x.closePath();x.fillStyle=grad;x.fill();
   x.beginPath();x.moveTo(X(0),Y(vals[0]));vals.forEach((v,i)=>x.lineTo(X(i),Y(v)));x.strokeStyle=color;x.lineWidth=opts.lw||1.8;x.lineJoin='round';x.stroke();
-  overlays.forEach(o=>{x.beginPath();let started=false;o.vals.forEach((v,i)=>{if(v==null){started=false;return;}if(!started){x.moveTo(X(i),Y(v));started=true;}else x.lineTo(X(i),Y(v));});x.strokeStyle=o.color;x.lineWidth=1.4;x.stroke();});
+  chartOverlays(x,overlays,X,Y);
   if(opts.mark){const pk=vals.indexOf(Math.max(...vals));x.fillStyle=cssv('--ink-faint');x.beginPath();x.arc(X(pk),Y(vals[pk]),2.5,0,7);x.fill();}
   const li=vals.length-1;x.fillStyle=color;x.beginPath();x.arc(X(li),Y(vals[li]),3,0,7);x.fill();x.fillStyle=cssv('--surface');x.beginPath();x.arc(X(li),Y(vals[li]),1.3,0,7);x.fill();
-  if(opts.hover!=null){const hi2=opts.hover;x.strokeStyle=cssv('--ink-faint');x.setLineDash([3,3]);x.beginPath();x.moveTo(X(hi2),pad.t);x.lineTo(X(hi2),h-pad.b);x.stroke();x.setLineDash([]);}
-  return {padL:pad.l,padR:pad.r};
+  chartCrosshair(x,opts.hover,X,pad,h);
+  /* inverse of X(i)=pad.l+span*(i/(n-1)) */
+  return chartGeom(pad,w,(cx,width)=>Math.round((cx-pad.l)/(width-pad.l-pad.r)*(vals.length-1)));
 }
 function candleChart(cv,ser,opts={}){
   const {x,w,h}=setup(cv);if(!ser.length)return{};
@@ -872,7 +994,7 @@ function candleChart(cv,ser,opts={}){
   const n=ser.length,iw=(w-pad.l-pad.r)/n;
   const X=i=>pad.l+iw*(i+0.5);
   const Y=v=>pad.t+(h-pad.t-pad.b)*(1-(v-mn)/(mx-mn));
-  if(opts.grid){x.strokeStyle=cssv('--grid');x.lineWidth=1;for(let g=0;g<=3;g++){const yy=pad.t+(h-pad.t-pad.b)*g/3;x.beginPath();x.moveTo(pad.l,yy);x.lineTo(w-pad.r,yy);x.stroke();}}
+  if(opts.grid)chartGrid(x,w,h,pad);
   const cu=cssv('--up'),cd=cssv('--down'),cf=cssv('--ink-faint');
   const bw=Math.max(2,iw*0.62);
   ser.forEach((s,i)=>{
@@ -882,9 +1004,11 @@ function candleChart(cv,ser,opts={}){
     const t=Math.min(Y(s.o),Y(s.c)),bh=Math.max(1,Math.abs(Y(s.o)-Y(s.c)));
     x.fillRect(X(i)-bw/2,t,bw,bh);
   });
-  overlays.forEach(o=>{x.beginPath();let st=false;o.vals.forEach((v,i)=>{if(v==null){st=false;return;}if(!st){x.moveTo(X(i),Y(v));st=true;}else x.lineTo(X(i),Y(v));});x.strokeStyle=o.color;x.lineWidth=1.4;x.lineJoin='round';x.stroke();});
-  if(opts.hover!=null){const hi2=opts.hover;x.strokeStyle=cssv('--ink-faint');x.setLineDash([3,3]);x.beginPath();x.moveTo(X(hi2),pad.t);x.lineTo(X(hi2),h-pad.b);x.stroke();x.setLineDash([]);}
-  return {padL:pad.l,padR:pad.r};
+  chartOverlays(x,overlays,X,Y);
+  chartCrosshair(x,opts.hover,X,pad,h);
+  /* inverse of X(i)=pad.l+iw*(i+0.5) - a different inverse from the line chart, which is
+     exactly why the caller should not be doing it */
+  return chartGeom(pad,w,(cx,width)=>Math.round((cx-pad.l)/(width-pad.l-pad.r)*n-0.5));
 }
 function volChart(cv,ser){const {x,w,h}=setup(cv);if(!ser.length)return;const mx=Math.max(...ser.map(s=>s.v))||1;const bw=w/ser.length;const cu=cssv('--up'),cd=cssv('--down');
   ser.forEach((s,i)=>{const bh=(h-2)*(s.v/mx);x.fillStyle=(s.c>=s.o?cu:cd)+'66';x.fillRect(i*bw+bw*0.12,h-bh,bw*0.76,bh);});}
@@ -904,12 +1028,8 @@ function updatePL(){
   H.forEach(h=>{const sh=SHARES[h.code];const cLS=costs[h.code];const av=cLS>0?null:tradeAvgCost(h.code);const c=cLS>0?cLS:av;const el=document.querySelector(`[data-plcard="${h.code}"]`);
    /* 移動停利訊號：與選股引擎出場規則同款（獲利≥15% 且收盤跌破 10 日線）。
       需要成本價才算得出獲利，所以掛在這裡而非 adviseHolding；沒成本就不猜、不顯示 */
-   h.trailSignal=null;
-   if(c>0){haveAny=true;totVal+=h.price*sh;totCost+=c*sh;const pl=(h.price-c)*sh;const pct=(h.price-c)/c*100;if(el){el.textContent=`損益 ${fmtSignI(Math.round(pl))} (${fmtSign(pct,1)}%)${av?'·依交易均價':''}`;el.className='pl num '+plColor(pl);}
-    const ser=(DASH[h.code]||{}).series;
-    if(pct>=15&&ser&&ser.length>=10){
-     const cl=ser.map(x=>x.c);let t10=0;for(let k=cl.length-10;k<cl.length;k++)t10+=cl[k];const ma10=t10/10;
-     if(h.price<ma10)h.trailSignal={gain:pct,ma10};}}
+   h.trailSignal=computeTrailingStop(h.price,c,(DASH[h.code]||{}).series);
+   if(c>0){haveAny=true;totVal+=h.price*sh;totCost+=c*sh;const pl=(h.price-c)*sh;const pct=(h.price-c)/c*100;if(el){el.textContent=`損益 ${fmtSignI(Math.round(pl))} (${fmtSign(pct,1)}%)${av?'·依交易均價':''}`;el.className='pl num '+plColor(pl);}}
    else if(el){el.textContent='未設成本';el.className='pl num';el.style.color='var(--ink-faint)';}
    const tc=document.querySelector(`[data-trailchip="${h.code}"]`);if(tc)tc.hidden=!h.trailSignal;});
   const out=document.getElementById('pfPL'),outp=document.getElementById('pfPLpct');
@@ -931,16 +1051,45 @@ function renderBigChart(){const ser=curSeries;if(!ser)return;const closes=ser.ma
 function attachChartHover(){
   const bc=document.getElementById('bc'),tip=document.getElementById('tip');
   const move=e=>{if(!curSeries)return;const r=bc.getBoundingClientRect();const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
-    const ser=curSeries,n=ser.length;const pl=(lastGeom&&lastGeom.padL)||10,pr=(lastGeom&&lastGeom.padR)||10;
-    /* candle mode: X(i)=pad.l+iw*(i+0.5); line mode: X(i)=pad.l+span*(i/(n-1)) -- different inverses, mode-dependent */
-    let i=curMode==='k'?Math.round((cx-pl)/(r.width-pl-pr)*n-0.5):Math.round((cx-pl)/(r.width-pl-pr)*(n-1));
-    i=Math.max(0,Math.min(n-1,i));
+    const ser=curSeries,n=ser.length;
+    /* the chart returns its own inverse, so this no longer branches on curMode */
+    if(!lastGeom||!lastGeom.indexAt)return;
+    let i=Math.max(0,Math.min(n-1,lastGeom.indexAt(cx,r.width)));
     if(i!==hoverIdx){hoverIdx=i;renderBigChart();}
     const s=ser[i],cl=s.chg>0?'up-txt':s.chg<0?'down-txt':'';
     tip.innerHTML=`<b>${s.d}</b>　開 ${s.o}　高 ${s.h}　低 ${s.l}　收 <b class="${cl}">${s.c}</b>（${fmtSign(s.chg)}）　量 ${fmt(s.v)} 張`;
     if(e.cancelable)e.preventDefault();};
   bc.addEventListener('pointermove',move);bc.addEventListener('pointerdown',move);
   bc.addEventListener('pointerleave',()=>{hoverIdx=null;tip.innerHTML='按住或滑過圖表可查每日開高低收';renderBigChart();});}
+/* ---------- shared modal chart plumbing ----------
+   openModal (7.2 KB) and openPickModal (3.7 KB) carried ~25 byte-identical lines between them:
+   the MA/mode chip markup, the tipbar + canvases, and the whole post-render wiring. Both are
+   now built from these two helpers, so a change to the chart controls happens once. */
+function maChipsHtml(closes,mode){
+  const maNum=n=>{const a=sma(closes,n);return a[a.length-1];};
+  const maV=n=>{const v=maNum(n);return v?v.toFixed(2):'—';};
+  return `<div class="matoggle">
+    <button class="machip mode" data-mode="k" aria-pressed="${mode==='k'}">K線</button>
+    <button class="machip mode" data-mode="line" aria-pressed="${mode==='line'}">折線</button>
+    <span style="flex:1"></span>
+    <button class="machip m5" data-ma="5" aria-pressed="false"><span class="sw"></span>MA5 <span class="val num">${maV(5)}</span></button>
+    <button class="machip m20" data-ma="20" aria-pressed="false"><span class="sw"></span>月線 <span class="val num">${maV(20)}</span></button>
+    <button class="machip m60" data-ma="60" aria-pressed="false"><span class="sw"></span>季線 <span class="val num">${maV(60)}</span></button></div>
+  <div class="tipbar" id="tip">按住或滑過圖表可查每日開高低收</div>
+  <canvas class="bigchart" id="bc"></canvas><canvas class="volchart" id="vc"></canvas>`;
+}
+/* open the overlay, draw, and wire the chart controls - the identical tail both modals had */
+function wireModalChart(){
+  rememberFocus();ov.classList.add('open');document.body.style.overflow='hidden';
+  renderBigChart();
+  document.querySelectorAll('.machip[data-ma]').forEach(btn=>btn.addEventListener('click',()=>{
+    const n=+btn.dataset.ma;curMA[n]=!curMA[n];btn.setAttribute('aria-pressed',curMA[n]);renderBigChart();}));
+  document.querySelectorAll('.machip.mode').forEach(btn=>btn.addEventListener('click',()=>{
+    curMode=btn.dataset.mode;
+    document.querySelectorAll('.machip.mode').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===curMode)));
+    renderBigChart();}));
+  attachChartHover();
+}
 function openModal(i){
   const h=H[i],d=DASH[h.code],ser=d.series,up=h.chg>=0;curCode=h.code;curSeries=ser;curMA={5:false,20:false,60:false};curMode='k';hoverIdx=null;
   const first=ser[0].d,last=ser[ser.length-1].d;
@@ -964,15 +1113,7 @@ function openModal(i){
       <span class="plout" id="mPL"><small>輸入成本以計算損益</small></span></div>
 
     <div class="an-block"><div class="an-head"><span class="an-head t">📈 技術面</span>${sig('tech','')}</div>
-      <div class="matoggle">
-        <button class="machip mode" data-mode="k" aria-pressed="true">K線</button>
-        <button class="machip mode" data-mode="line" aria-pressed="false">折線</button>
-        <span style="flex:1"></span>
-        <button class="machip m5" data-ma="5" aria-pressed="false"><span class="sw"></span>MA5 <span class="val num">${maV(5)}</span></button>
-        <button class="machip m20" data-ma="20" aria-pressed="false"><span class="sw"></span>月線 <span class="val num">${maV(20)}</span></button>
-        <button class="machip m60" data-ma="60" aria-pressed="false"><span class="sw"></span>季線 <span class="val num">${maV(60)}</span></button></div>
-      <div class="tipbar" id="tip">按住或滑過圖表可查每日開高低收</div>
-      <canvas class="bigchart" id="bc"></canvas><canvas class="volchart" id="vc"></canvas>
+      ${maChipsHtml(closes,'k')}
       <div class="chart-meta"><span>${first}</span><span>近 ${ser.length} 個交易日 · 紅漲綠跌</span><span class="num">最新 ${last}</span></div>
       <div class="levels">
         <span>月線 <b>${maV(20)}</b>（${relMA(20)}）</span>
@@ -1002,13 +1143,7 @@ function openModal(i){
 
     <div class="subhd" style="margin-top:18px">近 24 小時新聞 · 國內外 · 附來源</div>
     <ul class="news">${newsHtml}</ul>`;
-  rememberFocus();ov.classList.add('open');document.body.style.overflow='hidden';
-  renderBigChart();
-  // MA toggles
-  document.querySelectorAll('.machip[data-ma]').forEach(btn=>btn.addEventListener('click',()=>{const n=+btn.dataset.ma;curMA[n]=!curMA[n];btn.setAttribute('aria-pressed',curMA[n]);renderBigChart();}));
-  // K線 / 折線 mode
-  document.querySelectorAll('.machip.mode').forEach(btn=>btn.addEventListener('click',()=>{curMode=btn.dataset.mode;document.querySelectorAll('.machip.mode').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===curMode)));renderBigChart();}));
-  attachChartHover();
+  wireModalChart();
   // cost input
   const inEl=document.getElementById('costIn');const recalc=()=>{const v=parseFloat(inEl.value);const out=document.getElementById('mPL');
     if(v>0){setCost(h.code,v);const sh=SHARES[h.code];const pl=(h.price-v)*sh;const pct=(h.price-v)/v*100;out.innerHTML=`損益 <span class="${plColor(pl)}">${fmtSignI(Math.round(pl))}　${fmtSign(pct,1)}%</span>`;}
@@ -1042,15 +1177,7 @@ function openPickModal(p,backInd){
   <div class="m-price"><div class="p num ${up?'up-txt':'down-txt'}">${p.close}</div>
   <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(cp).toFixed(2)}%${dist!=null?` · 距高 ${fmtSign(dist,1)}%`:''}</div></div></div>
   <div class="mlabel">技術走勢 · 近 ${ser.length} 個交易日</div>
-  <div class="matoggle">
-    <button class="machip mode" data-mode="k" aria-pressed="${curMode==='k'}">K線</button>
-    <button class="machip mode" data-mode="line" aria-pressed="${curMode==='line'}">折線</button>
-    <span style="flex:1"></span>
-    <button class="machip m5" data-ma="5" aria-pressed="false"><span class="sw"></span>MA5 <span class="val num">${maV(5)}</span></button>
-    <button class="machip m20" data-ma="20" aria-pressed="false"><span class="sw"></span>月線 <span class="val num">${maV(20)}</span></button>
-    <button class="machip m60" data-ma="60" aria-pressed="false"><span class="sw"></span>季線 <span class="val num">${maV(60)}</span></button></div>
-  <div class="tipbar" id="tip">按住或滑過圖表可查每日開高低收</div>
-  <canvas class="bigchart" id="bc"></canvas><canvas class="volchart" id="vc"></canvas>
+  ${maChipsHtml(closes,curMode)}
   <div class="chart-meta"><span>${first}</span><span>紅漲綠跌</span><span class="num">最新 ${last}</span></div>
   <div class="levels">
     <span>月線 <b>${maV(20)}</b>（${relMA(20)}）</span>
@@ -1060,11 +1187,7 @@ function openPickModal(p,backInd){
   <div class="an-text" style="font-size:13px">${evOf(p)}</div>
   ${p.note?`<div class="mlabel">題材筆記</div><div class="pk-note" style="margin-top:0">${esc(p.note)}</div>`:''}
   <div style="margin-top:14px;font-size:11.5px;color:var(--ink-faint)">量化篩選僅供研究參考、非投資建議、非推介買進。</div>`;
- rememberFocus();ov.classList.add('open');document.body.style.overflow='hidden';
- renderBigChart();
- document.querySelectorAll('.machip[data-ma]').forEach(btn=>btn.addEventListener('click',()=>{const n=+btn.dataset.ma;curMA[n]=!curMA[n];btn.setAttribute('aria-pressed',curMA[n]);renderBigChart();}));
- document.querySelectorAll('.machip.mode').forEach(btn=>btn.addEventListener('click',()=>{curMode=btn.dataset.mode;document.querySelectorAll('.machip.mode').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===curMode)));renderBigChart();}));
- attachChartHover();
+ wireModalChart();
  const bb=document.getElementById('backCat');
  if(bb)bb.addEventListener('click',e=>{e.stopPropagation();openCatModal(backInd);});
  document.getElementById('mClose').focus();
@@ -1102,7 +1225,7 @@ const PM=(function(){const D=window.PICKS_DATA;if(!D)return null;
  (D.etf||[]).forEach(p=>{p.note=(window.PICKS_NOTES[p.code]||p.note||'');});
  return D;})();
 let CATS={};
-(function(){
+function buildPicks(){
  if(!PM){const fn=document.getElementById('funnelNote');if(fn)fn.textContent='（選股引擎資料尚未載入，將於下次排程自動填入）';return;}
  const LT={green:['#22a06b','綠燈 · 風向偏多，可較積極'],yellow:['#d9a514','黃燈 · 中性觀望，控制部位、精選個股'],red:['#d0342c','紅燈 · 防守模式，暫停積極追價']};
  const L=LT[PM.regime.light]||LT.yellow;
@@ -1118,6 +1241,7 @@ let CATS={};
  const redNote=PM.regime.light==='red'?'　⚠ 紅燈：以下僅列觀察、不建議積極進場':'';
  document.getElementById('funnelNote').textContent=`全市場 → 籌碼初選 ${PM.meta.candidates} 檔 → 風控＋技術複審 → 入選 ${PM.picks.length} 檔／${catList.length} 類（★Top5 進追蹤）＋ ETF ${(PM.etf||[]).length} 檔　·　行情基準 ${dateStr}${redNote}`;
  const cw=document.getElementById('catsWrap');
+ cw.replaceChildren();          /* boot() is re-runnable now; appending twice would duplicate */
  catList.forEach(c=>{
   const el=document.createElement('div');el.className='cat';el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',c.ind+' 入選個股');
   const names=c.arr.slice(0,4).map(p=>`${esc(p.name)}${p.top?'<span class="star">★</span>':''}`).join('、')+(c.arr.length>4?'…':'');
@@ -1130,6 +1254,7 @@ let CATS={};
   cw.appendChild(el);
  });
  const ew=document.getElementById('etfWrap');
+ ew.replaceChildren();
  const bar=(lbl,v,max,col)=>`<div class="pk-bar"><span>${lbl}</span><span class="tr"><span class="fl" style="width:${Math.round(v/max*100)}%;background:${col}"></span></span><span class="num">${v}/${max}</span></div>`;
  (PM.etf||[]).forEach(p=>{
   const el=document.createElement('div');el.className='pk';el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',p.name+' 完整 K 線');
@@ -1173,7 +1298,7 @@ let CATS={};
   if(done.length)html+=`<details><summary>已結案（顯示最近 ${done.length} 筆）</summary>${tbl(done)}</details>`;
  }
  pb.innerHTML=html;
-})();
+}
 function openCatModal(ind){
  const arr=(CATS[ind]||[]).slice().sort((a,b)=>b.score-a.score);
  if(!arr.length)return;
@@ -1244,7 +1369,26 @@ function buildTokenUsage(){
  if(!total){ el.textContent=''; return; }
  el.textContent='　|　'+t.date+' 本站每日流程 AI 用量：約 '+total.toLocaleString('en-US')+' tokens';
 }
-function boot(){renderAll();updatePL();fillTop();buildWind();buildSignals();buildBacktest();buildConc();buildEval();buildTokenUsage();}
+/* boot() is the entry point, and now really is one. Until this was fixed, seven top-level IIFEs
+   rendered at PARSE time - the holding cards, the allocation bar and the whole quant-picks
+   section among them - and boot() only redrew canvases. That meant the page could never be
+   rendered twice, so no test could feed it a second dataset; it also meant a throw in any of
+   them killed everything after it with no way to tell which. Each section is wrapped so one
+   failure cannot blank the rest. */
+function boot(){
+ const steps=[
+  ['hydrate',hydrate],['alloc',buildAlloc],['cards',buildCards],['picks',buildPicks],
+  ['charts',renderAll],['pl',updatePL],['top',fillTop],['wind',buildWind],
+  ['signals',buildSignals],['backtest',buildBacktest],['conc',buildConc],
+  ['eval',buildEval],['tokens',buildTokenUsage],['account',accountMode],
+ ];
+ const failed=[];
+ for(const [name,fn] of steps){
+  try{ fn(); }catch(e){ failed.push(name); console.error('boot step failed: '+name,e); }
+ }
+ window.__bootFailed=failed;
+ return failed;
+}
 if(window.DASH)boot();else addEventListener('load',boot);
 let __rzT;window.addEventListener('resize',()=>{clearTimeout(__rzT);__rzT=setTimeout(renderAll,150);}); /* 防抖：手機捲動時網址列伸縮不連環重繪 */
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',renderAll);
@@ -1253,7 +1397,7 @@ new MutationObserver(renderAll).observe(document.documentElement,{attributes:tru
 /* ---------- 伺服器模式（多使用者）：帳號列與持股編輯 ----------
    window.APP_USER 由 server.py 逐使用者注入 <script id="appuser">。靜態 demo 沒有它，
    下面整段就不啟用，頁面行為與單人版完全相同。 */
-(function accountMode(){
+function accountMode(){
  const U=window.APP_USER;if(!U)return;
  const bar=document.getElementById('acctBar');if(!bar)return;
  bar.hidden=false;
@@ -1334,5 +1478,5 @@ new MutationObserver(renderAll).observe(document.documentElement,{attributes:tru
    load();
   }catch(e){say(e.message,true);}
  };
-})();
+}
 </script>

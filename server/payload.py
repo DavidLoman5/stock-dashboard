@@ -17,15 +17,13 @@ import json
 import os
 
 from . import config
+from . import pagedata
 
-# per-holding fields a guest may see: factual, code-level, portfolio-independent
-GUEST_NOTE_FIELDS = ("sigFund", "tech", "chip", "fund")
-
-# _market fields that are genuinely market-wide. `wind` is deliberately NOT here: the daily
-# prompt writes it as commentary on the owner's portfolio ("投組今日明顯分化：00990A…"), so it
-# names real holdings. buildWind() renders fine without it - it falls back to windLead alone.
-# This is an allowlist, not a blocklist, so a new field added upstream stays private by default.
-MARKET_PUBLIC_FIELDS = ("windLead", "sox", "mood", "moodK")
+# The two note allowlists and the _market allowlist come from page-contract.json - the same file
+# build-demo.ps1 filters on and lib/publish-gate.ps1 refuses on. They used to be hardcoded here,
+# which meant the contract governed what got *published* while the live server shipped whatever
+# this module happened to say; adding a field to noteFields.guest changed the demo build and did
+# nothing here. Read through the contract so there is one declaration, not three.
 
 
 def _read_json(path, default=None):
@@ -175,8 +173,15 @@ def _mentions_other_holding(text, own_code, private_codes):
     return any(c != own_code and c in text for c in private_codes)
 
 
-def notes_for(tier, codes, all_notes, private_codes=(), guest_notes=None):
+def notes_for(tier, codes, all_notes, private_codes, guest_notes=None):
     """Owner sees their own full daily analysis, untouched.
+
+    `private_codes` is REQUIRED and must be the owner's own holdings (payload.owner_codes) - it
+    is what makes every check below mean anything. It used to default to (), which reads as
+    "nothing is private": `code not in ()` is always true and _mentions_other_holding scans an
+    empty list, so both guards below silently allowed everything. Omitting the argument was a
+    one-token way to publish the owner's advice, so it is no longer omittable. Prefer
+    notes_for_reader(), which derives it from the connection and cannot get it wrong.
 
     A guest's page is assembled from two sources:
       * the owner's Claude notes, code-level factual fields only, and only where the text does
@@ -198,13 +203,15 @@ def notes_for(tier, codes, all_notes, private_codes=(), guest_notes=None):
     """
     all_notes = all_notes or {}
     guest_notes = guest_notes or {}
+    guest_fields = pagedata.guest_note_fields()
+    market_fields = pagedata.market_public_fields()
     out = {}
     market = all_notes.get("_market")
     if isinstance(market, dict):
         if tier == "owner":
             out["_market"] = market
         else:
-            slim = {k: market[k] for k in MARKET_PUBLIC_FIELDS if k in market}
+            slim = {k: market[k] for k in market_fields if k in market}
             if slim:
                 out["_market"] = slim
     for code in codes:
@@ -216,12 +223,12 @@ def notes_for(tier, codes, all_notes, private_codes=(), guest_notes=None):
         merged = {}
         gnote = guest_notes.get(code)
         if isinstance(gnote, dict):
-            merged.update({k: gnote[k] for k in GUEST_NOTE_FIELDS if k in gnote})
+            merged.update({k: gnote[k] for k in guest_fields if k in gnote})
             if gnote.get("rec"):
                 merged["rec"] = gnote["rec"]
         if isinstance(note, dict):
             merged.update({
-                k: note[k] for k in GUEST_NOTE_FIELDS
+                k: note[k] for k in guest_fields
                 if k in note and not _mentions_other_holding(note[k], code, private_codes)
             })
             if (code not in private_codes and note.get("rec")
@@ -232,6 +239,18 @@ def notes_for(tier, codes, all_notes, private_codes=(), guest_notes=None):
     return out
 
 
+def notes_for_reader(conn, reader, codes, all_notes, guest_notes=None):
+    """notes_for() with the privacy set derived rather than passed.
+
+    This is the interface callers should use: the one fact that makes the filter work - which
+    codes are the owner's own - comes out of the connection, so there is no argument to forget
+    and no way to express "nothing is private". The owner reads their own notes unfiltered, so
+    for them the private set is empty by definition, not by omission.
+    """
+    private = () if reader["tier"] == "owner" else owner_codes(conn)
+    return notes_for(reader["tier"], codes, all_notes, private, guest_notes)
+
+
 def bootstrap(conn, cfg, user):
     """Everything index.html needs, in one response."""
     data_dir = cfg["dataDir"]
@@ -239,22 +258,24 @@ def bootstrap(conn, cfg, user):
     meta = _read_json(os.path.join(data_dir, "meta.json"), {}) or {}
     picks = _read_json(os.path.join(data_dir, "picks.json"), None)
     picks_kline = _read_json(os.path.join(data_dir, "picks-kline.json"), None)
-    picks_notes = _read_json(_root("picks-notes.json"), {}) or {}
-    all_notes = _read_json(_root("holdings-notes.json"), {}) or {}
+    notes_dir = cfg.get("notesDir", config.ROOT)
+    picks_notes = _read_json(os.path.join(notes_dir, "picks-notes.json"), {}) or {}
+    all_notes = _read_json(os.path.join(notes_dir, "holdings-notes.json"), {}) or {}
     # Gemini's per-code analysis (server/gnotes.py). Only guests read it; missing file just means
     # the step has not run yet, and notes_for() then behaves exactly as it did before.
-    guest_notes = {} if user["tier"] == "owner" else (_read_json(_root("guest-notes.json"), {}) or {})
-    eval_report = _read_json(_root("eval-report.json"), None)
+    guest_notes = ({} if user["tier"] == "owner"
+                   else (_read_json(os.path.join(notes_dir, "guest-notes.json"), {}) or {}))
+    eval_report = _read_json(os.path.join(notes_dir, "eval-report.json"), None)
     # backtest-card.json is the page-card shape ({rows:[...]}) that backtest.ps1 splices into the
     # static page. backtest-result.json is the raw research output (grid/current/bestOOS) and has
     # no `rows`, so buildBacktest() silently rendered nothing from it - hence the fallback order.
-    backtest = _read_json(_root("backtest-card.json"), None)
+    backtest = _read_json(os.path.join(notes_dir, "backtest-card.json"), None)
     if not isinstance(backtest, dict) or not backtest.get("rows"):
         backtest = None
 
     # daily AI token usage (written by finish-daily-push.ps1, non-AI, cost transparency only -
     # same figure already shown to everyone on the public GitHub Pages demo, so no tier gate here
-    token_usage = _read_json(_root("token-usage.json"), None)
+    token_usage = _read_json(os.path.join(notes_dir, "token-usage.json"), None)
     if not isinstance(token_usage, dict) or not token_usage.get("date"):
         token_usage = None
 
@@ -306,11 +327,7 @@ def bootstrap(conn, cfg, user):
         "pendingCodes": missing,
         "dash": dash,
         "holdingsMeta": hmeta,
-        "holdingsNotes": notes_for(
-            user["tier"], codes, all_notes,
-            () if user["tier"] == "owner" else owner_codes(conn),
-            guest_notes,
-        ),
+        "holdingsNotes": notes_for_reader(conn, user, codes, all_notes, guest_notes),
         "picks": picks,
         "picksKline": picks_kline,
         "picksNotes": picks_notes,

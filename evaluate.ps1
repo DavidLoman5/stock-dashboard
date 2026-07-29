@@ -1,8 +1,8 @@
-# evaluate.ps1 - weekly attribution report (run Fridays by the schedule, or manually anytime)
+﻿# evaluate.ps1 - weekly attribution report (run Fridays by the schedule, or manually anytime)
 # Reads picks-log.json (closed picks w/ factor snapshots) + stance-log.json (holding stances),
 # answers "which entry conditions actually beat the index", writes eval-report.json for the AI
 # to distill into lessons.md, and splices <script id="evaldata"> so the page shows the report.
-# ASCII source only (no BOM needed).
+# UTF-8 with BOM (the comments below name the CJK exit reasons; tests.ps1 [2] enforces it).
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract

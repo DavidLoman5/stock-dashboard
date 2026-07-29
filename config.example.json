@@ -39,6 +39,9 @@
   "dbPath": "data/app.db",
   "dataDir": "data",
 
+  "_notesDir": "Where the daily run leaves holdings-notes.json / guest-notes.json / picks-notes.json / eval-report.json / backtest-card.json / token-usage.json. Relative paths resolve against the repo root; '.' (the default) means the repo root itself.",
+  "notesDir": ".",
+
   "_comment_gemini": "Gemini writes the per-code analysis that GUESTS see (server/gnotes.py, run by run-daily.sh). Deliberately a different provider from the owner's daily Claude run, so more guests can never cost Claude tokens. Get a free key at aistudio.google.com/apikey - the free tier (250 req/day) is ~100x what one batched call a day needs. Leave empty to skip the step entirely: guests then fall back to the owner's shared notes, exactly as before.",
   "geminiApiKey": "",
   "geminiModel": "gemini-3.6-flash"

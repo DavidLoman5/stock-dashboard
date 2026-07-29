@@ -23,6 +23,7 @@
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $root 'lib/feed.ps1')       # Get-FeedJson / Get-FeedDailySeries / FeedCols
+. (Join-Path $root 'lib/score.ps1')      # THE production selection rules - not a copy of them
 . (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
 # bodies live in lib/feed.ps1; the names stay so the call sites below read the same.
 # MI_INDEX returns the whole market for one day and is the slowest call in the repo, so this
@@ -33,18 +34,14 @@ function Num($s){ ConvertTo-FeedNum $s }
 function GetJson($url){ Get-FeedJson $url }
 
 $PANEL=200   # panel days kept (=> ~120 eval days after 60-day lookback + 20-day forward)
+$ProfBT = Get-ScoreProfile 'stock'   # the backtest replays the STOCK funnel
 
 Write-Host "[1/4] trade dates + index closes (FMTQIK 11 months)..."
 $months=@(); $now=Get-Date
 for($m=10;$m -ge 0;$m--){ $months += $now.AddMonths(-$m).ToString('yyyyMM01') }
 $datesAll=@(); $idxMapBT=@{}
-foreach($mm in $months){
-  $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=$mm&response=json"
-  if($r -and $r.stat -eq 'OK'){ foreach($d in $r.data){
-    $p="$($d[0])".Split('/'); $dt=("{0}{1}{2}" -f ([int]$p[0]+1911),$p[1],$p[2])
-    $datesAll += $dt; $idxMapBT[$dt]=[double](Num $d[4])
-  } }
-  Start-Sleep -Milliseconds 700
+foreach($row in (Get-FeedIndexHistory -Months $months).Rows){
+  $datesAll += $row.dt; $idxMapBT[$row.dt]=[double]$row.c
 }
 # regime per date from the full window: index vs MA60
 $idxAll=@(); foreach($d in $datesAll){ $idxAll += $idxMapBT[$d] }
@@ -85,31 +82,12 @@ foreach($d in $dates){
   }
   if($pm.Count -eq 0){
     $tm=@{}
-    $r=GetJson "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=$d&type=ALLBUT0999&response=json"
-    if($r -and $r.tables){
-      $tbl=$r.tables | Where-Object { $_.data -and $_.data.Count -gt 500 } | Select-Object -First 1
-      if($tbl){ foreach($row in $tbl.data){
-        $c="$($row[0])".Trim()
-        if($c -match '^[1-9][0-9]{3}$'){
-          $cl=Num $row[8]
-          if($cl -ne $null){
-            # col9 is the +/- direction (may arrive as an HTML fragment), col10 the unsigned
-            # change vs the (dividend-adjusted) reference price - same convention STOCK_DAY
-            # uses, which is exactly what makes the DivSumSince-style add-back possible
-            $chgV=Num $row[10]; if($chgV -eq $null){ $chgV=0.0 }
-            if("$($row[9])" -like '*-*'){ $chgV=-$chgV }
-            $pm[$c]=@{ o=(Num $row[5]); h=(Num $row[6]); l=(Num $row[7]); c=$cl; v=(Num $row[2]); val=(Num $row[4]); chg=$chgV }
-          }
-        }
-      } }
-    }
-    Start-Sleep -Milliseconds 700
-    $r=GetJson "https://www.twse.com.tw/rwd/zh/fund/T86?date=$d&selectType=ALL&response=json"
-    if($r -and $r.stat -eq 'OK'){ foreach($row in $r.data){
-      $c="$($row[0])".Trim()
-      if($c -match '^[1-9][0-9]{3}$'){ $tm[$c]=@{ f=[double](Num $row[4]); t=[double](Num $row[10]) } }
+    $q=Get-FeedMarketQuotes -Date $d
+    foreach($c in $q.Rows.Keys){ $pm[$c]=$q.Rows[$c] }
+    $ti=Get-FeedInstitutional -Date $d -Market 't'
+    if($ti.Ok){ foreach($c in $ti.Rows.Keys){
+      if($c -match '^[1-9][0-9]{3}$'){ $tm[$c]=@{ f=$ti.Rows[$c].f; t=$ti.Rows[$c].t } }
     } }
-    Start-Sleep -Milliseconds 700
     # save cache v2 (compact arrays)
     $pxO=@{}; foreach($k in $pm.Keys){ $b=$pm[$k]; $pxO[$k]=@($b.o,$b.h,$b.l,$b.c,$b.v,$b.val,$b.chg) }
     $t8O=@{}; foreach($k in $tm.Keys){ $t8O[$k]=@($tm[$k].f,$tm[$k].t) }
@@ -151,11 +129,10 @@ for($i=$evalLo; $i -le $evalHi; $i++){
     if($tArr.Count -lt 4){ continue }   # production gate: >=4 of the 5-day window (was 5/5, stricter than prod)
     $tPos=($tArr|Where-Object{$_ -gt 0}).Count; $fPos=($fArr|Where-Object{$_ -gt 0}).Count
     $tSum=($tArr|Measure-Object -Sum).Sum; $fSum=($fArr|Measure-Object -Sum).Sum
-    $gate=$false
-    if($tPos -ge 3 -and $tSum -gt 300000){ $gate=$true }
-    if($fPos -ge 4 -and $fSum -gt 3000000){ $gate=$true }
-    if(-not $gate){ continue }
-    $chipS=[math]::Min(25,$tPos*5)+[math]::Min(10,$fPos*2)
+    $stats=Get-ChipStats -Trust $tArr -Foreign $fArr
+    if(-not (Test-ChipGate -Stats $stats -Profile $ProfBT)){ continue }
+    # no margin data in the panel, so the -5 margin-down bonus never applies here
+    $chipS=Get-ChipScore -Stats $stats
     $cl=CloseAt $code $i; if($cl -eq $null){ continue }
     # 60-day history: last 25 days must be complete (MA20/slope/ret5 exact); older gaps tolerated (MA60 null like prod)
     $hist=@(); $miss=$false
@@ -168,34 +145,23 @@ for($i=$evalLo; $i -le $evalHi; $i++){
     $ma20=($hist[($hist.Count-20)..($hist.Count-1)]|Measure-Object -Average).Average
     $ma20p=($hist[($hist.Count-25)..($hist.Count-6)]|Measure-Object -Average).Average   # prod: 20d MA ending 5 bars back
     $ret5=$cl/$hist[$hist.Count-6]-1
-    if($ret5 -gt 0.25){ continue }
     $ma60=$(if($hist.Count -ge 60){ ($hist[($hist.Count-60)..($hist.Count-1)]|Measure-Object -Average).Average } else { $null })
-    if($ma60 -ne $null -and $cl -lt $ma60){ continue }   # prod filter: below MA60 -> drop
     $n40=[math]::Min(40,$hist.Count); $hi=($hist[($hist.Count-$n40)..($hist.Count-1)]|Measure-Object -Maximum).Maximum   # prod: 40-day high
     $dist=$cl/$hi-1
-    $techS=0
-    if($cl -gt $ma20){ $techS+=10 }
-    if($ma60 -ne $null -and $cl -gt $ma60){ $techS+=8 }   # prod: above MA60 +8 (was missing)
-    if($ma20 -gt $ma20p){ $techS+=5 }
-    if($dist -ge -0.08){ $techS+=4 }
-    # --- v2.2: volume/candle factors, same order and thresholds as production screen.ps1 ---
     $bar=$pxm[$code]
     $vs=@()
     for($k=$i-20;$k -le $i-1;$k++){ $m2=$pxDay[$dates[$k]]; if($m2.ContainsKey($code) -and $m2[$code].v -ne $null){ $vs+=[double]$m2[$code].v } }
     $vAvg= if($vs.Count -ge 15){ ($vs|Measure-Object -Average).Average } else { $null }
     $vr= if($vAvg -and $vAvg -gt 0 -and $bar.v -ne $null){ [double]$bar.v/$vAvg } else { $null }
-    $rng= if($bar.h -ne $null -and $bar.l -ne $null){ [double]$bar.h-[double]$bar.l } else { 0 }
-    $upW= if($rng -gt 0 -and $bar.o -ne $null){ ([double]$bar.h-[math]::Max([double]$bar.o,$cl))/$rng } else { 0 }
-    $loW= if($rng -gt 0 -and $bar.o -ne $null){ ([math]::Min([double]$bar.o,$cl)-[double]$bar.l)/$rng } else { 0 }
-    $cp= if($rng -gt 0){ ($cl-[double]$bar.l)/$rng } else { 0.5 }
-    # distribution day at highs -> reject outright (prod does the same)
-    if($dist -ge -0.03 -and $vr -ne $null -and $vr -ge 2 -and ($cp -lt 0.35 -or $upW -gt 0.6)){ continue }
-    if($bar.chg -gt 0 -and $vr -ne $null -and $vr -ge 1.5){ $techS+=4 }
-    elseif($bar.chg -gt 0 -and $bar.val -ne $null -and [double]$bar.val -gt 3e8){ $techS+=2 }
-    if($dist -ge -0.03 -and $upW -gt 0.6 -and $vr -ne $null -and $vr -ge 1.2){ $techS-=5 }
-    if($dist -le -0.10 -and $loW -gt 0.6){ $techS+=2 }
-    if($techS -lt 0){ $techS=0 }
-    if($techS -gt 30){ $techS=30 }
+    # -Light 'na': the panel has no red/yellow/green light, so the green-day momentum reward
+    # never applied here. That was already true of the hand-copied version this replaces; it is
+    # now a one-word change rather than a missing block, but turning it on would change backtest
+    # numbers, so it stays off until the monthly parameter review says otherwise.
+    $tsBT = Get-TechScore -Bar @{ c=$cl; o=$bar.o; h=$bar.h; l=$bar.l; chg=$bar.chg; vr=$vr; val=$bar.val } `
+                          -Ma @{ ma20=$ma20; ma20p=$ma20p; ma60=$ma60; ret5=$ret5; dist=$dist } `
+                          -Light 'na' -Profile $ProfBT
+    if($tsBT.Drop){ continue }
+    $techS=$tsBT.Score
     $scored += [pscustomobject]@{ code=$code; chip=$chipS; tech=$techS; tSum=$tSum }
   }
   if($scored.Count -eq 0){ continue }

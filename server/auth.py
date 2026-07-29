@@ -311,6 +311,44 @@ def destroy_session(conn, token):
     conn.commit()
 
 
+def verify_current_password(conn, cfg, user, password_, ip):
+    """Re-check an already-authenticated user's own password, under the same attempt budget as
+    login.
+
+    api.change_password used to call verify_password() directly, which meant a stolen or
+    borrowed session could guess the current password indefinitely: no lockout, no attempt row,
+    and set_password's audit only fires on success, so the guessing left no trace either.
+    Keeping the throttle inside this function - rather than asking every caller to remember two
+    more calls - is what makes that unrepeatable.
+    """
+    username_ = user["username"]
+    if is_locked_out(conn, cfg, ip, username_):
+        raise AuthError("嘗試次數過多，請稍後再試", 429)
+    if not verify_password(password_ or "", user["pw_salt"], user["pw_hash"]):
+        record_attempt(conn, ip, username_, False)
+        conn.commit()
+        raise AuthError("目前密碼不正確", 403)
+    record_attempt(conn, ip, username_, True)
+    conn.commit()
+
+
+def rollback_registration(conn, user_id):
+    """Undo a just-created account whose invite turned out to be invalid.
+
+    Deliberately not delete_user(): this is a row that never became an account, so it wants no
+    audit entry and no owner guard - but it is still a write to `users`, and those live here
+    rather than in a handler. Refuses anything that has already become a real account."""
+    row = conn.execute(
+        "SELECT tier, status FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if row is None:
+        return
+    if row["tier"] != "guest" or row["status"] != "pending":
+        raise AuthError("不能以註冊回滾刪除已生效的帳號", 400)
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+
+
 def login(conn, cfg, username_, password_, ip, ua):
     username_ = (username_ or "").strip()
     if is_locked_out(conn, cfg, ip, username_):

@@ -47,6 +47,11 @@ def owner_only_fields():
     return tuple(contract()["noteFields"]["ownerOnly"])
 
 
+def market_public_fields():
+    """`_market` fields that are genuinely market-wide and may be shown to non-owners."""
+    return tuple(contract()["noteFields"]["marketPublic"])
+
+
 def js(value):
     """JSON for embedding inside <script>. Breaking up '</' is what stops a string in the data
     from closing the tag early and turning data into markup."""
@@ -66,17 +71,23 @@ def block_text(html, block_id):
 
 
 def splice(html, block_id, payload):
-    """Replace the body of <script id="block_id">…</script>. Unknown id is a programming error;
-    a missing marker leaves the page untouched (the server renders whatever shell it was given)."""
+    """Replace the body of <script id="block_id">…</script>.
+
+    Fails closed, matching lib/pagedata.ps1's Set-PageBlocks: an unknown id and a marker that
+    is not in the page are both programming errors. This used to return the html untouched on a
+    missing marker, which renders as a silently blank section - the same failure mode that let
+    the tokenusage block ship empty to every self-hosted user (commit 6fc268a). A caller that
+    genuinely wants "splice if present" should check block_text() first.
+    """
     if block_id not in contract()["blocks"]:
         raise KeyError("%r is not a block in page-contract.json" % block_id)
     start_tag = '<script id="%s">' % block_id
     i1 = html.find(start_tag)
     if i1 < 0:
-        return html
+        raise ValueError("index.html has no marker for block %r" % block_id)
     i2 = html.find("</script>", i1)
     if i2 < 0:
-        return html
+        raise ValueError("block %r is never closed in index.html" % block_id)
     return html[: i1 + len(start_tag)] + payload + html[i2:]
 
 

@@ -18,6 +18,7 @@ $ErrorActionPreference='Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $root 'lib/pagedata.ps1')     # Set-PageBlocks / Get-PageBlockText / Get-PageContract
 . (Join-Path $root 'lib/publish-gate.ps1') # Invoke-PublishGate
+. (Join-Path $root 'lib/picks-log.ps1')    # Get-PicksLog / Set-PicksLog / Add-PicksLogTags
 $idxPath = Join-Path $root 'index.html'
 
 # guard: never splice yesterday's notes (e.g. today's Write step failed but old file remains)
@@ -74,18 +75,18 @@ $tagPath = Join-Path $root 'ai-tags.json'
 $logPath = Join-Path $root 'picks-log.json'
 if((Test-Path $tagPath) -and (Test-Path $logPath) -and (IsFresh $tagPath)){
   try{
-    $tags = Get-Content $tagPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    $lg = Get-Content $logPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    $n=0
-    foreach($pk in $lg.picks){
-      if($pk.status -eq 'open' -and $tags.PSObject.Properties["$($pk.code)"] -and -not $pk.PSObject.Properties['aiSust']){
-        $t=$tags.("$($pk.code)")
-        $pk | Add-Member -NotePropertyName aiSust -NotePropertyValue ([bool]$t.sust) -Force
-        $pk | Add-Member -NotePropertyName aiRisk -NotePropertyValue "$($t.risk)" -Force
-        $n++
-      }
+    # Through lib/picks-log.ps1, so this second writer gets the same retry, key ordering and
+    # -ErrorAction Stop as screen.ps1. It used to read with a bare Get-Content and write back
+    # with none of them; a truncated write here bricks the next morning's screening run, which
+    # hard-aborts on an unreadable log. No -Retain: archiving is screen.ps1's job, not this one's.
+    $tags = ReadJsonRetry $tagPath
+    if($null -eq $tags){ throw "ai-tags.json unreadable after 3 tries" }
+    $rows = Get-PicksLog -Path $logPath
+    $n = Add-PicksLogTags -Rows $rows -Tags $tags
+    if($n -gt 0){
+      Set-PicksLog -Path $logPath -Rows $rows
+      Write-Host "attached AI tags to $n open picks"
     }
-    if($n -gt 0){ $lg | ConvertTo-Json -Depth 5 | Out-File $logPath -Encoding UTF8; Write-Host "attached AI tags to $n open picks" }
   }catch{ Write-Host "ai-tags attach skipped: $($_.Exception.Message)" }
 }
 

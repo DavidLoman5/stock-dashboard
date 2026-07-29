@@ -28,6 +28,9 @@ def make_cfg(tmp):
     cfg.update({
         "dbPath": os.path.join(tmp, "test.db"),
         "dataDir": os.path.join(tmp, "data"),
+        # keep bootstrap() off the real repo-root artifacts; this suite promises no fixtures
+        # outside a temp dir, and holdings-notes.json is the owner's actual analysis
+        "notesDir": tmp,
         "secureCookie": False,       # tests speak plain http
         "trustProxyHeader": False,
         "port": 0,
@@ -167,6 +170,41 @@ class TestSessions(Base):
         token, _ = auth.login(self.conn, self.cfg, "erin", "correct-horse-1", "1.1.1.1", "ua")
         auth.set_password(self.conn, uid, "brand-new-password")
         self.assertIsNone(auth.resolve_session(self.conn, self.cfg, token))
+
+    def test_changing_password_is_throttled_like_login(self):
+        # an authenticated session used to be an unlimited oracle for the current password:
+        # change_password verified inline, recorded no attempt and consulted no lockout
+        self.cfg["maxLoginFailures"] = 3
+        uid = self.mkuser("gus")
+        user = self.conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+        for _ in range(3):
+            with self.assertRaises(auth.AuthError) as ctx:
+                api.change_password(FakeCtx(
+                    self.conn, self.cfg, user,
+                    {"current": "wrong-password-9", "new": "another-good-password"},
+                    ip="5.5.5.5"))
+            self.assertEqual(ctx.exception.status, 403)
+        with self.assertRaises(auth.AuthError) as ctx:
+            api.change_password(FakeCtx(
+                self.conn, self.cfg, user,
+                {"current": "correct-horse-1", "new": "another-good-password"},
+                ip="5.5.5.5"))
+        self.assertEqual(ctx.exception.status, 429)   # right password, still throttled
+
+    def test_registration_rollback_refuses_a_live_account(self):
+        # the rollback path is a raw delete on `users`; it must not become a way to remove a
+        # real account (least of all the owner's) if it is ever called with the wrong id
+        owner = self.mkuser("boss", tier="owner")
+        active = self.mkuser("hana")
+        for uid in (owner, active):
+            with self.assertRaises(auth.AuthError):
+                auth.rollback_registration(self.conn, uid)
+            self.assertIsNotNone(
+                self.conn.execute("SELECT 1 FROM users WHERE id = ?", (uid,)).fetchone())
+        pending = self.mkuser("iris", status="pending")
+        auth.rollback_registration(self.conn, pending)
+        self.assertIsNone(
+            self.conn.execute("SELECT 1 FROM users WHERE id = ?", (pending,)).fetchone())
 
 
 class TestApproval(Base):
@@ -412,12 +450,12 @@ class TestTiers(Base):
         self.assertIn("_market", got)           # market view is genuinely shared
 
     def test_market_commentary_naming_owner_holdings_is_not_shared(self):
-        got = payload.notes_for("guest", ["0050"], self.NOTES)
+        got = payload.notes_for("guest", ["0050"], self.NOTES, private_codes={"0050"})
         # `wind` is written about the owner's portfolio and names real holdings
         self.assertNotIn("wind", got["_market"])
         self.assertNotIn("00990A", json.dumps(got, ensure_ascii=False))
         self.assertEqual(got["_market"]["windLead"], "大盤收紅")   # the market-level part survives
-        self.assertIn("wind", payload.notes_for("owner", [], self.NOTES)["_market"])
+        self.assertIn("wind", payload.notes_for("owner", [], self.NOTES, ())["_market"])
 
     def test_note_naming_another_owner_holding_is_dropped(self):
         notes = {"0050": {
@@ -449,16 +487,16 @@ class TestTiers(Base):
 
     def test_market_allowlist_keeps_new_fields_private_by_default(self):
         notes = {"_market": {"mood": "偏多", "somethingNew": "未來新增的欄位"}}
-        got = payload.notes_for("guest", [], notes)
+        got = payload.notes_for("guest", [], notes, private_codes={"0050"})
         self.assertNotIn("somethingNew", got["_market"])
 
     def test_owner_gets_everything(self):
-        got = payload.notes_for("owner", ["0050"], self.NOTES)
+        got = payload.notes_for("owner", ["0050"], self.NOTES, ())
         self.assertIn("rec", got["0050"])
         self.assertIn("news", got["0050"])
 
     def test_uncovered_code_yields_no_note_not_an_error(self):
-        got = payload.notes_for("guest", ["9999"], self.NOTES)
+        got = payload.notes_for("guest", ["9999"], self.NOTES, private_codes={"0050"})
         self.assertNotIn("9999", got)   # page falls back to '（尚無分析…）'
 
 
@@ -486,7 +524,7 @@ class TestGuestNoteMerge(Base):
         self.assertNotIn("news", got["0050"])
 
     def test_code_the_owner_does_not_hold_is_fully_covered_by_gemini(self):
-        got = payload.notes_for("guest", ["2330"], self.CLAUDE, guest_notes=self.GEMINI)
+        got = payload.notes_for("guest", ["2330"], self.CLAUDE, private_codes={"0050"}, guest_notes=self.GEMINI)
         self.assertEqual(got["2330"]["tech"], "Gemini 技術")
         self.assertEqual(got["2330"]["rec"], "若站回月線則加碼。")
 
@@ -499,9 +537,73 @@ class TestGuestNoteMerge(Base):
         self.assertNotIn("00947", json.dumps(got, ensure_ascii=False))
 
     def test_owner_never_sees_gemini_notes(self):
-        got = payload.notes_for("owner", ["0050"], self.CLAUDE, guest_notes=self.GEMINI)
+        got = payload.notes_for("owner", ["0050"], self.CLAUDE, private_codes=(), guest_notes=self.GEMINI)
         self.assertEqual(got["0050"]["tech"], "Claude 技術")
         self.assertEqual(got["0050"]["rec"], "owner 專屬建議")
+
+
+class TestBootstrapPrivacyWiring(Base):
+    """The gap this class exists to close: every test above calls notes_for() directly, so all of
+    them verified the filter and none of them verified that bootstrap() *uses* it. `holdingsNotes`
+    appeared nowhere in this file, and payload.bootstrap() resolved holdings-notes.json against
+    the repo root, so there was no way to hand it a fixture. Passing () for private_codes there
+    would have leaked every owner rec to every guest with the whole suite green."""
+
+    NOTES = {
+        "_market": {"mood": "偏多", "windLead": "大盤收紅",
+                    "wind": "投組今日分化：00990A 靠外資續買收紅"},
+        "0050": {"tech": "站上月線", "chip": "外資買超", "fund": "追蹤大盤",
+                 "rec": "建議續抱兩成部位", "news": [{"t": "x", "u": "http://a"}]},
+        "2330": {"tech": "季線之上", "fund": "成分股與 0050 高度重疊"},
+    }
+
+    def setUp(self):
+        super().setUp()
+        self.cfg["notesDir"] = self.tmp
+        with open(os.path.join(self.tmp, "holdings-notes.json"), "w", encoding="utf-8") as fh:
+            json.dump(self.NOTES, fh, ensure_ascii=False)
+        with open(os.path.join(self.cfg["dataDir"], "quotes.json"), "w", encoding="utf-8") as fh:
+            json.dump({"TAIEX": [], "0050": {"series": []}, "2330": {"series": []}}, fh)
+        owner = self.mkuser("owner_acct", tier="owner")
+        self.conn.execute(
+            "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
+            (owner, "0050", "x", 1000))
+        self.conn.commit()
+
+    def _boot_for(self, name, tier):
+        uid = self.mkuser(name, tier=tier)
+        for code in ("0050", "2330"):
+            self.conn.execute(
+                "INSERT INTO holdings (user_id, code, name, shares) VALUES (?,?,?,?)",
+                (uid, code, "x", 1000))
+        self.conn.commit()
+        user = self.conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+        return payload.bootstrap(self.conn, self.cfg, user)
+
+    def test_guest_bootstrap_never_carries_owner_advice(self):
+        notes = self._boot_for("gwen", "guest")["holdingsNotes"]
+        blob = json.dumps(notes, ensure_ascii=False)
+        self.assertEqual(notes["0050"]["tech"], "站上月線")   # factual fields still arrive
+        self.assertNotIn("rec", notes["0050"])
+        self.assertNotIn("news", notes["0050"])
+        self.assertNotIn("建議續抱兩成部位", blob)
+        self.assertNotIn("wind", notes.get("_market", {}))
+        self.assertNotIn("00990A", blob)
+        # 2330's fund text names the owner's 0050, so the whole field goes
+        self.assertNotIn("0050 高度重疊", blob)
+
+    def test_owner_bootstrap_still_gets_the_unfiltered_analysis(self):
+        uid = self.conn.execute(
+            "SELECT id FROM users WHERE tier = 'owner'").fetchone()["id"]
+        user = self.conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+        notes = payload.bootstrap(self.conn, self.cfg, user)["holdingsNotes"]
+        self.assertEqual(notes["0050"]["rec"], "建議續抱兩成部位")
+        self.assertIn("wind", notes["_market"])
+
+    def test_notes_for_cannot_be_called_without_a_privacy_set(self):
+        # the omission that used to mean "publish everything"
+        with self.assertRaises(TypeError):
+            payload.notes_for("guest", ["0050"], self.NOTES)
 
 
 class TestGeminiResponseParsing(Base):
@@ -789,17 +891,42 @@ class TestHoldingsApi(Base):
         self.assertEqual(out["holdingsMeta"]["2330"]["prevStance"], "defend")
 
 
+def page_with_every_block(extra=""):
+    """A stand-in index.html carrying every block the contract declares.
+
+    build_shell/render_page fail closed on a marker that is not in the page, so a test template
+    listing only the blocks it cares about no longer represents a page the server would accept.
+    Generating from the contract also means a new block cannot be forgotten here.
+    """
+    parts = [
+        "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; "
+        "connect-src 'none'\">\n"
+    ]
+    for block_id in pagedata.block_ids():
+        parts.append('<script id="%s">window.LEAK_%s=1;</script>\n' % (block_id, block_id))
+    parts.append(extra)
+    return "".join(parts)
+
+
+def full_boot(**overrides):
+    """A complete payload.bootstrap()-shaped dict. render_page now refuses a key it was told to
+    render but was not given, so every BLOCK_SOURCES key has to be present (None is allowed and
+    means 'this artifact is legitimately absent today')."""
+    boot = {key: None for _block, key in server.BLOCK_SOURCES}
+    boot["meta"] = {}
+    boot["user"] = {}
+    boot["pendingCodes"] = []
+    boot.update(overrides)
+    return boot
+
+
 class TestShell(Base):
     def test_data_blocks_are_emptied_and_csp_relaxed(self):
         index = os.path.join(self.tmp, "index.html")
         with open(index, "w", encoding="utf-8") as fh:
-            fh.write(
-                "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; "
-                "connect-src 'none'\">\n"
-                '<script id="dashdata">window.DASH={"secret":1};</script>\n'
-                '<script id="holdingsmeta">window.HOLDINGS_META={"2330":{}};</script>\n'
-                '<script id="app">console.log(1)</script>\n'
-            )
+            fh.write(page_with_every_block('<script id="app">console.log(1)</script>\n')
+                     .replace('window.LEAK_dashdata=1;', 'window.DASH={"secret":1};')
+                     .replace('window.LEAK_holdingsmeta=1;', 'window.HOLDINGS_META={"2330":{}};'))
         html = server.build_shell(index)
         self.assertNotIn("secret", html)          # never ship one portfolio to everyone
         self.assertNotIn("2330", html)
@@ -809,17 +936,12 @@ class TestShell(Base):
     def test_render_injects_this_users_data_only(self):
         # META is a data block like every other one now, not a regex over the page's JS source
         # and a second regex over the 報告日期 markup - the page renders both strings from it.
-        template = (
-            '<script id="dashdata"></script><script id="holdingsmeta"></script>'
-            '<script id="appuser"></script><script id="meta"></script>'
-        )
-        html = server.render_page(template, {
-            "dash": {"TAIEX": [1]},
-            "holdingsMeta": {"2330": {"shares": 4000}},
-            "meta": {"generated": "2026/07/23", "lastTrade": "2026-07-23"},
-            "user": {"username": "nina", "tier": "guest"},
-            "pendingCodes": [],
-        })
+        html = server.render_page(page_with_every_block(), full_boot(
+            dash={"TAIEX": [1]},
+            holdingsMeta={"2330": {"shares": 4000}},
+            meta={"generated": "2026/07/23", "lastTrade": "2026-07-23"},
+            user={"username": "nina", "tier": "guest"},
+        ))
         self.assertIn('window.DASH={"TAIEX":[1]}', html)
         self.assertIn('"shares":4000', html)
         self.assertIn('"username":"nina"', html)
@@ -838,18 +960,62 @@ class TestShell(Base):
 
     def test_script_close_sequence_in_data_cannot_break_out(self):
         template = '<script id="holdingsmeta"></script>'
-        html = server.render_page(template, {
-            "holdingsMeta": {"2330": {"name": "</script><img src=x onerror=alert(1)>"}},
-        })
+        html = pagedata.set_block(
+            template, "holdingsmeta",
+            {"2330": {"name": "</script><img src=x onerror=alert(1)>"}})
         # the only </script> in the output is the block's own closing tag
         self.assertEqual(html.count("</script>"), 1)
         self.assertIn("<\\/script>", html)
 
     def test_missing_artifacts_leave_blocks_empty_rather_than_crash(self):
-        template = '<script id="pkdata"></script><script id="evaldata"></script>'
-        html = server.render_page(template, {"picks": None, "eval": None})
+        html = server.render_page(page_with_every_block(), full_boot(picks=None, eval=None))
         self.assertNotIn("window.PICKS_DATA", html)   # page's own fallbacks take over
         self.assertNotIn("window.EVAL", html)
+
+    def test_a_block_the_payload_never_supplies_is_a_loud_error(self):
+        # tokenusage shipped blank to every self-hosted user because render_page skipped a key
+        # that was not there (6fc268a). Silence is the bug; a missing key must not render.
+        boot = full_boot()
+        del boot["tokenUsage"]
+        with self.assertRaises(KeyError):
+            server.render_page(page_with_every_block(), boot)
+
+    def test_every_contract_block_is_wired_to_a_payload_key(self):
+        covered = {b for b, _ in server.BLOCK_SOURCES} | set(server.SPECIAL_BLOCKS)
+        self.assertEqual(covered, set(pagedata.block_ids()))
+
+    def test_note_field_policy_comes_from_the_contract_not_a_copy(self):
+        # payload.py used to hardcode these, so the contract governed what got published while
+        # the live server shipped whatever this module said. tests.ps1 [9] asserts the same
+        # lists on the PowerShell side; this is the Python half of that pair.
+        self.assertEqual(pagedata.guest_note_fields(), ("sigFund", "tech", "chip", "fund"))
+        self.assertEqual(pagedata.owner_only_fields(), ("rec", "news", "wind"))
+        self.assertEqual(pagedata.market_public_fields(),
+                         ("windLead", "sox", "mood", "moodK"))
+        # and no guest field may also be owner-only
+        self.assertEqual(
+            set(pagedata.guest_note_fields()) & set(pagedata.owner_only_fields()), set())
+
+    def test_a_field_added_to_the_contract_reaches_notes_for(self):
+        # the drift that had no detector: adding a field to noteFields.guest changed the demo
+        # build and the publish gate, and did nothing on the live server
+        notes = {"2330": {"tech": "t", "newField": "n"}}
+        self.assertNotIn("newField", payload.notes_for("guest", ["2330"], notes, ("0050",)))
+        original = pagedata.contract()["noteFields"]["guest"]
+        try:
+            pagedata.contract()["noteFields"]["guest"] = list(original) + ["newField"]
+            got = payload.notes_for("guest", ["2330"], notes, ("0050",))
+            self.assertEqual(got["2330"]["newField"], "n")
+        finally:
+            pagedata.contract()["noteFields"]["guest"] = original
+
+    def test_splice_refuses_a_marker_the_page_does_not_have(self):
+        # lib/pagedata.ps1 throws here; the Python port used to return the html unchanged, which
+        # renders as a silently blank section instead of an error
+        with self.assertRaises(ValueError):
+            pagedata.splice("<p>no blocks here</p>", "dashdata", "window.DASH={};")
+        with self.assertRaises(ValueError):
+            pagedata.splice('<script id="dashdata">unclosed', "dashdata", "x")
 
 
 class TestHttp(Base):
@@ -859,11 +1025,9 @@ class TestHttp(Base):
         super().setUp()
         index = os.path.join(self.tmp, "index.html")
         with open(index, "w", encoding="utf-8") as fh:
-            fh.write(
-                '<script id="dashdata">window.DASH={"x":1};</script>'
-                '<script id="holdingsmeta">window.HOLDINGS_META={"9999":{}};</script>'
-                '<script id="appuser"></script><p>頁面</p>'
-            )
+            # every block, because build_shell now refuses a page the contract does not match
+            fh.write(page_with_every_block("<p>頁面</p>")
+                     .replace('window.LEAK_holdingsmeta=1;', 'window.HOLDINGS_META={"9999":{}};'))
         self.cfg["host"] = "127.0.0.1"
         self.srv = server.make_server(self.cfg, index_path=index)
         self.port = self.srv.server_address[1]
@@ -1020,31 +1184,26 @@ class TestHttp(Base):
         self.assertEqual(status, 404)
 
 
-class FakeCtx:
-    """Stands in for server.Ctx so handler logic can be tested without a socket."""
+class FakeCtx(server.Ctx):
+    """server.Ctx without a socket: same authorisation code, injected state.
+
+    This used to re-implement require_user/require_owner, so every "a guest cannot reach the
+    admin routes" test was exercising the copy in this file - invert the real require_owner and
+    they all still passed. Subclassing means the tests below now run the code the server runs;
+    only session resolution and the cookie sink are replaced.
+    """
 
     def __init__(self, conn, cfg, user=None, body=None, ip="127.0.0.1"):
+        self.handler = None
         self.conn = conn
         self.cfg = cfg
-        self.user = user
-        self.body = body or {}
+        self.body = body if isinstance(body, dict) else {}
         self.ip = ip
         self.ua = "test"
         self.token = None
         self.cookie_set = None
-
-    def require_user(self, allow_pending=False):
-        if self.user is None:
-            raise api.ApiError("請先登入", 401)
-        if self.user["status"] != "active" and not allow_pending:
-            raise api.ApiError("帳號尚待管理者核准", 403)
-        return self.user
-
-    def require_owner(self):
-        user = self.require_user()
-        if user["tier"] != "owner":
-            raise api.ApiError("需要管理者權限", 403)
-        return user
+        self._user = user
+        self._resolved = True      # user is injected, never resolved from a session
 
     def set_session_cookie(self, token):
         self.cookie_set = token
