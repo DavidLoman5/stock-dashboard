@@ -24,6 +24,7 @@ from . import api, auth, config, db, pagedata, payload, validate  # noqa: E402
 MAX_BODY = 64 * 1024
 COOKIE_NAME = "sid"
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+ICON_PATH = "/apple-touch-icon.png"
 _shell_cache = {"mtime": None, "html": None}
 _shell_lock = threading.Lock()
 # prune used to run only at startup, which under systemd means "once per boot, ever" -
@@ -282,6 +283,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/healthz":
             return self.respond(200, {"ok": True})
 
+        if method == "GET" and path == ICON_PATH:
+            return self.serve_icon()
+
         try:
             prune_if_due(db.get(self.cfg["dbPath"]), self.cfg)
         except Exception:                      # noqa: BLE001 - housekeeping must never 500 a request
@@ -347,6 +351,21 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(500, {"ok": False, "error": "index.html 不存在"})
         boot = payload.bootstrap(ctx.conn, self.cfg, user)
         self.respond(200, render_page(template, boot), "text/html; charset=utf-8")
+
+    def serve_icon(self):
+        """The iOS home-screen icon - the one asset here that is bytes, not text.
+
+        It sits next to index.html (same file GitHub Pages serves), so the static and
+        server modes ship the same icon from one copy. No auth: it is on every page's
+        <link>, including /login, and it discloses nothing.
+        """
+        target = os.path.join(os.path.dirname(self.index_path), "apple-touch-icon.png")
+        try:
+            with open(target, "rb") as fh:
+                blob = fh.read()
+        except OSError:
+            return self.respond(404, {"ok": False, "error": "not found"})
+        self.respond(200, blob, "image/png")
 
     def serve_static(self, name):
         target = os.path.normpath(os.path.join(STATIC_DIR, name))

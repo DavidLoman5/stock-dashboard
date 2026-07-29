@@ -1,9 +1,15 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex, nofollow">
 <title>台股投資報告</title>
+<!-- iOS「加入主畫面」的圖示。必須是真的檔案：iOS 不吃 data: URI 的 apple-touch-icon，
+     而預設的 /apple-touch-icon.png 在 GitHub Pages 上會指到網域根目錄（不是我們的路徑），
+     所以這個 link 是必要的。圖檔由 tools/make-icon.py 產生（純標準庫，無外部相依）。 -->
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="台股報告">
 <style>
   :root{
     --bg:#f5f6f9;--surface:#fff;--surface-2:#eef0f5;--line:#dfe2ea;

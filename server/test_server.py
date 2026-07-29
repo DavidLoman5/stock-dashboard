@@ -901,6 +901,23 @@ class TestHttp(Base):
         status, body, _ = self.request("/healthz")
         self.assertEqual((status, body["ok"]), (200, True))
 
+    def test_icon_is_served_as_bytes_without_login(self):
+        # every page <link>s it, including /login, so it has to work logged out - and it is
+        # the only response here that is not text, which is what this actually guards
+        icon = os.path.join(self.tmp, "apple-touch-icon.png")
+        with open(icon, "wb") as fh:
+            fh.write(b"\x89PNG\r\n\x1a\n" + b"fake")
+        with urllib.request.urlopen(self.url("/apple-touch-icon.png")) as resp:
+            blob = resp.read()
+            self.assertEqual(resp.status, 200)
+            self.assertEqual(resp.headers["Content-Type"], "image/png")
+        self.assertTrue(blob.startswith(b"\x89PNG\r\n\x1a\n"))
+
+    def test_icon_missing_is_404_not_500(self):
+        status, body, _ = self.request("/apple-touch-icon.png")
+        self.assertEqual(status, 404)
+        self.assertFalse(body["ok"])
+
     def test_bootstrap_requires_login(self):
         status, body, _ = self.request("/api/bootstrap")
         self.assertEqual(status, 401)

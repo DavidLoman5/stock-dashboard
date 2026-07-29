@@ -209,6 +209,30 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## ✅ 已完成
 
+### 2026-07-29 iOS 主畫面圖示（apple-touch-icon）
+
+使用者把儀表板加到 iPhone 主畫面，想換掉那個「網頁截圖」預設圖示。
+
+三個限制決定了做法：
+
+1. **不能用 data: URI。** 本來最合站台調性（CSP 只開 `img-src data:`、零外部資源），但查下來 iOS 對
+   apple-touch-icon 的 data URI 支援不可靠，做了可能靜默沒效果。改成真的放一個 `apple-touch-icon.png`，
+   CSP 跟著放寬成 `img-src 'self' data:`（只多開同源，沒開外部主機）
+2. **`<link>` 標籤是必要的，不能靠 iOS 自己找。** iOS 沒看到 link 時只會去抓「網域根目錄」的
+   `/apple-touch-icon.png`——在 GitHub Pages 上那是 `davidloman5.github.io/`，不是我們的 `/stock-dashboard/`
+3. **伺服器模式本來完全沒有靜態檔路由**（`serve_static` 還只讀 UTF-8 文字，放不了二進位）。加了
+   `ICON_PATH` 一條路由，從 `index.html` 隔壁讀檔案送 `image/png`——兩種模式因此共用同一份圖檔
+
+圖是 `tools/make-icon.py` 產的：純標準庫（zlib+struct 手寫 PNG，這台機器沒有 PIL／ImageMagick），
+4× 超取樣再降採樣當抗鋸齒，深藍底＋三根上升金色 K 線（配 `--accent` #d9ad57）。1.2KB。
+改圖案就改那支腳本重跑，不必手動開圖形軟體。
+
+`apple-touch-icon.png` 已加進 `$PublishAllowlist`（發佈閘門的內容掃描只看 `.json`／`.html`，PNG 自然略過）。
+測試：tests.ps1、server 83 個測試（新增兩個：圖示要能未登入取得且是 bytes、檔案不存在時 404 不是 500）、
+jsdom boot-check 全過。
+
+**注意**：iOS 會快取 webclip 圖示，換圖後必須把主畫面舊捷徑刪掉重加，原地重整不會變。
+
 ### 2026-07-29 推薦追蹤止血：JSON key 排序、保留期＋封存、法人天數對齊、殭屍部位
 
 使用者問「推薦追蹤會變無限長怎麼解決」。量完之後發現**體積不是主要問題，churn 才是**。

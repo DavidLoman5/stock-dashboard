@@ -29,6 +29,7 @@ $PublishAllowlist = @(
   'server/'
   'docs/'
   'index.html'
+  'apple-touch-icon.png'
   'page-contract.json'
   'config.example.json'
   # public data: the demo portfolio, market-wide screening output and its scorecards.
