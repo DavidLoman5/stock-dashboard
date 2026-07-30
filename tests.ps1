@@ -791,6 +791,42 @@ $btSrc = Get-Content (Join-Path $root 'backtest.ps1') -Raw -Encoding UTF8
 Assert ($btSrc -match 'Get-TechScore') "backtest.ps1 replays production scoring, not a transcription"
 Assert ($btSrc -notmatch '\$techS\+=10') "backtest.ps1 no longer carries its own tech ladder"
 
+Write-Host "[12] shared design tokens across the four HTML pages..."
+# CSP (style-src 'unsafe-inline', no 'self') blocks an external stylesheet on all four pages, so
+# the token block has to be duplicated. Duplication is only safe if drift is detectable: the three
+# server pages must carry a byte-identical block, and every colour value in it must still match
+# index.html. Without this the pages silently diverge one edit at a time (they already had).
+$staticDir = Join-Path $root 'server/static'
+$sharedBlocks = @{}
+foreach($pg in @('login.html','admin.html','pending.html')){
+  $txt = Get-Content (Join-Path $staticDir $pg) -Raw -Encoding UTF8
+  $m = [regex]::Match($txt, '/\* SHARED-TOKENS-START.*?/\* SHARED-TOKENS-END \*/', 'Singleline')
+  Assert $m.Success "$pg carries the shared token block"
+  if($m.Success){ $sharedBlocks[$pg] = $m.Value }
+}
+if($sharedBlocks.Count -eq 3){
+  $distinct = ($sharedBlocks.Values | Select-Object -Unique)
+  Assert (@($distinct).Count -eq 1) "the three server pages' token blocks are byte-identical"
+  # and the values in it must still agree with index.html's single source
+  $idxTok = Get-Content (Join-Path $root 'index.html') -Raw -Encoding UTF8
+  $drift = @()
+  foreach($pair in @(
+      @('bg','#f5f6f9','#0e121b'), @('surface','#fff','#161c28'), @('line','#dfe2ea','#2a3346'),
+      @('ink','#1a1e27','#e7eaf1'), @('accent','#b6842f','#d9ad57'),
+      @('on-accent','#fff','#0e121b'), @('up','#d0342c','#ff5d51'), @('down','#12885e','#34c48d'),
+      @('hold','#9a7a1e','#e0b955'))){
+    $name,$light,$dark = $pair
+    if($idxTok -notmatch [regex]::Escape("--l-$name`:$light")){ $drift += "index --l-$name != $light" }
+    if($idxTok -notmatch [regex]::Escape("--d-$name`:$dark")){  $drift += "index --d-$name != $dark" }
+    if($sharedBlocks['login.html'] -notmatch [regex]::Escape("--$name`:$light")){ $drift += "static --$name light != $light" }
+    if($sharedBlocks['login.html'] -notmatch [regex]::Escape("--$name`:$dark")){  $drift += "static --$name dark != $dark" }
+  }
+  Assert ($drift.Count -eq 0) "index.html and the static pages agree on every shared colour ($($drift -join '; '))"
+}
+# the four #fff-on-accent rules are gone for good (--on-accent exists precisely for them)
+$idxAllTok = Get-Content (Join-Path $root 'index.html') -Raw -Encoding UTF8
+Assert ($idxAllTok -notmatch 'aria-pressed="true"\][^{}]*\{[^{}]*(color|background):#fff') "index.html: pressed chips use --on-accent, not #fff"
+
 Write-Host ""
 if($fails.Count -eq 0){ Write-Host "ALL TESTS PASSED"; exit 0 }
 else { Write-Host "FAILED: $($fails.Count) test(s): $($fails -join '; ')"; exit 1 }

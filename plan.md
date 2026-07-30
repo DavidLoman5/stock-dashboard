@@ -209,6 +209,79 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## ✅ 已完成
 
+### 2026-07-30 UI 優化：手機版面 ＋ design token 收斂（保守精修，不動視覺語言）
+
+兩個動機：**手機從沒被真正設計過**（整份 CSS 只有 560／640 兩層斷點，560 以下什麼都沒有——
+360px 手機拿到的是 559px 的版面），以及**token 已經漂掉**（配色被寫了四次、20 種字級、
+11 種圓角、0 個間距 token、三個伺服器頁各抄一份）。範圍限定這兩軸，保留金色 accent＋
+中性灰底、卡片骨架與區塊順序；**沒有做**無障礙工程（語意標題／landmark／canvas 替代文字／
+提高 `--ink-faint` 對比）與資訊架構改動（區塊導覽、windBox 折疊、深淺切換按鈕）。
+
+**① 配色改成單一來源（值對＋映射）** — `:root` 裡每個顏色只寫一次成 `--l-*`／`--d-*` 一對，
+三個主題情境（`:root`／dark media／`[data-theme=dark]`）只做「重新指向」、不含色值。
+改一個顏色從**三處變一處**。`[data-theme=light]` 那條 700 字元的整行刪掉了：
+dark media query 改成 `:root:not([data-theme="light"])` 之後它就是多餘的。
+另補 `color-scheme:light dark`（四頁原本都沒有，深色模式的 input 與捲軸還是亮的）。
+
+**⚠️ 這裡有一個會靜默失敗的陷阱，值得記住**：`cssv()` 讀出來的字串是直接餵進
+`ctx.fillStyle` 的，而**無效顏色不會 throw、canvas 只會沿用上一個顏色**。瀏覽器會在
+computed-value 時把 `var()` 代入（CSS Variables L1），但**jsdom 不會**——實測
+`getPropertyValue('--bg')` 回傳字面的 `var(--d-bg)`。也就是說間接層在生產環境沒事，
+但 boot-check 會靜默上錯色。所以 `cssv()` 自己解掉間接層（4 層上限），
+兩個環境結果一致、也不必依賴 spec 行為。**同理不可以用 `light-dark()`**：它在 custom
+property 裡不會被解析成單一顏色，canvas 一樣靜默拒絕。
+boot-check 新增第 28 項斷言守這件事（10 個被 JS 讀的 token 都要解析成真顏色），
+並先在「還是純 hex」的狀態下驗證這條斷言**抓得到**問題，才動配色。
+
+**② 尺度 token** — 18 種字級收成 10 級、10 種圓角收成 7 級 ＋ `--r-full`（膠囊）、
+動效收成 `--tr`、間距按「卡片家族」收成 8 個 token（刻意不硬湊成線性尺度，
+目的是讓斷點能一次縮全頁密度）。字級位移只有兩個規則超過 0.5px：
+`.m-close` 17→16、`.hero .v2` 19→20。
+**驗法**：寫了一支把兩版 CSS 的 `var()` 全部展開後逐條比對的腳本，確認
+108 處差異全部落在「已知且刻意」的類別裡、`UNEXPECTED` 為 0。這比看截圖可靠。
+
+**③ 修掉三個真的 bug（都是這次要收斂的模式造成的）**
+- **modal 價格被關閉鈕蓋住**：`.m-close` 是不透明的（`--surface-2`、`z-index:2`）、
+  絕對定位 `right:18px` 寬 32px，而 `.m-price` 靠右貼齊 `.m-body` 的 22px 內距——
+  價格最右邊約 28px **在所有寬度下**都被蓋掉，不只窄螢幕。補 `.m-head{padding-right:40px}`
+- **損益永遠是灰的**：`index.html` 的 `#pfPLpct` 帶 inline `style="color:var(--ink-faint)"`，
+  `updatePL()` 卻是設 `className`——inline style 永遠贏。個股卡片同樣毛病：
+  沒成本時設 `el.style.color`，之後**從不清掉**，所以使用者輸入成本價後
+  `up-txt`/`down-txt` 被殘留的 inline 灰壓掉。兩處都改用 `.faint` class
+- **`.mlabel` 完全沒有 CSS 規則**（`openPickModal` 三處在用），併進 `.subhd` 的選擇器
+
+**④ 手機／RWD** — 新增 768 與 400 兩層（沒有加平板層：`.wrap` 上限 960px，
+640～960 本來就等同桌機，硬加一層只是裝飾）。密度靠改 `:root` 的 token 而非逐條覆寫。
+- hero 三格擠兩欄的孤兒格 → 第三格 `grid-column:1/-1`；≤400px 單欄
+- `.hero .tot` 改 `clamp(21px,5.6vw,var(--fs-3xl))`：26px 的「12,345,678」在 360px 手機上
+  約 140px，剛好撐破格子。**≥465px 與改動前完全相同**
+- `.bigchart` `touch-action:none` → `pan-y`：原本手機在那張 180px 圖上完全無法往下捲。
+  **連帶必須補 `pointercancel`**——瀏覽器收回手勢時發的是它不是 `pointerleave`，
+  少了十字準線會卡住
+- 六個橫向溢出的表格收成一個 `.tblwrap`（純 CSS scroll-shadow，`background-attachment:local`
+  讓提示只在那一側真的還有內容時出現；iOS 不理 `::-webkit-scrollbar`）
+- `.ov` 補 `overscroll-behavior:contain`（iOS scroll chaining）
+- `.legend .nm` 補 ellipsis（`.editor td.nm` 早就有，legend 漏了）
+- `.picks`/`.cats` 的 `minmax` 改 `min(280px,100%)`：auto-fill 軌道不再可能超出容器
+
+**⑤ 三個伺服器頁** — `login`/`admin`/`pending` 改帶一段**完全相同**的
+`SHARED-TOKENS-START…END` 區塊，`--err`/`--ok`/`--warn` 換成 `--up`/`--down`/`--hold`
+（實測值本來就一樣，零視覺變化），`#fff` 換 `--on-accent`。
+**這三頁刻意不用 index 的「值對」寫法**：那個結構是為三個主題情境存在的，
+這三頁只有兩個情境，用值對反而多寫一層。
+`admin.html` 的狀態徽章底色接上 token，但**前景色留在頁面內**——淺色模式那幾個是
+特意壓深的版本（`#0a6b49` vs `#12885e`），併過去會真的變色；改成頁面內 token 之後
+原本第二個 dark media query 就不需要了。另外 admin 的表格**本來完全沒有捲動容器**，
+手機上會把整頁推歪，也補上 `.tblwrap`。
+
+**⑥ 防漂移的測試** — CSP（`style-src 'unsafe-inline'`、沒有 `'self'`）連同源外部 CSS 都擋，
+四頁只能各帶一份 token，所以**重複是沒得選的**——那就讓漂移看得見。
+`tests.ps1` 新增 [12]：三頁的 token 區塊必須位元組相同、且每個共用色值仍與 `index.html` 一致。
+兩條都做過反向驗證（故意改壞一個值／讓一頁分歧，確認會紅）。
+
+**沒做但記在這**：`publish.ps1 -DryRun` 這次沒跑——它會重寫 index.html 的資料塊並換成
+demo 持股，對驗證 CSS/JS 改動沒有幫助，只會把工作區弄亂。**發佈前要跑**。
+
 ### 2026-07-29 架構整理第二輪（`/improve-codebase-architecture` 八個候選全做）
 
 起點是第二次架構檢視。這輪的主題不是「同一件事寫很多份」（那是 7/25 那輪），而是

@@ -7,17 +7,31 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" type="image/png" href="/apple-touch-icon.png">
 <style>
+  /* SHARED-TOKENS-START
+     與 index.html 同一組色值。CSP（style-src 'unsafe-inline'，沒有 'self'）連同源的外部 CSS
+     都擋，所以四個頁面只能各帶一份——這段在 login/admin/pending 三頁「必須完全相同」，
+     tests.ps1 會驗。改色請連 index.html 一起改。
+     這裡刻意不用 index.html 的「值對＋映射」寫法：那個結構是為了 index 的三個主題情境
+     （:root／dark media／data-theme）而存在，這三頁只有兩個情境、也沒有 data-theme，
+     用值對反而是多寫一層。 */
   :root{
-    --bg:#f5f6f9;--surface:#fff;--line:#dfe2ea;--ink:#1a1e27;--ink-soft:#545b6b;
-    --ink-faint:#8b92a3;--accent:#b6842f;--accent-soft:#f2e7cf;
-    --shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);--radius:14px;
+    --bg:#f5f6f9;--surface:#fff;--surface-2:#eef0f5;--line:#dfe2ea;
+    --ink:#1a1e27;--ink-soft:#545b6b;--ink-faint:#8b92a3;
+    --accent:#b6842f;--accent-soft:#f2e7cf;--on-accent:#fff;
+    --up:#d0342c;--up-bg:#fbe9e7;--down:#12885e;--down-bg:#e2f3ec;--hold:#9a7a1e;--hold-bg:#f6edd6;
+    --shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);
+    color-scheme:light dark;   /* 少了這行，深色模式的 input 與捲軸還是亮色的 */
+    --radius:14px;
     --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",-apple-system,"Segoe UI",system-ui,sans-serif;
   }
   @media(prefers-color-scheme:dark){:root{
-    --bg:#0e121b;--surface:#161c28;--line:#2a3346;--ink:#e7eaf1;--ink-soft:#a3abbd;
-    --ink-faint:#6b7488;--accent:#d9ad57;--accent-soft:#2a2413;
+    --bg:#0e121b;--surface:#161c28;--surface-2:#1d2534;--line:#2a3346;
+    --ink:#e7eaf1;--ink-soft:#a3abbd;--ink-faint:#6b7488;
+    --accent:#d9ad57;--accent-soft:#2a2413;--on-accent:#0e121b;
+    --up:#ff5d51;--up-bg:#3a1c1a;--down:#34c48d;--down-bg:#123027;--hold:#e0b955;--hold-bg:#2e2712;
     --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
   }}
+  /* SHARED-TOKENS-END */
   *{box-sizing:border-box}
   body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
        padding:24px;background:var(--bg);color:var(--ink);font-family:var(--font);

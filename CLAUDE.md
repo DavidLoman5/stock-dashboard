@@ -42,7 +42,7 @@
 | `lib/score.ps1` | **唯一的選股規則**：`Get-RegimeLight`／`Get-ChipStats`／`Test-ChipGate`／`Get-ChipScore`／`Get-TechScore`／`Get-FundScore`／`Get-TotalReturnSeries`／`Test-ExitRules`。股票與 ETF 是同一組函式的兩個 **profile**（`$ScreenProfiles`），不是兩份程式 | `screen.ps1`、`backtest.ps1`（回測直接呼叫生產規則，不再手抄） |
 | `lib/picks-log.ps1` | `picks-log.json` 的唯一讀寫者：retry＋FATAL 保護、`[ordered]` key 順序、保留期封存、`-ErrorAction Stop` | `screen.ps1`、`publish.ps1` |
 | `lib/stance-log.ps1` | `stance-log.json` 的唯一讀寫者＋`Get-PrevStanceMap`（純函式） | `update-holdings.ps1` |
-| `tools/boot-check.js` | jsdom 實跑 index.html 並斷言（27 項：`window.ANALYTICS` 純函式、三個 modal、圖表投影往返、boot 冪等、逸出） | 改前端後手動跑 |
+| `tools/boot-check.js` | jsdom 實跑 index.html 並斷言（28 項：`window.ANALYTICS` 純函式、三個 modal、圖表投影往返、boot 冪等、逸出、canvas 色彩 token 解析得出來） | 改前端後手動跑 |
 | `server/pagedata.py` | 同一份 `page-contract.json` 的 Python 端（含 `noteFields` 隱私政策，`payload.py` 實際讀它） | `server/server.py`、`payload.py` |
 
 - **splice 一律用 `Set-PageBlocks`**，別再手寫 `IndexOf('<script id=...')`。找不到 marker 或不認識的 block id 都會 throw（以前只警告然後照樣寫檔）
@@ -62,6 +62,13 @@
 ## 可以安全改
 CSS／版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯、渲染器、`screen.ps1` 選股演算法、`holdings.json`
 
+### 改 CSS 前要知道的四件事（2026-07-30 起）
+- **顏色值只在 `:root` 的 `--l-*`／`--d-*` 值對裡寫一次**，三個主題情境（`:root`／dark media／`[data-theme=dark]`）只做重新指向。加新顏色要照這個寫，別直接往 dark 區塊塞色值
+- **`cssv()` 讀出來的字串直接進 `ctx.fillStyle`，無效顏色不會 throw、canvas 會沿用上一個顏色**（靜默失敗）。所以：`var()` 間接層由 `cssv()` 自己解（瀏覽器會解、**jsdom 不會**）；**不可以用 `light-dark()`**（在 custom property 裡不會被解析成單一顏色）。`tools/boot-check.js` 第 28 項守這條
+- **字級／圓角／間距／動效都有 token**（`--fs-*`／`--r-*`／`--pad-*`／`--tr`）。新規則用既有級距，不要再引入新的字面值；膠囊形狀用 `--r-full`，真圓才用 `50%`
+- **弱化文字用 `.faint` class，不要用 inline `style="color:…"`**——inline style 永遠贏過後來設的 `up-txt`/`down-txt`，這正是損益顏色曾經永遠是灰的原因
+- **`server/static/` 三頁的 `SHARED-TOKENS-START…END` 區塊必須三頁完全相同**，且色值要與 `index.html` 一致（`tests.ps1` [12] 會驗）。CSP 擋外部 CSS，四頁只能各帶一份
+
 ## 硬性慣例（違反會壞）
 - **任何含非 ASCII 位元組的 `.ps1` 都必須存 UTF-8 with BOM**（pwsh 7 不需要，保留是為了在 Windows PS5.1 也能解析中文字面值）。`tests.ps1` [2] 是**算出來的**不變式（「有非 ASCII → 必須有 BOM」），不再是手寫檔名清單——舊清單早就漏了 `evaluate.ps1`
 - **repo 只放 `$PublishAllowlist` 列出的檔案**（`lib/publish-gate.ps1`；`tests.ps1` [8] 驗證「每個被追蹤的檔案都在 allowlist 上」）。`data/`、`*.db`、`config.json`、`holdings-notes.json`、`holdings-context.json`、`stance-log.json` 都不在上面——前三個一直如此，後三個是 2026-07-25 才停止外洩的（見 plan.md）；推上 GitHub 的 `index.html` 一律由 `build-demo.ps1` 用 demo 持股重建，**不可**直接推 `update-holdings.ps1` 產出的版本——那裡面是 owner 的真實部位
@@ -80,7 +87,8 @@ CSS／版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯�
 ## 測試與部署
 - 預覽 `python3 -m http.server 8000`｜引擎 `pwsh -File screen.ps1`｜伺服器 `python3 -m server.server`
 - **改任何腳本後、commit 前必跑 `pwsh -File tests.ps1`**（離線、秒級）；**改 `server/` 下任何東西則必跑 `python3 -m unittest discover -s server -t .`**
-- **改 `index.html` 的 JS 後**：`D=$(mktemp -d) && (cd "$D" && npm install jsdom canvas)` 然後 `NODE_PATH="$D/node_modules" node tools/boot-check.js index.html`。少了 canvas 套件 `getContext('2d')` 回 null，boot() 第一步就斷，後面全部不會執行——「沒有錯誤」會是假的。另驗 `HOLDINGS_META` 缺 `stance` 與空投組 `{"_trades":[]}` 兩種變體（腳本第三、四個參數可換掉某個 block）
+- **改 `index.html` 的 JS 後**：`D=$(mktemp -d) && (cd "$D" && npm install jsdom canvas)` 然後 `NODE_PATH="$D/node_modules" node tools/boot-check.js index.html`。少了 canvas 套件 `getContext('2d')` 回 null，boot() 第一步就斷，後面全部不會執行——「沒有錯誤」會是假的。另驗 `HOLDINGS_META` 缺 `stance` 與空投組 `{"_trades":[]}` 兩種變體（腳本第三、四個參數可換掉某個 block）。**兩個變體都是換 `holdingsmeta`**：拿 `dashdata` 當變體會把行情資料一起清掉，`DASH[code].series` 變 undefined，於是「權益曲線」與「圖表投影往返」兩項必然紅——那是叫錯用法，不是回歸
+- **jsdom 的 CSS 剖析器有兩個要知道的限制**（都不是頁面的 bug，別去「修」）：① 不解析 custom property 裡的 `var()` 間接層（回傳字面的 `var(--x)`）——`cssv()` 已自己處理；② **整條丟掉含 `clamp()` 或 `min()` 的宣告**，所以 `h1`／`.market .idx-val`／`.hero .tot` 的 font-size 在 boot-check 裡「看不到」。要驗這幾條只能開真的瀏覽器
 - **發佈前想看會推什麼**：`pwsh -File publish.ps1 -DryRun`（跑完整流程但不 commit/push）
 - 每日完整流程：`./run-daily.sh --phase fetch` →（AI 寫 notes）→ `./run-daily.sh --phase publish`
 - 部署：push `main`（2026-07-21 起使用者授權 Claude 自主 push，測試通過即可推）

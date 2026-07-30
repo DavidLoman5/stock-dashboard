@@ -7,19 +7,31 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" type="image/png" href="/apple-touch-icon.png">
 <style>
+  /* SHARED-TOKENS-START
+     與 index.html 同一組色值。CSP（style-src 'unsafe-inline'，沒有 'self'）連同源的外部 CSS
+     都擋，所以四個頁面只能各帶一份——這段在 login/admin/pending 三頁「必須完全相同」，
+     tests.ps1 會驗。改色請連 index.html 一起改。
+     這裡刻意不用 index.html 的「值對＋映射」寫法：那個結構是為了 index 的三個主題情境
+     （:root／dark media／data-theme）而存在，這三頁只有兩個情境、也沒有 data-theme，
+     用值對反而是多寫一層。 */
   :root{
-    --bg:#f5f6f9;--surface:#fff;--surface-2:#eef0f5;--line:#dfe2ea;--ink:#1a1e27;
-    --ink-soft:#545b6b;--ink-faint:#8b92a3;--accent:#b6842f;--accent-soft:#f2e7cf;
-    --err:#d0342c;--ok:#12885e;--warn:#9a7a1e;
-    --shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);--radius:14px;
+    --bg:#f5f6f9;--surface:#fff;--surface-2:#eef0f5;--line:#dfe2ea;
+    --ink:#1a1e27;--ink-soft:#545b6b;--ink-faint:#8b92a3;
+    --accent:#b6842f;--accent-soft:#f2e7cf;--on-accent:#fff;
+    --up:#d0342c;--up-bg:#fbe9e7;--down:#12885e;--down-bg:#e2f3ec;--hold:#9a7a1e;--hold-bg:#f6edd6;
+    --shadow:0 1px 2px rgba(20,24,34,.06),0 8px 24px rgba(20,24,34,.05);
+    color-scheme:light dark;   /* 少了這行，深色模式的 input 與捲軸還是亮色的 */
+    --radius:14px;
     --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",-apple-system,"Segoe UI",system-ui,sans-serif;
   }
   @media(prefers-color-scheme:dark){:root{
-    --bg:#0e121b;--surface:#161c28;--surface-2:#1d2534;--line:#2a3346;--ink:#e7eaf1;
-    --ink-soft:#a3abbd;--ink-faint:#6b7488;--accent:#d9ad57;--accent-soft:#2a2413;
-    --err:#ff5d51;--ok:#34c48d;--warn:#e0b955;
+    --bg:#0e121b;--surface:#161c28;--surface-2:#1d2534;--line:#2a3346;
+    --ink:#e7eaf1;--ink-soft:#a3abbd;--ink-faint:#6b7488;
+    --accent:#d9ad57;--accent-soft:#2a2413;--on-accent:#0e121b;
+    --up:#ff5d51;--up-bg:#3a1c1a;--down:#34c48d;--down-bg:#123027;--hold:#e0b955;--hold-bg:#2e2712;
     --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
   }}
+  /* SHARED-TOKENS-END */
   *{box-sizing:border-box}
   body{margin:0;padding:24px 16px 60px;background:var(--bg);color:var(--ink);
        font-family:var(--font);-webkit-font-smoothing:antialiased}
@@ -43,27 +55,42 @@
         max-width:280px;overflow-wrap:anywhere}
   .pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;
         background:var(--surface-2);color:var(--ink-soft);white-space:nowrap}
-  .pill.active{background:#e2f3ec;color:#0a6b49}
-  .pill.pending{background:#f6edd6;color:#7a5f12}
-  .pill.suspended{background:#fbe9e7;color:#a52a22}
-  .pill.owner{background:var(--accent-soft);color:var(--accent)}
-  .pill.guest_plus{background:#e4ecfb;color:#2c5cb8}
-  @media(prefers-color-scheme:dark){
-    .pill.active{background:#123027;color:#34c48d}
-    .pill.pending{background:#2e2712;color:#e0b955}
-    .pill.suspended{background:#3a1c1a;color:#ff8079}
-    .pill.guest_plus{background:#1a2740;color:#7fa8ee}
+  /* 狀態徽章：底色與共用 token 完全同值，所以直接用 token。
+     前景色刻意不併進 --up/--down/--hold——淺色模式這幾個是特意壓深的版本（#0a6b49 vs #12885e），
+     併過去會讓這一頁的顏色真的變掉。改成頁面內的 token 之後，原本第二個 dark media query
+     就不需要了（少一個要記得同步的地方）。guest_plus 的藍色不在共用色盤裡，也留在這裡。 */
+  :root{
+    --chip-ok:#0a6b49;--chip-wait:#7a5f12;--chip-stop:#a52a22;
+    --chip-plus:#2c5cb8;--chip-plus-bg:#e4ecfb;
   }
+  @media(prefers-color-scheme:dark){:root{
+    --chip-ok:#34c48d;--chip-wait:#e0b955;--chip-stop:#ff8079;
+    --chip-plus:#7fa8ee;--chip-plus-bg:#1a2740;
+  }}
+  .pill.active{background:var(--down-bg);color:var(--chip-ok)}
+  .pill.pending{background:var(--hold-bg);color:var(--chip-wait)}
+  .pill.suspended{background:var(--up-bg);color:var(--chip-stop)}
+  .pill.owner{background:var(--accent-soft);color:var(--accent)}
+  .pill.guest_plus{background:var(--chip-plus-bg);color:var(--chip-plus)}
+  /* 表格在手機上會橫向溢出（欄位是 nowrap），要有自己的捲動容器＋提示。
+     純 CSS scroll-shadow：background-attachment:local 讓提示只出現在那一側真的還有內容時。
+     與 index.html 的 .tblwrap 同一份寫法。 */
+  .tblwrap{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;
+    background:
+      linear-gradient(to right,var(--surface) 30%,transparent) 0 0/28px 100% no-repeat local,
+      linear-gradient(to left, var(--surface) 30%,transparent) 100% 0/28px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%,rgba(10,13,20,.14),transparent) 0 0/11px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%,rgba(10,13,20,.14),transparent) 100% 0/11px 100% no-repeat scroll}
   .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
   button{font:inherit;font-size:12px;padding:5px 11px;border-radius:8px;cursor:pointer;
          border:1px solid var(--line);background:var(--surface-2);color:var(--ink)}
   button:hover{border-color:var(--accent)}
-  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
-  button.danger{color:var(--err)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:700}
+  button.danger{color:var(--up)}   /* --up 是紅色 token，這裡借用當「危險動作」紅字 */
   button:disabled{opacity:.5;cursor:default}
   .msg{font-size:12.5px;min-height:1.3em;margin:0 0 14px;line-height:1.6}
-  .msg.err{color:var(--err)}
-  .msg.ok{color:var(--ok)}
+  .msg.err{color:var(--up)}
+  .msg.ok{color:var(--down)}
   .empty{color:var(--ink-faint);font-size:12.5px;padding:4px 8px 14px}
   code{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:12px;
        overflow-wrap:anywhere}
@@ -79,17 +106,17 @@
 
   <div class="card">
     <h2>待核准 <span class="count" id="cPending"></span></h2>
-    <table><tbody id="tPending"></tbody></table>
+    <div class="tblwrap"><table><tbody id="tPending"></tbody></table></div>
     <p class="empty" id="ePending" hidden>目前沒有待核准的申請。</p>
   </div>
 
   <div class="card">
     <h2>所有帳號 <span class="count" id="cAll"></span></h2>
     <p class="sub" id="budgetLine" style="margin-bottom:12px"></p>
-    <table>
+    <div class="tblwrap"><table>
       <thead><tr><th>帳號</th><th>狀態</th><th>持股</th><th style="text-align:right">操作</th></tr></thead>
       <tbody id="tAll"></tbody>
-    </table>
+    </table></div>
   </div>
 
   <div class="card">

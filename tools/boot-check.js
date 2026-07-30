@@ -180,6 +180,17 @@ check('user text is escaped, never injected as markup', skipIf(EMPTY, 'no holdin
   w.eval('boot()');   // restore the page from the real data
   return clean && 'escaped';
 }));
+// cssv() feeds these straight into ctx.fillStyle/strokeStyle at 13 sites. An unparseable colour
+// does NOT throw - canvas silently keeps the previous style - so nothing else here would notice.
+// This matters because the palette resolves through a var() indirection layer (--bg:var(--l-bg)),
+// and jsdom's getComputedStyle does NOT substitute var() in custom properties the way browsers
+// do; cssv() resolves the indirection itself so both environments agree.
+check('every JS-read colour token resolves to a real colour', () => {
+  const names = ['--accent','--ink-faint','--ink-soft','--grid','--surface',
+                 '--up','--down','--ma5','--ma20','--ma60'];
+  const bad = names.filter(n => !/^(#[0-9a-f]{3,8}|rgba?\()/i.test(w.eval(`cssv('${n}')`)));
+  return bad.length === 0 && `${names.length} tokens resolve`;
+});
 
 let failed = 0;
 for (const [ok, name, detail] of results) {
