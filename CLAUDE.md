@@ -42,7 +42,7 @@
 | `lib/score.ps1` | **唯一的選股規則**：`Get-RegimeLight`／`Get-ChipStats`／`Test-ChipGate`／`Get-ChipScore`／`Get-TechScore`／`Get-FundScore`／`Get-TotalReturnSeries`／`Test-ExitRules`。股票與 ETF 是同一組函式的兩個 **profile**（`$ScreenProfiles`），不是兩份程式 | `screen.ps1`、`backtest.ps1`（回測直接呼叫生產規則，不再手抄） |
 | `lib/picks-log.ps1` | `picks-log.json` 的唯一讀寫者：retry＋FATAL 保護、`[ordered]` key 順序、保留期封存、`-ErrorAction Stop` | `screen.ps1`、`publish.ps1` |
 | `lib/stance-log.ps1` | `stance-log.json` 的唯一讀寫者＋`Get-PrevStanceMap`（純函式） | `update-holdings.ps1` |
-| `tools/boot-check.js` | jsdom 實跑 index.html 並斷言（28 項：`window.ANALYTICS` 純函式、三個 modal、圖表投影往返、boot 冪等、逸出、canvas 色彩 token 解析得出來） | 改前端後手動跑 |
+| `tools/boot-check.js` | jsdom 實跑 index.html 並斷言（33 項：`window.ANALYTICS` 純函式、三個 modal、圖表投影往返、boot 冪等、逸出、canvas 色彩 token 解析得出來、封面圖視窗與標註同源） | 改前端後手動跑 |
 | `server/pagedata.py` | 同一份 `page-contract.json` 的 Python 端（含 `noteFields` 隱私政策，`payload.py` 實際讀它） | `server/server.py`、`payload.py` |
 
 - **splice 一律用 `Set-PageBlocks`**，別再手寫 `IndexOf('<script id=...')`。找不到 marker 或不認識的 block id 都會 throw（以前只警告然後照樣寫檔）
@@ -62,9 +62,14 @@
 ## 可以安全改
 CSS／版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯、渲染器、`screen.ps1` 選股演算法、`holdings.json`
 
+### 改圖表前要知道的三件事（2026-07-30 起）
+- **封面圖（`.spark`／`#mchart`）刻意只有一條價格線**。均線與「期間起點」基準線都試過並**拿掉了**——在 58px 的小圖上它們是雜訊不是資訊。要加線之前先想清楚：均線、K 線、十字準星都已經在 modal 裡了。期間與漲跌一律走圖下方的 `.chart-meta` 文字
+- **封面只畫近 `COVER_DAYS`（60）日，完整序列留給 modal**。視窗一律經 `computeCoverWindow()`（純函式、在 `window.ANALYTICS` 上），圖下方的標註也用它回傳的 `from`／`n`／`pct`——**圖與標註必須同一個來源**，否則標註會描述一個沒被畫出來的區間。boot-check 的 `cover-window:` 那組斷言守這條
+- **同一張圖上的多條線要用顏色＋線型雙重區分**（`chartOverlays` 的 `o.dash`，預設實線）。目前只有權益曲線是多線圖：金色實線＝投組、灰色虛線＝加權指數，圖例在 canvas 下方的 `.chart-meta`（`.sw-line`／`.sw-line.dash` 用 CSS border 畫線段，**不要用 `━`／`┄` 這類 box-drawing 字元**，中文字型下的粗細與對齊不可靠）。只靠顏色分在色弱與黑白列印下會失效
+
 ### 改 CSS 前要知道的四件事（2026-07-30 起）
 - **顏色值只在 `:root` 的 `--l-*`／`--d-*` 值對裡寫一次**，三個主題情境（`:root`／dark media／`[data-theme=dark]`）只做重新指向。加新顏色要照這個寫，別直接往 dark 區塊塞色值
-- **`cssv()` 讀出來的字串直接進 `ctx.fillStyle`，無效顏色不會 throw、canvas 會沿用上一個顏色**（靜默失敗）。所以：`var()` 間接層由 `cssv()` 自己解（瀏覽器會解、**jsdom 不會**）；**不可以用 `light-dark()`**（在 custom property 裡不會被解析成單一顏色）。`tools/boot-check.js` 第 28 項守這條
+- **`cssv()` 讀出來的字串直接進 `ctx.fillStyle`，無效顏色不會 throw、canvas 會沿用上一個顏色**（靜默失敗）。所以：`var()` 間接層由 `cssv()` 自己解（瀏覽器會解、**jsdom 不會**）；**不可以用 `light-dark()`**（在 custom property 裡不會被解析成單一顏色）。boot-check 的「every JS-read colour token resolves」那項守這條
 - **字級／圓角／間距／動效都有 token**（`--fs-*`／`--r-*`／`--pad-*`／`--tr`）。新規則用既有級距，不要再引入新的字面值；膠囊形狀用 `--r-full`，真圓才用 `50%`
 - **弱化文字用 `.faint` class，不要用 inline `style="color:…"`**——inline style 永遠贏過後來設的 `up-txt`/`down-txt`，這正是損益顏色曾經永遠是灰的原因
 - **`server/static/` 三頁的 `SHARED-TOKENS-START…END` 區塊必須三頁完全相同**，且色值要與 `index.html` 一致（`tests.ps1` [12] 會驗）。CSP 擋外部 CSS，四頁只能各帶一份

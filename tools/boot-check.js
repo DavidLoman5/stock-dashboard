@@ -241,3 +241,31 @@ process.exitCode = failed === 0 ? 0 : 1;
   }
   if (bad) process.exitCode = 1;
 })();
+
+// --- cover-chart window: the cover charts draw ONLY a price line, so every other fact about
+// them (how long the window is, where it starts, what it did over that window) reaches the user
+// through the text this function returns. If it drifts, the label silently describes a
+// different window than the one drawn.
+(function coverWindowFixtures(){
+  const C = w.ANALYTICS && w.ANALYTICS.computeCoverWindow;
+  if (!C) { console.log('FAIL window.ANALYTICS.computeCoverWindow exposed'); process.exitCode = 1; return; }
+  const ser = Array.from({length:82}, (_,i) => ({d:`m/${i+1}`, c:i+1}));   // 1..82, strictly rising
+  const r = C(ser, 60);
+  const ok = [];
+  ok.push(['window is the tail n', r.vals.length === 60 && r.vals[0] === 23 && r.last === 82,
+           `${r.vals.length} ${r.vals[0]}..${r.last}`]);
+  ok.push(['base is the window start, labels come from the same row',
+           r.base === 23 && r.from === 'm/23' && r.to === 'm/82', `${r.base} ${r.from} ${r.to}`]);
+  ok.push(['pct is first->last of the window', Math.abs(r.pct - 256.5) < 1e-9, r.pct]);
+  const shortR = C(ser.slice(0,30), 60);
+  ok.push(['series shorter than the window uses all of it',
+           shortR.n === 30 && shortR.vals.length === 30 && shortR.from === 'm/1', shortR.n]);
+  ok.push(['empty series returns null instead of throwing', C([], 60, [20]) === null, '']);
+
+  let bad = 0;
+  for (const [name, pass, val] of ok) {
+    if (!pass) bad++;
+    console.log(`${pass ? 'PASS' : 'FAIL'} cover-window: ${name}${val === '' ? '' : '  [' + val + ']'}`);
+  }
+  if (bad) process.exitCode = 1;
+})();

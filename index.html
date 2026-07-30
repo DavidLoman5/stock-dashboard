@@ -179,11 +179,13 @@
   .pill.exit{color:var(--on-accent);background:var(--down)}
   .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
 
-  .market{padding:var(--pad-lg);display:grid;grid-template-columns:1.1fr 1fr;gap:6px 26px;align-items:center}
+  /* 單欄：圖與指數數字並排時，82→60 天的折線只有半個卡片寬可用，擠成一團看不出趨勢。
+     指數數字自己一列、圖整列，寬度加倍。 */
+  .market{padding:var(--pad-lg);display:grid;grid-template-columns:1fr;gap:6px}
   .market .idx-name{font-size:var(--fs-sm);color:var(--ink-soft)}
   .market .idx-val{font-size:clamp(28px,6vw,38px);font-weight:800;line-height:1;letter-spacing:-.02em}
   .market .idx-chg{font-size:var(--fs-base);font-weight:700;margin-top:5px}
-  .market .mchart{width:100%;height:96px;display:block}
+  .market .mchart{width:100%;height:126px;display:block;margin-top:8px}
   .market .mmeta{grid-column:1/-1;margin-top:10px;padding-top:12px;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
   .market .mmeta .mi{font-size:var(--fs-xs);color:var(--ink-faint)}
   .market .mmeta .mi b{display:block;font-size:var(--fs-base);color:var(--ink);font-weight:700;margin-top:2px}
@@ -214,7 +216,7 @@
   .h-price{text-align:right;flex:none}
   .h-price .p{font-size:var(--fs-xl);font-weight:800;letter-spacing:-.02em;line-height:1}
   .h-price .c{font-size:var(--fs-xs);font-weight:700;margin-top:3px}
-  .spark{width:100%;height:44px;display:block;margin:12px 0 8px}
+  .spark{width:100%;height:58px;display:block;margin:12px 0 3px}
   .sigrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
   .sig{font-size:var(--fs-3xs);font-weight:700;padding:2px 7px;border-radius:var(--r-sm);display:inline-flex;align-items:center;gap:4px}
   .sig::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
@@ -275,7 +277,14 @@
      完全無法往下看），橫向移動仍然送到 pointermove 畫十字準線。滑鼠不受 touch-action 影響。 */
   .bigchart{width:100%;height:180px;display:block;touch-action:pan-y;cursor:crosshair}
   .volchart{width:100%;height:48px;display:block;margin-top:2px}
-  .chart-meta{display:flex;justify-content:space-between;font-size:var(--fs-2xs);color:var(--ink-faint);margin-top:4px}
+  .chart-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:var(--fs-2xs);color:var(--ink-faint);margin-top:4px}
+  /* 圖例的線段色塊：用 CSS 畫，不用 ━／┄ 這類 box-drawing 字元——它們在中文字型下的
+     粗細與基線對齊都不可靠。色值只從 token 來，不用 inline style（inline 會永遠贏過
+     後面才設的 up-txt/down-txt）。 */
+  .chart-meta .sw-line{display:inline-block;width:14px;height:0;border-top:2px solid currentColor;vertical-align:middle;margin-right:5px}
+  .chart-meta .sw-line.dash{border-top-style:dashed}
+  .chart-meta .lgd-port{color:var(--accent);font-weight:700}
+  .h-card .chart-meta{font-size:var(--fs-3xs);margin:0 0 9px}
 
   .tbl{width:100%;border-collapse:collapse;font-size:var(--fs-xs);margin-top:2px}
   .tbl th,.tbl td{padding:6px 5px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
@@ -390,13 +399,12 @@
     .hero{grid-template-columns:repeat(2,1fr);gap:12px 16px}
     /* 三個 KPI 擠兩欄會讓第三格旁邊留一個空格；讓它橫跨整列就沒有孤兒格了 */
     .hero .hcell{grid-column:1/-1}
-    .market{grid-template-columns:1fr}
     .market .mmeta{grid-template-columns:repeat(2,1fr)}
     .legend{grid-template-columns:1fr}
     .ov{padding:12px 8px}
     /* 卡片變成整頁寬之後，這幾張圖在原高度下會被拉成一條平線 */
-    .market .mchart{height:104px}
-    .spark{height:52px}
+    .market .mchart{height:118px}
+    .spark{height:64px}
     .pkspark{height:44px}
   }
   @media(max-width:400px){
@@ -452,6 +460,8 @@
       <div class="idx-chg num" id="idxChg"></div>
     </div>
     <canvas class="mchart" id="mchart"></canvas>
+    <!-- mchartMeta：由 drawMarket() 依實際視窗填入起始日／期間漲跌；此處文字僅為 JS 失敗時的 fallback -->
+    <div class="chart-meta" id="mchartMeta"><span>近 60 個交易日</span><span class="num">—</span></div>
     <div class="mmeta">
       <div class="mi">成交金額<b class="num" id="mAmt">—</b></div>
       <div class="mi">距波段高<b class="num" id="mDist">—</b></div>
@@ -476,12 +486,13 @@
     <div class="costpanel" id="costPanel" hidden></div>
     <div class="eqhead" id="eqHead">近三個月績效：投組（含息還原）vs 加權指數（以現行股數回推，起點＝100）</div>
     <canvas id="eqChart"></canvas>
+    <div class="chart-meta"><span><b class="lgd-port"><span class="sw-line"></span>投組</b>　<span class="sw-line dash"></span>加權指數</span><span>起點＝100</span></div>
     <div class="riskrow" id="riskRow"></div>
     <div class="riskcontrib" id="riskContrib"></div>
     <div class="warn" id="concWarn" hidden></div>
   </div>
 
-  <div class="sec-title">個股逐檔分析　<span class="hint">— 點卡片看三面分析（籌碼／技術／基本）、均線與損益</span></div>
+  <div class="sec-title">個股逐檔分析　<span class="hint">— 小圖＝近 60 日收盤走勢；點卡片看完整 K 線、均線、三面分析與損益</span></div>
   <div class="holdings" id="holdings"></div>
 
   <div class="sec-title">市場紅綠燈與量化選股（Bonus）</div>
@@ -882,6 +893,21 @@ function computeIndexStats(taiex){
          drawdownPct:(tl.c/Math.max(...tx.map(d=>d.c))-1)*100};
 }
 
+/* 封面圖（持股小圖／大盤圖）的視窗。全期間 82 個交易日塞進一張 58px 的小圖是一團抖動，
+   所以封面只畫尾段 COVER_DAYS 筆，完整序列留給 modal 的 K 線圖。
+   圖上只有價格線，所以「多久、期間漲跌多少」全靠這裡回傳的 from／n／pct 寫成圖下方的文字。 */
+const COVER_DAYS=60;
+function computeCoverWindow(series,n){
+ const ser=series||[];
+ if(!ser.length)return null;
+ const cl=ser.map(d=>d.c);
+ const take=Math.max(2,Math.min(n||cl.length,cl.length));
+ const s=cl.length-take;
+ const vals=cl.slice(s),base=vals[0],last=vals[vals.length-1];
+ return {vals,base,last,n:take,from:ser[s].d,to:ser[ser.length-1].d,
+         pct:base>0?+(((last/base)-1)*100).toFixed(1):0};
+}
+
 /* 過期警示：行情基準日之後過了幾個「平日」。>=2 就亮（原本 >5 天才亮，排程漏跑要一週後
    才發現）。2 天以上連假會誤亮，文案已涵蓋——寧可誤亮也不要漏亮。 */
 const STALE_WEEKDAYS=2;
@@ -982,7 +1008,8 @@ function computeSignals(holdings,dash,meta,shares){
 }
 
 window.ANALYTICS={computeEquity,computePortfolio,computeIndexStats,computeStaleness,
-                  computeHeroStance,computeConcentration,computeTrailingStop,computeSignals};
+                  computeHeroStance,computeConcentration,computeTrailingStop,computeSignals,
+                  computeCoverWindow};
 
 function buildEquity(){
  const cv=document.getElementById('eqChart'),rr=document.getElementById('riskRow');
@@ -991,7 +1018,10 @@ function buildEquity(){
  if(!e)return;
  const eh=document.getElementById('eqHead');
  if(eh&&e.hasWinTrades)eh.textContent='近三個月績效：投組（TWR·含息·依實際交易紀錄）vs 加權指數（起點＝100）';
- priceChart(cv,e.pn,cssv('--accent'),{grid:true,pad:{t:8,r:8,b:8,l:8},lw:2,overlays:[{vals:e.inx,color:cssv('--ink-faint')}]});
+ /* 這是頁面上唯一一張多線圖，所以兩條線用顏色（金／灰）與線型（實／虛）雙重區分，
+    圖例在 canvas 下方的 .chart-meta——顏色是固定的，所以那段是靜態 markup。 */
+ priceChart(cv,e.pn,cssv('--accent'),{grid:true,pad:{t:8,r:8,b:8,l:8},lw:2,
+   overlays:[{vals:e.inx,color:cssv('--ink-faint'),dash:[5,4]}]});
  rr.innerHTML=`
   <div class="rk">期間報酬（投組·含息）<b class="${plColor(e.pRet)}">${fmtSign(e.pRet,1)}%</b></div>
   <div class="rk">期間報酬（大盤）<b class="${plColor(e.iRet)}">${fmtSign(e.iRet,1)}%</b></div>
@@ -1057,6 +1087,9 @@ function buildCards(){const wrap=document.getElementById('holdings');
  if(!wrap)return;
  wrap.replaceChildren();
  H.forEach((h,i)=>{const up=h.chg>=0;const el=document.createElement('div');
+  /* 圖下方的標註在這裡算一次（buildCards 手上已有資料）；drawSparks() 只負責畫圖，
+     它每次 resize／換主題都會重跑，文字不需要跟著重算。 */
+  const cw=computeCoverWindow(DASH[h.code].series,COVER_DAYS);
   el.className='h-card';el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',h.name+' 詳細分析');
   el.innerHTML=`<div class="h-accent" style="background:${h.color}"></div><div class="h-body">
     <div class="h-head"><div><div class="h-name">${esc(h.name)} <span class="code">${h.code}</span></div>
@@ -1064,6 +1097,8 @@ function buildCards(){const wrap=document.getElementById('holdings');
     <div class="h-price"><div class="p num ${up?'up-txt':'down-txt'}">${h.price.toFixed(2)}</div>
     <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(h.chg).toFixed(2)}　${fmtSign(h.pct)}%</div></div></div>
     <canvas class="spark" data-i="${i}"></canvas>
+    ${cw?`<div class="chart-meta"><span>${cw.from} 起 · 近 ${cw.n} 日</span>
+      <span><b class="${plColor(cw.pct)}">${fmtSign(cw.pct,1)}%</b></span></div>`:''}
     <div class="sigrow">
       <span class="sig ${h.sig.chip[0]}">籌 ${h.sig.chip[1]}</span>
       <span class="sig ${h.sig.tech[0]}">技 ${h.sig.tech[1]}</span>
@@ -1071,7 +1106,7 @@ function buildCards(){const wrap=document.getElementById('holdings');
       ${h.stanceChanged?`<span class="sig ${h.stanceChanged.worse?'bear':'bull'}">⚠ 判級轉變 ${STANCE_NM[h.stanceChanged.from]}→${STANCE_NM[h.stanceChanged.to]}</span>`:''}
       <span class="sig bear" data-trailchip="${h.code}" hidden>🔔 移動停利訊號</span>
     </div>
-    <div class="h-foot"><span class="dd">距高 <b class="down-txt num">${fmtSign(h.dd,1)}%</b> · <span class="pl num" data-plcard="${h.code}" style="color:var(--ink-faint)">未設成本</span></span>
+    <div class="h-foot"><span class="dd">距40日高 <b class="down-txt num">${fmtSign(h.dd,1)}%</b> · <span class="pl num" data-plcard="${h.code}" style="color:var(--ink-faint)">未設成本</span></span>
     <span class="h-more">三面分析 ›</span></div></div>`;
   el.addEventListener('click',()=>openModal(i));
   el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openModal(i);}});
@@ -1091,10 +1126,14 @@ function chartGrid(x,w,h,pad){
   x.strokeStyle=cssv('--grid');x.lineWidth=1;
   for(let g=0;g<=3;g++){const yy=pad.t+(h-pad.t-pad.b)*g/3;x.beginPath();x.moveTo(pad.l,yy);x.lineTo(w-pad.r,yy);x.stroke();}
 }
+/* o.dash 存在的理由不是裝飾：權益曲線把「投組」與「加權指數」畫在同一張圖上，只靠顏色
+   區分，在色弱、黑白列印或縮圖時就分不出來了。線型是顏色之外的第二個維度，跟圖例
+   （.chart-meta 的 .sw-line）用同一組形狀。預設實線，所以 modal 大圖的均線不受影響。 */
 function chartOverlays(x,overlays,X,Y){
   overlays.forEach(o=>{x.beginPath();let started=false;
     o.vals.forEach((v,i)=>{if(v==null){started=false;return;}if(!started){x.moveTo(X(i),Y(v));started=true;}else x.lineTo(X(i),Y(v));});
-    x.strokeStyle=o.color;x.lineWidth=1.4;x.lineJoin='round';x.stroke();});
+    x.strokeStyle=o.color;x.lineWidth=1.4;x.lineJoin='round';
+    x.setLineDash(o.dash||[]);x.stroke();x.setLineDash([]);});
 }
 function chartCrosshair(x,hover,X,pad,h){
   if(hover==null)return;
@@ -1153,8 +1192,20 @@ function candleChart(cv,ser,opts={}){
 }
 function volChart(cv,ser){const {x,w,h}=setup(cv);if(!ser.length)return;const mx=Math.max(...ser.map(s=>s.v))||1;const bw=w/ser.length;const cu=cssv('--up'),cd=cssv('--down');
   ser.forEach((s,i)=>{const bh=(h-2)*(s.v/mx);x.fillStyle=(s.c>=s.o?cu:cd)+'66';x.fillRect(i*bw+bw*0.12,h-bh,bw*0.76,bh);});}
-function drawSparks(){document.querySelectorAll('canvas.spark').forEach(cv=>{const h=H[+cv.dataset.i];const vals=DASH[h.code].series.map(d=>d.c);priceChart(cv,vals,h.color,{pad:{t:5,r:4,b:5,l:4},lw:1.6});});}
-function drawMarket(){const cv=document.getElementById('mchart');if(cv)priceChart(cv,DASH.TAIEX.map(d=>d.c),cssv('--down'),{grid:true,pad:{t:8,r:8,b:8,l:8},lw:1.8});}
+/* 封面圖刻意只有一條價格線：均線與起點基準線試過，在 58px 的小圖上是雜訊而不是資訊。
+   「這是多久、期間漲跌多少」由圖下方的 .chart-meta 文字承載，均線與完整 K 線留給 modal。
+   線色是每檔自己的配色（與權重條、圖例、卡片左側色條同一個識別），不是漲跌色。 */
+function drawSparks(){document.querySelectorAll('canvas.spark').forEach(cv=>{const h=H[+cv.dataset.i];
+  const cw=computeCoverWindow(DASH[h.code].series,COVER_DAYS);if(!cw)return;
+  priceChart(cv,cw.vals,h.color,{pad:{t:5,r:4,b:5,l:4},lw:1.6});});}
+/* 大盤主線用中性的 --ink-soft（modal 折線模式同一個色）：原本寫死 --down 的綠線跟大盤漲跌
+   無關（它不隨漲跌變色），在紅漲綠跌的頁面上本身就是誤讀來源。同樣只有一條線，均線留給 modal。 */
+function drawMarket(){const cv=document.getElementById('mchart');if(!cv)return;
+  const cw=computeCoverWindow(DASH.TAIEX,COVER_DAYS);if(!cw)return;
+  priceChart(cv,cw.vals,cssv('--ink-soft'),{grid:true,pad:{t:8,r:8,b:8,l:8},lw:1.8});
+  const mm=document.getElementById('mchartMeta');
+  if(mm)mm.innerHTML=`<span>${cw.from} 起</span>`
+    +`<span class="num">近 ${cw.n} 日 <b class="${plColor(cw.pct)}">${fmtSign(cw.pct,1)}%</b></span>`;}
 
 /* ---------- P&L ---------- */
 /* trades 買進均價（僅 buy；作為未輸入成本時的預設，localStorage 輸入永遠優先） */
@@ -1253,7 +1304,7 @@ function openModal(i){
     <div class="m-head"><div><div class="m-title" id="mTitle">${esc(h.name)} <span class="code">${h.code}</span></div>
     <div class="m-tag">${esc(h.type)} · ${esc(h.theme)} · 持有 ${fmt(h.shares)} 股 · 權重 ${h.weight}%${h.divNote?` · <span class="divchip">💰${esc(h.divNote)}</span>`:''}</div></div>
     <div class="m-price"><div class="p num ${up?'up-txt':'down-txt'}">${h.price.toFixed(2)}</div>
-    <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(h.chg).toFixed(2)}　${fmtSign(h.pct)}% · 距高 ${fmtSign(h.dd,1)}%</div></div></div>
+    <div class="c num ${up?'up-txt':'down-txt'}">${up?'▲':'▼'} ${Math.abs(h.chg).toFixed(2)}　${fmtSign(h.pct)}% · 距40日高 ${fmtSign(h.dd,1)}%</div></div></div>
 
     <div class="costbar"><label for="costIn">平均成本價</label><input id="costIn" type="number" step="0.01" inputmode="decimal" placeholder="例 30.5" value="${cv}">
       <span class="plout" id="mPL"><small>輸入成本以計算損益</small></span></div>
@@ -1264,7 +1315,7 @@ function openModal(i){
       <div class="levels">
         <span>月線 <b>${maV(20)}</b>（${relMA(20)}）</span>
         <span>季線 <b>${maV(60)}</b>（${relMA(60)}）</span>
-        <span>波段高 <b>${Math.max(...closes).toFixed(2)}</b>（${fmtSign(h.dd,1)}%）</span>
+        <span>40日高 <b>${Math.max(...closes.slice(-Math.min(40,closes.length))).toFixed(2)}</b>（${fmtSign(h.dd,1)}%）</span>
       </div>
       <div class="an-text" style="margin-top:8px">${esc(h.tech)}</div></div>
 
