@@ -66,6 +66,33 @@ if($CodesFrom -and (Test-Path $CodesFrom)){
 $codes = @($ownCodes) + @($extraCodes)
 Write-Host "  codes: $($ownCodes -join ', ')$(if($extraCodes.Count){" (+$($extraCodes.Count) shared: $($extraCodes -join ', '))"})"
 
+# Index heavyweights (data/heavyweights.json, written weekly by screen.ps1). These are fetched
+# like everything else but stay OUT of $codes: $codes drives data/codes-context.json, which is
+# server/gnotes.py's whole input, and that step batches 40 codes per Gemini request - quietly
+# adding 30 codes there would double the request count for a file Gemini has no use for.
+#
+# Why they are fetched at all: this portfolio is entirely ETFs, so "what are the constituents
+# doing" had no owner-controlled data source. The daily AI step was reading it out of the
+# all-users context file instead, which made the analysis quality depend on which stocks other
+# people happened to hold. See plan.md 2026-07-31.
+#
+# screen.ps1 runs AFTER this script, so a freshly rebuilt list lands here one day later. That is
+# fine for a weekly list and costs no extra request; the alternative was fetching the whole
+# market a second time just to be same-day.
+$hwCodes=@()
+$hwPath=Join-Path $DataDir 'heavyweights.json'
+if(Test-Path $hwPath){
+  $hw=ReadJsonRetry $hwPath
+  if($null -eq $hw){ Write-Host "  WARN: heavyweights.json unreadable - skipping constituent view today" }
+  else {
+    $hwCodes=@(@($hw.codes) | ForEach-Object { "$_" } |
+                Where-Object { $_ -and $codes -notcontains $_ } | Select-Object -Unique)
+    Write-Host "  heavyweights: $($hwCodes.Count) code(s) from $($hw.asOfWeek) (holdings already in the set are skipped)"
+  }
+}
+# everything that gets fetched; $codes stays the union that feeds codes-context.json
+$fetchCodes = @($codes) + @($hwCodes)
+
 Write-Host "[2/6] STOCK_DAY per holding (4 months) + FMTQIK (TAIEX)..."
 $today = Get-Date
 $months=@(); for($m=3;$m -ge 0;$m--){ $months += $today.AddMonths(-$m).ToString('yyyyMM01') }
@@ -91,7 +118,7 @@ $otcCodes=@{}
 $klineCache = Get-FeedCacheDir $root
 $pruned = Invoke-FeedCachePrune $klineCache
 if($pruned -gt 0){ Write-Host "  cache: pruned $pruned stale month file(s)" }
-foreach($c in $codes){
+foreach($c in $fetchCodes){
   # 'auto': try TWSE for every month first and fall back to TPEx only if that produced nothing.
   # Unlike screen.ps1 there is no whole-market table here to look the market up in, so the
   # routing has to be discovered. The OTC branch is cached now too - the hand-written copy of
@@ -104,9 +131,26 @@ foreach($c in $codes){
   $DASH[$c]=[ordered]@{ series=$serF; inst=@(); margin=@() }
   Write-Host "  $c series=$($serF.Count)"
 }
-# FATAL guard: page hydrate() crashes on an empty series (whole dashboard goes blank)
-$empty=@($codes | Where-Object { @($DASH[$_].series).Count -lt 25 })
-if($empty.Count -gt 0){ Write-Host "FATAL: series too short for $($empty -join ',') - aborting, index.html untouched"; exit 1 }
+# FATAL guard: page hydrate() crashes on an empty series (whole dashboard goes blank).
+#
+# Only the OWNER's holdings are worth aborting for - those are what index.html renders. This
+# used to test every code in the fetch set, which included every other user's holdings: one
+# guest buying a freshly-listed stock (< 25 bars) killed the owner's entire daily update, and
+# the error named the code without hinting whose it was. Never fired in production, but it was
+# one newly-listed guest holding away from doing so.
+$emptyOwn=@($ownCodes | Where-Object { @($DASH[$_].series).Count -lt 25 })
+if($emptyOwn.Count -gt 0){ Write-Host "FATAL: series too short for $($emptyOwn -join ',') - aborting, index.html untouched"; exit 1 }
+# Everyone else's short series just drops out of today's run: no context row, no Gemini note,
+# no crash. Removing it from $DASH too keeps the loops below from re-adding a stub.
+$emptyOther=@($fetchCodes | Where-Object { $ownCodes -notcontains $_ -and @($DASH[$_].series).Count -lt 25 })
+if($emptyOther.Count -gt 0){
+  Write-Host "  WARN: series too short, skipping today: $($emptyOther -join ', ')"
+  foreach($c in $emptyOther){ $DASH.Remove($c) | Out-Null }
+  $fetchCodes = @($fetchCodes | Where-Object { $emptyOther -notcontains $_ })
+  $codes      = @($codes      | Where-Object { $emptyOther -notcontains $_ })
+  $extraCodes = @($extraCodes | Where-Object { $emptyOther -notcontains $_ })
+  $hwCodes    = @($hwCodes    | Where-Object { $emptyOther -notcontains $_ })
+}
 
 Write-Host "[3/6] T86 (5 days) + MI_MARGN (3 days)..."
 $last5 = $tradeDates | Select-Object -Last 5
@@ -115,7 +159,7 @@ foreach($d in $last5){
   $tw=Get-FeedInstitutional -Date $d -Market 't'
   if($tw.Ok){
     $dd=ConvertTo-FeedShortDate $d
-    foreach($c in $codes){
+    foreach($c in $fetchCodes){
       if(-not $tw.Rows.ContainsKey($c)){ continue }
       $e=$tw.Rows[$c]
       $DASH[$c].inst += [ordered]@{ d=$dd
@@ -143,7 +187,7 @@ $last3 = $tradeDates | Select-Object -Last 3
 foreach($d in $last3){
   $dd=ConvertTo-FeedShortDate $d
   $mg=Get-FeedMargin -Date $d -Market 't'
-  foreach($c in $codes){
+  foreach($c in $fetchCodes){
     if(-not $mg.Rows.ContainsKey($c)){ continue }
     $e=$mg.Rows[$c]
     $DASH[$c].margin += [ordered]@{ d=$dd; fin=[int]$e.fin; finPrev=[int]$e.finPrev
@@ -168,7 +212,7 @@ $r=GetJson "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL"
 if($r){
   foreach($row in $r){
     $c="$($row.Code)".Trim()
-    if($codes -contains $c){
+    if($fetchCodes -contains $c){
       $ds="$($row.Date)"
       if($ds.Length -eq 7){
         $y=[int]$ds.Substring(0,3)+1911; $mo=[int]$ds.Substring(3,2); $da=[int]$ds.Substring(5,2)
@@ -234,6 +278,20 @@ foreach($c in $codes){
 }
 $allContext | ConvertTo-Json -Depth 5 | Out-File (Join-Path $DataDir 'codes-context.json') -Encoding UTF8
 Write-Host "  wrote data/codes-context.json ($($allContext.Count) codes, union of all users)"
+
+# Same numbers again for the index heavyweights - the constituent view for a portfolio made
+# entirely of ETFs. Separate file on purpose: gnotes.py reads codes-context.json whole and
+# batches 40 codes per Gemini call, so folding these in would buy Gemini nothing and cost a
+# second request. Nothing reads this but the daily Claude step (see plan.md 2026-07-31).
+if($hwCodes.Count -gt 0){
+  $hwContext=@()
+  foreach($c in $hwCodes){
+    $cx=CodeContext $c $(if($nameMap.ContainsKey($c)){ $nameMap[$c] } else { $c })
+    if($cx){ $hwContext += $cx }
+  }
+  $hwContext | ConvertTo-Json -Depth 5 | Out-File (Join-Path $DataDir 'heavyweights-context.json') -Encoding UTF8
+  Write-Host "  wrote data/heavyweights-context.json ($($hwContext.Count) index heavyweights)"
+}
 
 Write-Host "[5b/6] stance-log.json (rule-engine stance per holding; mirrors page adviseHolding, for evaluate.ps1 validation)..."
 $stancePath=Join-Path $root 'stance-log.json'
@@ -304,9 +362,16 @@ Set-PageBlocks -IndexPath $idxPath -Blocks @{
 # server-mode exports: same payloads the page gets, as plain JSON for server.py to serve
 # per user. Written last so a failure here can never leave index.html half-spliced.
 Write-Host "[6b] data exports for server mode..."
-$DASH | ConvertTo-Json -Depth 6 -Compress | Out-File (Join-Path $DataDir 'quotes.json') -Encoding UTF8
+# quotes.json is what server.py serves to every user on every page load, so it carries exactly
+# the codes SOMEBODY holds - $codes, not $fetchCodes. The heavyweights in $DASH are by
+# construction held by nobody (they are filtered against $codes when the list is read), so
+# shipping their series would have added ~150KB to every request to render nothing. That is a
+# regression this line exists to prevent, not a pre-existing filter.
+$DASHOut=[ordered]@{}
+foreach($k in $DASH.Keys){ if($k -eq 'TAIEX' -or $codes -contains $k){ $DASHOut[$k]=$DASH[$k] } }
+$DASHOut | ConvertTo-Json -Depth 6 -Compress | Out-File (Join-Path $DataDir 'quotes.json') -Encoding UTF8
 $HOLDINGS_META | ConvertTo-Json -Depth 4 -Compress | Out-File (Join-Path $DataDir 'holdings-meta.json') -Encoding UTF8
 ([ordered]@{ generated=$genDate; lastTrade=$lastTradeIso }) | ConvertTo-Json -Compress | Out-File (Join-Path $DataDir 'meta.json') -Encoding UTF8
-Write-Host "  wrote quotes.json ($($DASH.Keys.Count) keys), holdings-meta.json, meta.json -> $DataDir"
+Write-Host "  wrote quotes.json ($($DASHOut.Keys.Count) keys), holdings-meta.json, meta.json -> $DataDir"
 
 Write-Host "DONE. lastTrade=$lastDate holdings=$($codes.Count) divNotes=$($divMap.Count)"

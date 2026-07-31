@@ -48,6 +48,21 @@ $FeedCols = @{
   MiIndex    = @{ code=0; volume=2; value=4; open=5; high=6; low=7; close=8; dir=9; change=10 }
 }
 
+# Object-shaped OpenAPI endpoints. Everything in $FeedCols above is a 0-based POSITION in an
+# array row; these endpoints return JSON objects instead, so what is named here are FIELD NAMES.
+# Deliberately a second table rather than more entries in $FeedCols - handing a caller a field
+# name where it expects an index is precisely the class of bug $FeedCols exists to prevent.
+#
+# The two boards do NOT share a schema, the same trap as T86 vs TpexInsti.
+#
+# Read the share count from 已發行普通股數 / IssueShares, NEVER from 實收資本額 / 面額. 21 listed
+# companies have a par value other than NT$10 - 2327 國巨 is 2.5, where the division understates
+# the count fourfold and drops a genuine top-20 name off the list entirely.
+$FeedFields = @{
+  CompanyTwse = @{ code='公司代號'; name='公司簡稱'; shares='已發行普通股數或TDR原股發行股數' }
+  CompanyTpex = @{ code='SecuritiesCompanyCode'; name='CompanyAbbreviation'; shares='IssueShares' }
+}
+
 # Swap the transport. $Transport is a scriptblock taking a url and returning parsed JSON
 # (or $null for "no data"). Passing $null restores live HTTP.
 function Set-FeedTransport([scriptblock]$Transport){ $script:FeedTransport = $Transport }
@@ -312,6 +327,91 @@ function Get-FeedMarketQuotes {
   }
   Wait-FeedPolite
   return @{ Ok=$true; Rows=$out }
+}
+
+function Get-FeedIssuedShares {
+  <#  Issued COMMON shares per code, both boards, from the exchanges' company-basics OpenAPI.
+      This is the only share count anywhere in the project - every other endpoint carries price
+      and turnover but nothing you can turn into a market cap.
+
+      Returns @{ Ok; Rows=@{ code -> @{ shares; name; market } } }. Ok is $false only when BOTH
+      boards fail; one board down still returns what it got, because the ranking degrades
+      gracefully but a hard failure would take out the day's whole constituent view.
+
+      TWSE wins a code present on both, matching the $px precedence in screen.ps1:66.
+
+      Preferred and private shares are separate fields upstream and are deliberately left out:
+      we pair COMMON shares with the common-share close. 台泥's paid-in capital over a 10 NTD par
+      gives 7,723,181,742, but 200,000,000 of those are preferred - the common count published
+      here is 7,523,181,742, which is the one that matches the quoted price. #>
+  $out=@{}
+  $okAny=$false
+  foreach($src in @(
+    @{ url='https://openapi.twse.com.tw/v1/opendata/t187ap03_L'; f=$FeedFields.CompanyTwse; mkt='t' }
+    @{ url='https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O'; f=$FeedFields.CompanyTpex; mkt='o' }
+  )){
+    $r=Get-FeedJson $src.url
+    if(-not $r){ continue }
+    $f=$src.f
+    $n=0
+    foreach($row in @($r)){
+      $code="$($row.($f.code))".Trim()
+      if(-not $code){ continue }
+      if($out.ContainsKey($code)){ continue }          # TWSE listed first, so it wins
+      $sh=ConvertTo-FeedNum $row.($f.shares)
+      if($null -eq $sh -or $sh -le 0){ continue }      # no share count = cannot be ranked
+      $out[$code]=@{ name="$($row.($f.name))".Trim(); shares=$sh; market=$src.mkt }
+      $n++
+    }
+    if($n -gt 0){ $okAny=$true }
+    Wait-FeedPolite
+  }
+  return @{ Ok=$okAny; Rows=$out }
+}
+
+function Select-FeedTopByMarketCap {
+  <#  The N largest codes by market cap (shares x close), biggest first. Pure - no fetching, so
+      the ranking is testable without a network.
+
+      $Profile  code -> @{shares}, from Get-FeedListedProfile
+      $Quotes   code -> @{c}, any whole-market quote map (screen.ps1's $px will do)
+
+      Deliberately does NOT take an exclude list. The one caller runs inside screen.ps1, where
+      the only holdings file in reach is the DEMO portfolio in server mode (screen.ps1:276) -
+      subtracting that would silently rank against the wrong set. Whoever knows the real
+      positions does the dedupe; this stays "the biggest N companies", full stop.
+
+      A code missing from either map, or lacking a usable price or share count, drops out of the
+      ranking instead of sorting as zero.
+
+      Two whole classes of listing are thrown out, because shares x close does not mean for them
+      what it means everywhere else:
+        * 創新板 (names ending -創): qualified-investors-only with a thin float. Measured
+          2026-07-31, 6949 沛爾生醫-創 computes to 10,362億 - rank 16 in a list whose whole job is
+          to describe what a market-cap ETF holds. This exclusion is load-bearing today.
+        * TDR (91xx, names ending -DR): the published share count is the FOREIGN PARENT's entire
+          issue while the price is the NTD depositary receipt, so the product is not a market cap
+          at all. Defensive rather than load-bearing - 9105 泰金寶-DR measured 777億 on the same
+          day, nowhere near the cut - but the quantity is meaningless whatever its size.
+      Board membership is not published by either basics endpoint, so -創 can only be spotted by
+      the name suffix. If the exchange ever drops that convention the filter fails silently, and
+      the symptom is a company nobody recognises appearing mid-list. #>
+  param([hashtable]$Profile,[hashtable]$Quotes,[int]$Top=30)
+  if(-not $Profile -or -not $Quotes){ return @() }
+  $ranked=@()
+  foreach($code in $Profile.Keys){
+    if($code -notmatch '^[1-9][0-9]{3}$'){ continue }
+    if($code -match '^91'){ continue }                                   # TDR
+    if(-not $Quotes.ContainsKey($code)){ continue }
+    $nm="$($Profile[$code].name)"
+    if($nm -match '(-DR|-創)$'){ continue }
+    $px=$Quotes[$code].c
+    $sh=$Profile[$code].shares
+    if($null -eq $px -or $px -le 0 -or $null -eq $sh -or $sh -le 0){ continue }
+    $ranked += [pscustomobject]@{ code=$code; cap=([double]$sh * [double]$px) }
+  }
+  return @($ranked | Sort-Object -Property @{e='cap';Descending=$true}, @{e='code'} |
+             Select-Object -First $Top | ForEach-Object { $_.code })
 }
 
 # One code, one month, one market. Returns bar rows oldest-first; an empty array means the code

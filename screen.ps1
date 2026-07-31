@@ -82,6 +82,57 @@ if($px.Count -gt 0){
   foreach($k in ($px.Keys | Sort-Object)){ $n="$($px[$k].name)".Trim(); if($n){ $nameMap[$k]=$n } }
   $nameMap | ConvertTo-Json -Depth 2 -Compress | Out-File (Join-Path $nameDir 'names.json') -Encoding UTF8
   Write-Host "  wrote data/names.json ($($nameMap.Count) codes)"
+
+  # data/heavyweights.json - the 30 largest listed companies by market cap, recomputed once a
+  # week. update-holdings.ps1 picks it up and fetches the same per-code numbers it fetches for
+  # holdings, so the daily analysis has an index-constituent view that belongs to the owner.
+  #
+  # It used to get that view by accident: the AI step read data/codes-context.json, which is the
+  # union of EVERY user's holdings, so "can I say anything concrete about 0050's constituents"
+  # depended on whether some guest happened to hold 台積電. Quality that rides on who else signed
+  # up degrades silently the day their holdings change. This file is the deliberate replacement.
+  #
+  # Weekly, not daily, and keyed on the ISO week of the trade date rather than "is it Monday":
+  # a Monday holiday would otherwise skip the rebuild for the whole week. Holding the list still
+  # within a week is what lets the analysis say "台積電 has led for three sessions" - a list that
+  # churns daily has nothing to compare yesterday against.
+  # 30 covers 0050's top ten AND reaches far enough down for the mid-cap semis that drive the
+  # sector ETFs (5274 信驊 sat exactly at rank 30 on 2026-07-31). Changing it here changes the
+  # rebuild trigger too - a list of the wrong length counts as stale.
+  $hwTopN=30
+  $hwPath=Join-Path $nameDir 'heavyweights.json'
+  # $d0 is not parsed until [2/8]; this block runs earlier, so date the week off $lastDate here.
+  $hwDay=[datetime]::ParseExact($lastDate,'yyyyMMdd',$null)
+  $isoWeek="{0}-W{1:00}" -f [System.Globalization.ISOWeek]::GetYear($hwDay),[System.Globalization.ISOWeek]::GetWeekOfYear($hwDay)
+  $hwHave=$null
+  if(Test-Path $hwPath){ try{ $hwHave=Get-Content $hwPath -Raw -Encoding UTF8 | ConvertFrom-Json }catch{ $hwHave=$null } }
+  if($hwHave -and "$($hwHave.asOfWeek)" -eq $isoWeek -and @($hwHave.codes).Count -eq $hwTopN){
+    Write-Host "  heavyweights: $isoWeek already computed ($(@($hwHave.codes).Count) codes) - reusing"
+  } else {
+    $prof=Get-FeedIssuedShares
+    if(-not $prof.Ok){
+      # fail-open: this is the daily pipeline. A dead endpoint keeps last week's list (still a
+      # fine constituent view) or, on a first run, simply skips the feature.
+      Write-Host "  WARNING: company-basics endpoints failed - keeping $(if($hwHave){'last week''s heavyweights'}else{'no heavyweights file'})"
+    } else {
+      $hwCodes=Select-FeedTopByMarketCap -Profile $prof.Rows -Quotes $px -Top $hwTopN
+      # Sanity gate before overwriting a good list with a bad one. The top of the market cannot
+      # turn over by a third in a week, so if it looks like it did, the feed is wrong rather than
+      # the market. Failing the gate leaves asOfWeek stale, which means tomorrow's run retries by
+      # itself - the week key IS the retry mechanism, no queue needed.
+      $minOverlap=[math]::Ceiling($hwTopN*0.6)
+      $overlap = if($hwHave){ @(@($hwHave.codes) | Where-Object { $hwCodes -contains "$_" }).Count } else { $hwTopN }
+      if($hwCodes.Count -lt $hwTopN){
+        Write-Host "  WARNING: market-cap ranking produced only $($hwCodes.Count)/$hwTopN - heavyweights file left alone"
+      } elseif($overlap -lt $minOverlap){
+        Write-Host "  WARNING: new heavyweights share only $overlap/$hwTopN codes with last week's (need $minOverlap) - rejecting as a feed error"
+      } else {
+        ([ordered]@{ generated=(Get-Date).ToString('s'); asOfWeek=$isoWeek; asOfDate=$lastDate; codes=$hwCodes }) |
+          ConvertTo-Json -Depth 3 | Out-File $hwPath -Encoding UTF8
+        Write-Host "  wrote data/heavyweights.json ($($hwCodes.Count) codes, $isoWeek): $($hwCodes[0..([math]::Min(4,$hwCodes.Count-1))] -join ', ')..."
+      }
+    }
+  }
 }
 $upN=0;$dnN=0
 foreach($k in $px.Keys){ $g=$px[$k].chg; if($g -gt 0){$upN++} elseif($g -lt 0){$dnN++} }

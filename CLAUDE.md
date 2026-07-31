@@ -38,7 +38,7 @@
 | `lib/pagedata.ps1` | `Set-PageBlocks` / `Get-PageBlockText`：唯一的 splice 實作 | 六支 .ps1 全部 |
 | `lib/publish-gate.ps1` | `Invoke-PublishGate`：唯一的對外出口（allowlist 上架＋內容掃描＋commit/push） | `publish.ps1` |
 | `lib/stance.ps1` | `Get-StanceGrade`：唯一的判級公式 | `update-holdings.ps1`；頁面只顯示結果 |
-| `lib/feed.ps1` | 唯一的抓取／快取／欄位索引／民國日期／politeness。**九個端點都在這裡解析**（`Get-FeedIndexHistory`／`Get-FeedInstitutional`／`Get-FeedMargin`／`Get-FeedMarketInstAmount`／`Get-FeedMarketQuotes`／`Get-FeedDailySeries`），快取目錄的建立與清理也是（`Get-FeedCacheDir`／`Invoke-FeedCachePrune`） | `screen.ps1`、`update-holdings.ps1`、`backtest.ps1` |
+| `lib/feed.ps1` | 唯一的抓取／快取／欄位索引／民國日期／politeness。**十一個端點都在這裡解析**（`Get-FeedIndexHistory`／`Get-FeedInstitutional`／`Get-FeedMargin`／`Get-FeedMarketInstAmount`／`Get-FeedMarketQuotes`／`Get-FeedDailySeries`／`Get-FeedIssuedShares`），快取目錄的建立與清理也是（`Get-FeedCacheDir`／`Invoke-FeedCachePrune`）。市值排序 `Select-FeedTopByMarketCap` 是純函式、不抓資料 | `screen.ps1`、`update-holdings.ps1`、`backtest.ps1` |
 | `lib/score.ps1` | **唯一的選股規則**：`Get-RegimeLight`／`Get-ChipStats`／`Test-ChipGate`／`Get-ChipScore`／`Get-TechScore`／`Get-FundScore`／`Get-TotalReturnSeries`／`Test-ExitRules`。股票與 ETF 是同一組函式的兩個 **profile**（`$ScreenProfiles`），不是兩份程式 | `screen.ps1`、`backtest.ps1`（回測直接呼叫生產規則，不再手抄） |
 | `lib/picks-log.ps1` | `picks-log.json` 的唯一讀寫者：retry＋FATAL 保護、`[ordered]` key 順序、保留期封存、`-ErrorAction Stop` | `screen.ps1`、`publish.ps1` |
 | `lib/stance-log.ps1` | `stance-log.json` 的唯一讀寫者＋`Get-PrevStanceMap`（純函式） | `update-holdings.ps1` |
@@ -48,7 +48,7 @@
 - **splice 一律用 `Set-PageBlocks`**，別再手寫 `IndexOf('<script id=...')`。找不到 marker 或不認識的 block id 都會 throw（以前只警告然後照樣寫檔）
 - **`window.META` 是一般 block**，不再是對 HTML 做正則取代；報告日期由頁面從 META 帶出
 - **判級公式只改 `lib/stance.ps1`**，頁面 `adviseHolding` 只把分數翻成文字、不得再寫一份門檻
-- **抓官方資料一律走 `lib/feed.ps1`**，包括**解析**：呼叫端不可以再自己寫 `$row[10]` 這種位置索引。欄位索引全部在 `$FeedCols`——**T86（上市）與 TPEx dailyTrade（上櫃）欄位不同**（trust/total 是 10/18 vs 13/23），別混用。民國年轉換只有 `ConvertFrom-FeedRocDate` 一份（以前五份，其中兩份靠 API 自己補零）。測試用 `Set-FeedTransport` 換掉傳輸層即可離線驗真正的解析路徑
+- **抓官方資料一律走 `lib/feed.ps1`**，包括**解析**：呼叫端不可以再自己寫 `$row[10]` 這種位置索引。欄位索引全部在 `$FeedCols`——**T86（上市）與 TPEx dailyTrade（上櫃）欄位不同**（trust/total 是 10/18 vs 13/23），別混用。**兩張欄位表**：`$FeedCols` 是陣列的 0-based 位置，`$FeedFields` 是物件式 openapi 端點的**欄位名稱**（公司基本資料），別把名稱放到吃索引的地方。取發行股數一律用 `已發行普通股數`／`IssueShares`，**永遠不要用「實收資本額 ÷ 面額」**——有 21 家上市公司面額不是 10 元（2327 國巨是 2.5），那個算法會少算四倍、把真正的權值股擠出榜外。民國年轉換只有 `ConvertFrom-FeedRocDate` 一份（以前五份，其中兩份靠 API 自己補零）。測試用 `Set-FeedTransport` 換掉傳輸層即可離線驗真正的解析路徑
 - **選股／評分／出場規則只改 `lib/score.ps1`**，且股票與 ETF 用 profile 區分而不是複製一份。`backtest.ps1` 直接呼叫同一組函式，所以「回測跟生產一致」是結構保證、不再是註解裡的承諾。單位注意：`Get-FeedInstitutional` 回傳**股**（交易所原始單位），頁面顯示的**張**由呼叫端自己除 1000
 - **`picks-log.json`／`stance-log.json` 一律經各自的 lib 模組讀寫**，別再自己 `Get-Content`＋`Out-File`：retry、FATAL 保護、`[ordered]` key 順序、封存與 `-ErrorAction Stop` 都在模組裡
 - **頁面的財務計算放在 `computeEquity()`**（純函式、不碰 DOM，掛在 `window.ANALYTICS`）；`buildEquity()` 只負責畫。新增計算照這個分法，才驗得動
@@ -56,6 +56,7 @@
 
 ## 別手改：每日流程會覆寫的部分
 - `guest-notes.json`（Gemini 每日產出，gitignore）；`prev-recs.json`（每日由 holdings-notes.json 抽出，gitignore）
+- `data/heavyweights.json`（市值前 30 大，`screen.ps1` **每週重算一次**、當週固定，gitignore）與 `data/heavyweights-context.json`（`update-holdings.ps1` 每日重寫，gitignore）。想改名單大小改 `screen.ps1` 的 `$hwTopN`，不要手改 JSON——長度不符會被判定為過期、下次執行就整份重算蓋掉
 - splice 區塊全部：`<script id>` = `dashdata`、`holdingsmeta`、`holdingsnotes`（含 `_market` 市場風向）、`pkdata`、`pkline`、`pknotes`、`evaldata`（週五）、`backtest`（月跑）、`meta`（報告日期／行情基準日）、`tokenusage`（`finish-daily-push.ps1` 寫，非 AI）、`appuser`（伺服器逐使用者注入，committed 檔案內**必須留空**）
 - Hero 市值/損益/整體傾向（heroStance）、大盤數字、市場風向區（windBox/miSox/miMood）、權重、今日訊號、績效曲線 → 頁面 JS 自動算或 `_market` 覆寫，勿寫死；HTML 內殘留文字只是 JS 失敗時的 fallback
 

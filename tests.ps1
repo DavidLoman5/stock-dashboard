@@ -847,6 +847,91 @@ if($sharedBlocks.Count -eq 3){
 $idxAllTok = Get-Content (Join-Path $root 'index.html') -Raw -Encoding UTF8
 Assert ($idxAllTok -notmatch 'aria-pressed="true"\][^{}]*\{[^{}]*(color|background):#fff') "index.html: pressed chips use --on-accent, not #fff"
 
+Write-Host "[13] index heavyweights (owner-controlled constituent context)..."
+# Why this exists at all: the portfolio is entirely ETFs, so "what are the constituents doing"
+# had no data source the owner controlled - the daily AI step was reading it out of the
+# all-users context file, making analysis quality depend on which stocks OTHER people held.
+
+# a. both boards parse, and their schemas are genuinely different (the T86/TpexInsti trap again)
+Assert ($FeedFields.CompanyTwse.code -ne $FeedFields.CompanyTpex.code) "company basics: the two boards do not share a code field name"
+Assert ($FeedFields.CompanyTwse.shares -ne $FeedFields.CompanyTpex.shares) "company basics: the two boards do not share a shares field name"
+
+$twseRows = @(
+  [pscustomobject]@{ '公司代號'='2330'; '公司簡稱'='台積電';   '已發行普通股數或TDR原股發行股數'='25932370067' }
+  [pscustomobject]@{ '公司代號'='2327'; '公司簡稱'='國巨*';    '已發行普通股數或TDR原股發行股數'='2071000000' }
+  [pscustomobject]@{ '公司代號'='9105'; '公司簡稱'='泰金寶-DR'; '已發行普通股數或TDR原股發行股數'='9000000000' }
+  [pscustomobject]@{ '公司代號'='6949'; '公司簡稱'='沛爾生醫-創'; '已發行普通股數或TDR原股發行股數'='500000000' }
+  [pscustomobject]@{ '公司代號'='1234'; '公司簡稱'='沒股數';    '已發行普通股數或TDR原股發行股數'='--' }
+)
+$tpexRows = @(
+  [pscustomobject]@{ SecuritiesCompanyCode='5274'; CompanyAbbreviation='信驊'; IssueShares='37802685' }
+  [pscustomobject]@{ SecuritiesCompanyCode='2330'; CompanyAbbreviation='不該蓋掉上市的'; IssueShares='1' }
+)
+Set-FeedTransport {
+  param($u)
+  if($u -match 't187ap03_L'){ return $twseRows }
+  if($u -match 'mopsfin_t187ap03_O'){ return $tpexRows }
+  return $null
+}
+$sh=Get-FeedIssuedShares
+Assert ($sh.Ok) "issued shares: both boards parsed"
+Assert ($sh.Rows['2330'].shares -eq 25932370067) "issued shares read from the named field (got $($sh.Rows['2330'].shares))"
+Assert ($sh.Rows['2330'].market -eq 't' -and $sh.Rows['5274'].market -eq 'o') "issued shares tag the board they came from"
+Assert ($sh.Rows['5274'].shares -eq 37802685) "TPEx IssueShares parsed via its own field names (got $($sh.Rows['5274'].shares))"
+Assert (-not $sh.Rows.ContainsKey('1234')) "a '--' share count drops the row rather than becoming 0"
+# 5274 信驊 measured rank 30 on 2026-07-31: TWSE-only would have got the last slot wrong
+Assert ($sh.Rows['2330'].shares -ne 1) "a code on both boards keeps the TWSE row (TPEx must not overwrite)"
+
+# b. one board down is survivable; both down is not
+Set-FeedTransport { param($u) if($u -match 't187ap03_L'){ return $twseRows }; return $null }
+$sh1=Get-FeedIssuedShares
+Assert ($sh1.Ok -and $sh1.Rows.Count -gt 0 -and -not $sh1.Rows.ContainsKey('5274')) "one board down still returns the other board"
+Set-FeedTransport { param($u) return $null }
+Assert (-not (Get-FeedIssuedShares).Ok) "both boards down reports Ok=false"
+Set-FeedTransport $null
+
+# c. the ranking rule itself (pure - no transport needed)
+$profF=@{
+  '2330'=@{ name='台積電';    shares=25932370067 }
+  '2327'=@{ name='國巨*';     shares=2071000000 }   # par 2.5: capital/10 would say 518,000,000
+  '9105'=@{ name='泰金寶-DR'; shares=9000000000 }
+  '6949'=@{ name='沛爾生醫-創'; shares=500000000 }
+  '8888'=@{ name='高價少股';  shares=1000000000 }
+  '7777'=@{ name='沒報價';    shares=9999999999 }
+  '6666'=@{ name='停牌';      shares=9999999999 }
+}
+$quoF=@{
+  '2330'=@{ c=2425.0 }; '2327'=@{ c=502.0 }; '9105'=@{ c=20.0 }
+  '6949'=@{ c=300.0 };  '8888'=@{ c=700.0 }; '6666'=@{ c=0.0 }
+}
+$rank=Select-FeedTopByMarketCap -Profile $profF -Quotes $quoF -Top 10
+Assert ($rank[0] -eq '2330') "ranking is by shares x close, biggest first"
+# 2327 x its real share count beats 8888; via capital/10 (518m x 502) it would lose. This is the
+# regression test for "never derive the share count from paid-in capital / par value".
+Assert ($rank.IndexOf('2327') -lt $rank.IndexOf('8888')) "share count comes from the issued-shares field, not capital/par"
+Assert ($rank -notcontains '9105') "TDR excluded (parent's share count against a depositary price)"
+Assert ($rank -notcontains '6949') "創新板 excluded (measured 10,362億 on 2026-07-31 = rank 16)"
+Assert ($rank -notcontains '7777') "a code with no quote drops out instead of ranking as zero"
+Assert ($rank -notcontains '6666') "a zero close drops out instead of ranking as zero"
+Assert ((Select-FeedTopByMarketCap -Profile $profF -Quotes $quoF -Top 2).Count -eq 2) "-Top caps the list"
+Assert ((Select-FeedTopByMarketCap -Profile $null -Quotes $quoF).Count -eq 0) "a missing profile map yields an empty list, not a throw"
+
+# d. the fetch/context split that protects the Gemini batch. codes-context.json is gnotes.py's
+# entire input and its length sets the request count (BATCH=40); heavyweights must never widen
+# it. This asserts the wiring in update-holdings.ps1 rather than trusting the comment.
+$uh=Get-Content (Join-Path $root 'update-holdings.ps1') -Raw -Encoding UTF8
+Assert ($uh -match '\$allContext=@\(\)\s*\r?\n\s*foreach\(\$c in \$codes\)') "codes-context.json still iterates `$codes, not `$fetchCodes"
+Assert ($uh -match 'heavyweights-context\.json') "heavyweights get their own context file"
+Assert ($uh -match '\$fetchCodes = @\(\$codes\) \+ @\(\$hwCodes\)') "heavyweights join the fetch set but not `$codes"
+# the FATAL guard is now graded: owner short series aborts, anyone else's is skipped
+Assert ($uh -match '\$emptyOwn=@\(\$ownCodes \|') "FATAL guard tests the owner's holdings only"
+Assert ($uh -match 'WARN: series too short, skipping today') "a non-owner short series is skipped, not fatal"
+# quotes.json goes out on every server page load. Heavyweights are held by nobody, so shipping
+# their series added ~150KB per request to render nothing - measured, then fixed.
+Assert ($uh -match ([regex]::Escape('foreach($k in $DASH.Keys){ if($k -eq ''TAIEX'' -or $codes -contains $k){ $DASHOut'))) "quotes.json ships holdings only, never the heavyweights"
+# grading and stance-log stay on $codes: heavyweights must not dilute evaluate.ps1's sample
+Assert ($uh -notmatch '\$psAll\[\$c\]=\$prevStanceMap\[\$c\]\.s \}[\s\S]{0,200}\$fetchCodes') "stance history stays on holdings, not the fetch set"
+
 Write-Host ""
 if($fails.Count -eq 0){ Write-Host "ALL TESTS PASSED"; exit 0 }
 else { Write-Host "FAILED: $($fails.Count) test(s): $($fails -join '; ')"; exit 1 }
