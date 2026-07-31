@@ -32,7 +32,7 @@ maxLoginFailuresPerUser 20（2026-07-24 新增：IP 與帳號分開計，擋掉�
 maxCodesPerUser 30／maxDistinctCodes 200／maxRegistrationsPerIpPerDay 3／pendingExpiryDays 30。
 
 **營運狀態（2026-07-24 起）**：`stock-dashboard` systemd user service＋`loginctl enable-linger`，
-開機自動起。對外走 **Tailscale Funnel**（`https://felix-server.tailf8b922.ts.net`，固定網址、
+開機自動起。對外走 **Tailscale Funnel**（`https://<機器>.<tailnet>.ts.net`，固定網址、
 免網域、免費）——cloudflared 已停用（quick tunnel 網址每次重啟就換，具名 tunnel 要自有網域，
 而 Cloudflare 帳號當時沒有託管網域）。`~/.local/bin/cloudflared` 保留著沒刪。
 
@@ -208,6 +208,41 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
   degenerate candle fallback 選錯 curMode（cosmetic，未處理）。~~holdings.json 讀取失敗靜默吞掉~~（2026-07-24 已改為警告）
 
 ## ✅ 已完成
+
+### 2026-07-31 Funnel 靜默失效（手機連不上）＋ 發佈閘門補主機名掃描
+
+使用者回報「手機看不到了，電腦可以」。**「電腦可以」是誤導性的對照組**——電腦走 tailnet
+內網（`100.x`），手機不在 tailnet 裡走的是公網 Funnel，兩條完全不同的路徑。
+
+**根因**：當天 08:15 tailscaled 記錄到 `LinkChange: major`（預設路由改走 WiFi）之後，
+`Hostinfo.IngressEnabled` 沒有重新推給控制平面。Tailscale 的 ingress 收到連線、讀完 SNI
+找不到對應節點就直接關閉 → 外部看到的是 **TLS 握手失敗**，伺服器日誌**當天零筆**公網請求。
+
+三個讓人查錯方向的點：`tailscale funnel status` 顯示一切正常；憑證有效到 10/22；
+直接 `curl` 主機名也是通的（本機 DNS 會解析成 tailnet IP，驗不到公網那條路）。
+
+**修法**：`tailscale down && tailscale up`。只重推 serve 設定（`funnel off` 再 `on`）
+**無效**——實測過，listener 會重建但 ingress 仍不認得，必須整個節點重新註冊。
+驗證要用 `curl --resolve <host>:443:<ingress IP>` 強制走公網：壞的時候 `000`，好的時候 `302`。
+排查步驟已寫進 `SETUP.md`。
+
+**順手發現兩件事**：
+
+① `:8443` 那條 Funnel 指向 `127.0.0.1:3000`，而該埠有一個 Next.js dev server 綁在
+`*:3000` 跑著——等於一個開發伺服器正對全世界開放。已 `tailscale funnel --https=8443 off`。
+
+② **`plan.md` 從 07-24 起就寫著 owner 的真實 Funnel 主機名**，而 plan.md 是被追蹤、
+已公開的。站台有登入保護所以不是憑證外洩，但等於把私人入口網址交給掃描機器人
+（存取日誌看得到 `/.env`、`/.git/config` 這類探測）。兩處已改成佔位符。
+
+**閘門補強**：`Test-FileForOwnerContent` 原本只開 `.json`（比對 key 名）和 `.html`
+（逐 block 比對），**`.md` 從來沒被掃過**，所以這個洩漏永遠不會被攔到。現在加上
+`$TailnetHostPattern`，對**所有文字副檔名**做原文掃描。規則刻意要求 `.ts.net` 前面有
+**兩個真實 label** 才算命中，所以 SETUP.md 記錄的 `<機器>.<tailnet>.ts.net` 佔位符與
+散文裡提到的 `.ts.net` 都不會誤判——誤判在這裡的代價是擋掉未來每一次發佈。
+
+`tests.ps1` [8] 加三項：repo 內不得出現具體 tailnet 主機名、掃描抓得到 `.md` 裡的主機名、
+掃描不會對佔位符誤判。測試裡的假主機名**用字串拼接組出來**，否則它自己就會被第一項抓到。
 
 ### 2026-07-30 封面圖：60 日視窗＋圖下標註（單線）；權益曲線補圖例
 
@@ -684,7 +719,7 @@ riskRow／riskContrib／eqHead **輸出完全一致**，確認是純重構。
 
 ### 2026-07-25 事故：伺服器頁面全白（服務跑舊碼＋既有 migration bug 兩層疊加）
 
-使用者回報 `felix-server.tailf8b922.ts.net` 頁面幾乎空白（Hero 數字是 `—`、殘留舊新聞文字）。
+使用者回報自架伺服器頁面幾乎空白（Hero 數字是 `—`、殘留舊新聞文字）。
 用 claude-in-chrome 開真實瀏覽器讀 console 才看到，curl／jsdom 對這台伺服器都測不到——
 症狀只在「登入後的個人化頁面」才會炸，靜態 demo 頁（GitHub Pages）完全正常。
 

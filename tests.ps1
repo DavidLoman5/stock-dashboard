@@ -436,6 +436,26 @@ if(Get-Command git -ErrorAction SilentlyContinue){
     Assert ($allTracked -notcontains $f) "$f is not tracked (owner-derived, must never be published)"
   }
 }
+# 2026-07-31: plan.md had carried the owner's real Funnel hostname since 07-24, and the content
+# scan only ever opened .json and .html - so no run would ever have caught it. Guard both
+# directions. The false-positive half matters as much: SETUP.md documents the placeholder form,
+# and a scan that fired on it would block every future publish.
+if(Get-Command git -ErrorAction SilentlyContinue){
+  Push-Location $root
+  $hostLeaks = @(git grep -nE $TailnetHostPattern -- . 2>$null)
+  Pop-Location
+  Assert ($hostLeaks.Count -eq 0) "no tracked file names a concrete tailnet host (found: $($hostLeaks -join '; '))"
+}
+# Built by concatenation on purpose: spelled out in full, this fixture would be a concrete
+# hostname sitting in a tracked file, and the assertion above would fail on tests.ps1 itself.
+$fakeHost = 'box-7.' + 'tailabc123.' + 'ts' + '.net'
+$tmpLeak = Join-Path ([IO.Path]::GetTempPath()) ("leak-"+[guid]::NewGuid().ToString('N')+".md")
+$encL = New-Object System.Text.UTF8Encoding($false)
+[IO.File]::WriteAllText($tmpLeak,"the dashboard lives at https://$fakeHost/ these days",$encL)
+Assert (@(Test-FileForOwnerContent $tmpLeak 'leak.md').Count -eq 1) "the gate catches a tailnet hostname in a .md file"
+[IO.File]::WriteAllText($tmpLeak,"URL is <machine>.<tailnet>.ts.net - any .ts.net address is fine",$encL)
+Assert (@(Test-FileForOwnerContent $tmpLeak 'clean.md').Count -eq 0) "the gate ignores the placeholder and a bare .ts.net mention"
+Remove-Item $tmpLeak -ErrorAction SilentlyContinue
 
 Write-Host "[9] page-data contract + publication gate + stance engine..."
 # a block id that is not in the contract must be an error, not a silent no-op

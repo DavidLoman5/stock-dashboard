@@ -69,13 +69,36 @@ function Get-JsonKeyNames($Node,[int]$Depth=0){
   return $names
 }
 
+# A concrete tailnet hostname (`<machine>.<tailnet>.ts.net`) is the owner's private entry point
+# to the server. The dashboard is login-gated, so this is not a credential leak - but publishing
+# the URL hands it to the scanners that already probe the access log (/.env, /.git/config), and
+# nothing in the repo needs the real name. Two real labels must precede `.ts.net`, so the
+# angle-bracket placeholder SETUP.md documents with, and bare prose mentions of `.ts.net`,
+# are deliberately NOT matched - only a host that actually resolves.
+$TailnetHostPattern = '[A-Za-z0-9-]+\.[A-Za-z0-9-]+\.ts\.net'
+
+# Extensions whose bytes are not text. Reading a PNG as UTF-8 would not throw, just waste time
+# on the one binary the allowlist carries (apple-touch-icon.png).
+$BinaryExtensions = @('.png','.jpg','.jpeg','.gif','.ico','.woff','.woff2','.db')
+
 # Owner-only content found in one file, as a list of human-readable strings ('' = clean).
 # JSON is checked by key name; index.html is checked block by block, because its own source
-# legitimately mentions these words in JS while its data blocks must not.
+# legitimately mentions these words in JS while its data blocks must not. The tailnet-host scan
+# runs on every text extension instead, because the leak that prompted it (plan.md, found
+# 2026-07-31 while debugging a Funnel outage) sat in a .md file - a format neither of the
+# structured checks below ever opens.
 function Test-FileForOwnerContent([string]$Path,[string]$RelPath){
   $bad = Get-OwnerOnlyFields
   $hits=@()
   $ext = [IO.Path]::GetExtension($Path).ToLowerInvariant()
+  if($BinaryExtensions -notcontains $ext){
+    $encRaw = New-Object System.Text.UTF8Encoding($false)
+    $raw = [IO.File]::ReadAllText($Path,$encRaw)
+    # NOT $host: that is a read-only PowerShell automatic variable and assigning it throws.
+    foreach($tsHost in @([regex]::Matches($raw,$TailnetHostPattern) | ForEach-Object { $_.Value } | Sort-Object -Unique)){
+      $hits += "$RelPath names the private tailnet host '$tsHost' (use a <machine>.<tailnet>.ts.net placeholder)"
+    }
+  }
   if($ext -eq '.json'){
     try{ $obj = Get-Content $Path -Raw -Encoding UTF8 | ConvertFrom-Json }catch{ return @() }
     $keys = @(Get-JsonKeyNames $obj | Sort-Object -Unique)
