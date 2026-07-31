@@ -130,6 +130,50 @@ tailscale funnel --bg 8787
 注意 Funnel 是**對全世界公開**。若只想自己的裝置看得到，什麼都不用開——在 tailnet 內直接連
 `http://<這台機器的 100.x IP>:8787` 即可（但那就不能分享給別人）。
 
+#### 疑難排解：Funnel 突然連不上（2026-07-31 實際遇過）
+
+**症狀組合**——三個同時成立才是這個病：
+
+1. 外網／手機端是 **TLS 握手失敗**（Safari 顯示 "couldn't establish a secure connection"），
+   不是 404／502，也不是憑證錯誤
+2. `journalctl --user -u stock-dashboard` 當天**零筆**公網請求（流量根本沒進到伺服器）
+3. `tailscale funnel status` 看起來**完全正常**，憑證與系統時間也都沒問題
+
+成因是 tailscaled 在網路變動後（日誌會有 `LinkChange: major`）沒把
+`Hostinfo.IngressEnabled` 重新推給控制平面，於是 Tailscale 的 ingress 讀完 SNI
+找不到對應節點，直接關閉連線。
+
+**兩個會讓你查錯方向的陷阱：**
+
+- **「電腦可以、手機不行」不代表服務正常**。tailnet 內的裝置（`100.x`）走的是內網，
+  跟外部裝置走的公網 Funnel 是兩條完全不同的路徑
+- **直接 `curl` 主機名驗不到東西**。本機 DNS 會把 `<機器>.<tailnet>.ts.net`
+  解析成 tailnet IP，那條路一直是通的
+
+**正確的驗證方式**——用 `--resolve` 強制走真正的公網 ingress：
+
+```bash
+HOST=<機器>.<tailnet>.ts.net
+INGRESS=$(dig +short @1.1.1.1 "$HOST" | head -1)   # Tailscale 的 ingress，非本機
+curl -sS -o /dev/null -w "%{http_code}\n" --max-time 20 \
+  --resolve "$HOST:443:$INGRESS" "https://$HOST/"
+```
+
+壞的時候是 `000`（TLS 失敗），好的時候是 `302`（導向 `/login`）。
+
+**修法**（`--operator` 已設定，不需要 sudo）：
+
+```bash
+tailscale down && tailscale up
+```
+
+只重推 serve 設定（`tailscale funnel --https=443 off` 再開）**無效**——實測過，
+listener 會重建但 ingress 仍不認得，必須整個節點重新註冊。
+
+> 診斷時注意：從家裡網路打 ingress，**連不存在的 SNI 也會回 `000`**，
+> 所以那個對照組無法區分「節點沒註冊」和「這條路徑有問題」，別被它誤導。
+> 要分辨只能換一個網路來源測（例如手機關 WiFi 改用行動網路）。
+
 ### 安裝 cloudflared（方式 A/B 才需要）
 
 不需要 root（單一靜態執行檔）：
