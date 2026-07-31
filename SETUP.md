@@ -174,6 +174,29 @@ listener 會重建但 ingress 仍不認得，必須整個節點重新註冊。
 > 所以那個對照組無法區分「節點沒註冊」和「這條路徑有問題」，別被它誤導。
 > 要分辨只能換一個網路來源測（例如手機關 WiFi 改用行動網路）。
 
+#### 自動恢復守衛（`tools/funnel-watchdog.sh`）
+
+上面那個故障在本機是**反覆發生**的——這台主機只有 WiFi，每天重新關聯 5–8 次，
+其中一部分會讓 Funnel 失聯。所以有個 systemd user timer 每 5 分鐘探一次公網路徑，
+連續兩次失敗才跑 `down/up`：
+
+```bash
+systemctl --user list-timers funnel-watchdog.timer   # 看下次何時跑
+journalctl --user -u funnel-watchdog.service         # 看修過幾次
+```
+
+unit 檔在 `~/.config/systemd/user/funnel-watchdog.{service,timer}`（跟
+`stock-dashboard.service` 一樣不進 repo）。腳本有三個刻意的設計，各自對應一個踩過的坑：
+
+- **從公網 ingress 探測，不是探主機名**。本機解析主機名會拿到自己的 tailnet IP，
+  那條路在整個故障期間都是通的——探它等於永遠回報健康
+- **連續兩次失敗才動作**。WiFi 重新關聯造成的失聯幾十秒內會自己好，
+  修它等於每天無謂重啟通道好幾次
+- **冷卻期內即使不健康也不修**（預設 30 分鐘）。如果是 Tailscale 自己的 ingress 出事，
+  再怎麼重新註冊都沒用，每 5 分鐘 `down/up` 只會把對方的故障變成自己的
+
+要停用：`systemctl --user disable --now funnel-watchdog.timer`。
+
 ### 安裝 cloudflared（方式 A/B 才需要）
 
 不需要 root（單一靜態執行檔）：
