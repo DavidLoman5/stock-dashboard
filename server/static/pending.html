@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 手機是深色專用（見 CSS 的 hover:none/pointer:coarse 區塊），瀏覽器上下列的底色也要跟著，
+     否則 iOS Safari 的工具列會是亮的、跟頁面接不起來。media 讓桌機維持原本的行為。 -->
+<meta name="theme-color" content="#0e121b" media="(hover:none) and (pointer:coarse)">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex, nofollow">
 <title>等待核准－台股投資報告</title>
@@ -11,9 +14,9 @@
      與 index.html 同一組色值。CSP（style-src 'unsafe-inline'，沒有 'self'）連同源的外部 CSS
      都擋，所以四個頁面只能各帶一份——這段在 login/admin/pending 三頁「必須完全相同」，
      tests.ps1 會驗。改色請連 index.html 一起改。
-     這裡刻意不用 index.html 的「值對＋映射」寫法：那個結構是為了 index 的三個主題情境
-     （:root／dark media／data-theme）而存在，這三頁只有兩個情境、也沒有 data-theme，
-     用值對反而是多寫一層。 */
+     這裡刻意不用 index.html 的「值對＋映射」寫法：那個結構是為了 index 的多個主題情境
+     （:root／dark media／data-theme／觸控裝置）而存在，這三頁只有兩個情境、也沒有 data-theme，
+     用值對反而是多寫一層——手機一律深色在這裡是加一個媒體查詢條件（逗號＝OR），不必再寫一份值。 */
   :root{
     --bg:#f5f6f9;--surface:#fff;--surface-2:#eef0f5;--line:#dfe2ea;
     --ink:#1a1e27;--ink-soft:#545b6b;--ink-faint:#8b92a3;
@@ -24,12 +27,15 @@
     --radius:14px;
     --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",-apple-system,"Segoe UI",system-ui,sans-serif;
   }
-  @media(prefers-color-scheme:dark){:root{
+  /* 手機＝只有深色：觸控裝置（hover:none + pointer:coarse）不看系統偏好，直接吃下面這組深色值。
+     逗號是「或」，所以兩種情境共用同一份值，不會多出第三份色碼。與 index.html 同一條規則。 */
+  @media(prefers-color-scheme:dark),(hover:none) and (pointer:coarse){:root{
     --bg:#0e121b;--surface:#161c28;--surface-2:#1d2534;--line:#2a3346;
     --ink:#e7eaf1;--ink-soft:#a3abbd;--ink-faint:#6b7488;
     --accent:#d9ad57;--accent-soft:#2a2413;--on-accent:#0e121b;
     --up:#ff5d51;--up-bg:#3a1c1a;--down:#34c48d;--down-bg:#123027;--hold:#e0b955;--hold-bg:#2e2712;
     --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+    color-scheme:dark;   /* 少了這行，系統是淺色的手機上 input 與捲軸還是亮的 */
   }}
   /* SHARED-TOKENS-END */
   *{box-sizing:border-box}

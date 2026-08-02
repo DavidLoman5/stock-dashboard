@@ -68,8 +68,9 @@ CSS／版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯�
 - **封面只畫近 `COVER_DAYS`（60）日，完整序列留給 modal**。視窗一律經 `computeCoverWindow()`（純函式、在 `window.ANALYTICS` 上），圖下方的標註也用它回傳的 `from`／`n`／`pct`——**圖與標註必須同一個來源**，否則標註會描述一個沒被畫出來的區間。boot-check 的 `cover-window:` 那組斷言守這條
 - **同一張圖上的多條線要用顏色＋線型雙重區分**（`chartOverlays` 的 `o.dash`，預設實線）。目前只有權益曲線是多線圖：金色實線＝投組、灰色虛線＝加權指數，圖例在 canvas 下方的 `.chart-meta`（`.sw-line`／`.sw-line.dash` 用 CSS border 畫線段，**不要用 `━`／`┄` 這類 box-drawing 字元**，中文字型下的粗細與對齊不可靠）。只靠顏色分在色弱與黑白列印下會失效
 
-### 改 CSS 前要知道的四件事（2026-07-30 起）
-- **顏色值只在 `:root` 的 `--l-*`／`--d-*` 值對裡寫一次**，三個主題情境（`:root`／dark media／`[data-theme=dark]`）只做重新指向。加新顏色要照這個寫，別直接往 dark 區塊塞色值
+### 改 CSS 前要知道的五件事（2026-07-30 起）
+- **顏色值只在 `:root` 的 `--l-*`／`--d-*` 值對裡寫一次**，四個主題情境（`:root`／dark media／`[data-theme=dark]`／觸控裝置）只做重新指向。加新顏色要照這個寫，別直接往 dark 區塊塞色值——**新增 token 記得四個情境都要指到**，漏掉觸控那份的症狀是「手機上只有那一個顏色是淺色的」
+- **手機＝只有深色**（2026-08-02 起）：判定用 `@media(hover:none) and (pointer:coarse)`（裝置能力）**不是 `max-width`**——手機橫放就超過 768px，用斷點會在轉向時閃回淺色。`index.html` 那個區塊的選擇器是 `:root,:root[data-theme]`（不是單一 `:root`），為的是贏過 `[data-theme=light]`；`server/static/` 三頁沒有 `data-theme`，所以直接把條件加進既有 dark media query 的清單（逗號＝OR），不必多寫一份色值。四頁的 `<meta name="theme-color">` 也帶同一個 media 條件
 - **`cssv()` 讀出來的字串直接進 `ctx.fillStyle`，無效顏色不會 throw、canvas 會沿用上一個顏色**（靜默失敗）。所以：`var()` 間接層由 `cssv()` 自己解（瀏覽器會解、**jsdom 不會**）；**不可以用 `light-dark()`**（在 custom property 裡不會被解析成單一顏色）。boot-check 的「every JS-read colour token resolves」那項守這條
 - **字級／圓角／間距／動效都有 token**（`--fs-*`／`--r-*`／`--pad-*`／`--tr`）。新規則用既有級距，不要再引入新的字面值；膠囊形狀用 `--r-full`，真圓才用 `50%`
 - **弱化文字用 `.faint` class，不要用 inline `style="color:…"`**——inline style 永遠贏過後來設的 `up-txt`/`down-txt`，這正是損益顏色曾經永遠是灰的原因

@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 手機是深色專用（見 CSS 的 hover:none/pointer:coarse 區塊），瀏覽器上下列的底色也要跟著，
+     否則 iOS Safari 的工具列會是亮的、跟頁面接不起來。media 讓桌機維持原本的行為。 -->
+<meta name="theme-color" content="#0e121b" media="(hover:none) and (pointer:coarse)">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex, nofollow">
 <title>台股投資報告</title>
@@ -73,9 +76,9 @@
     --ma5:var(--l-ma5);--ma20:var(--l-ma20);--ma60:var(--l-ma60);
     --shadow:var(--l-shadow);--shadow-hover:var(--l-shadow-hover);--shadow-modal:var(--l-shadow-modal);
   }
-  /* 深色映射寫兩次是必要的：媒體查詢與屬性選擇器無法合併成一條規則。但兩者都只有指向、
-     沒有色值，所以不構成「改色要改三處」的問題。:not([data-theme=light]) 讓手動指定的
-     淺色主題贏過系統偏好。 */
+  /* 深色映射寫三次是必要的：媒體查詢與屬性選擇器無法合併成一條規則（三個觸發條件：系統偏好、
+     手動指定、觸控裝置）。但三者都只有指向、沒有色值，所以不構成「改色要改三處」的問題。
+     :not([data-theme=light]) 讓手動指定的淺色主題贏過系統偏好。 */
   @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
     --bg:var(--d-bg);--surface:var(--d-surface);--surface-2:var(--d-surface-2);--line:var(--d-line);
     --ink:var(--d-ink);--ink-soft:var(--d-ink-soft);--ink-faint:var(--d-ink-faint);
@@ -96,6 +99,23 @@
   }
   :root[data-theme="dark"]{color-scheme:dark}
   :root[data-theme="light"]{color-scheme:light}
+  /* ═══ 手機＝只有深色 ═══（2026-08-02）
+     觸控裝置（hover:none + pointer:coarse）不分直式橫式、不看系統偏好，一律深色。判定用的是
+     裝置能力而不是視窗寬度：手機橫放就超過 768px，用斷點會在轉向時閃回淺色；反過來桌機把
+     視窗縮窄仍照系統偏好走。
+     選擇器寫成清單而不是單一 :root，是為了贏過上面兩個 (0,2,0) 的 data-theme 區塊——手機上
+     連手動指定的 light 也要是深色。頁面目前沒有主題切換鈕，這是為了將來加了也不破功。
+     色值一樣只有指向、沒有字面值，所以「改一個顏色仍是改一處」。 */
+  @media(hover:none) and (pointer:coarse){:root,:root[data-theme]{
+    --bg:var(--d-bg);--surface:var(--d-surface);--surface-2:var(--d-surface-2);--line:var(--d-line);
+    --ink:var(--d-ink);--ink-soft:var(--d-ink-soft);--ink-faint:var(--d-ink-faint);
+    --accent:var(--d-accent);--accent-soft:var(--d-accent-soft);
+    --up:var(--d-up);--up-bg:var(--d-up-bg);--down:var(--d-down);--down-bg:var(--d-down-bg);
+    --hold:var(--d-hold);--hold-bg:var(--d-hold-bg);--grid:var(--d-grid);--on-accent:var(--d-on-accent);
+    --ma5:var(--d-ma5);--ma20:var(--d-ma20);--ma60:var(--d-ma60);
+    --shadow:var(--d-shadow);--shadow-hover:var(--d-shadow-hover);--shadow-modal:var(--d-shadow-modal);
+    color-scheme:dark;   /* 少了這行，系統是淺色的手機上 input 與捲軸還是亮的 */
+  }}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.6;-webkit-font-smoothing:antialiased}
   .wrap{max-width:960px;margin:0 auto;padding:var(--wrap-pad)}

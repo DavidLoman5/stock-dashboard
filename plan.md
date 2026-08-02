@@ -265,6 +265,38 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## ✅ 已完成
 
+### 2026-08-02 手機一律深色（四頁）
+
+使用者要求「手機版改成只有深色模式」。四頁（`index.html` ＋ `server/static/` 三頁）在觸控裝置上
+不再跟隨系統偏好，固定用深色那組值。
+
+**判定條件用裝置能力不是視窗寬度**：`@media(hover:none) and (pointer:coarse)`。
+用 `max-width:768px` 的話手機橫放（iPhone 橫式 ~844px）會閃回淺色，而桌機把視窗拉窄反而
+被迫變深色——兩邊都錯。現行條件下桌機縮視窗仍照系統偏好走，平板則跟手機一樣固定深色。
+
+**兩頁家族的寫法不同，是因為結構不同**：
+- `index.html` 用「值對＋映射」，所以新增第三份**映射**（仍然沒有色值，改色仍是改一處）。
+  選擇器刻意寫成 `:root,:root[data-theme]` 而不是單一 `:root`：後者的 (0,1,0) 贏不過上面
+  `[data-theme=…]` 的 (0,2,0)，手動指定的 light 會在手機上贏回淺色。頁面現在沒有主題切換鈕，
+  這是為了將來加了也不破功。`color-scheme:dark` 一起寫在裡面，否則系統是淺色的手機上
+  input 與捲軸還是亮的。
+- `server/static/` 三頁是直接色值（沒有 `data-theme`），所以把條件**加進既有 dark media query
+  的清單**（`@media(prefers-color-scheme:dark),(hover:none) and (pointer:coarse)`，逗號＝OR）——
+  兩種情境共用同一份色值，不會多出第三份色碼要同步。`admin.html` 頁面內那組狀態徽章色
+  （`--chip-ok`/`--chip-wait`/`--chip-stop`/`--chip-plus`）也要跟著改，否則深色頁配淺色版
+  前景色（`#0a6b49` 這種特意壓深的）就沒對比了。
+
+**順手**：四頁補 `<meta name="theme-color" content="#0e121b" media="(hover:none) and (pointer:coarse)">`，
+讓 iOS Safari 的工具列跟頁面同色；`media` 屬性讓桌機維持原本行為。
+
+**驗證**：`tests.ps1` 全綠（[12] 三頁 token 區塊仍 byte-identical、與 index 色值一致）、
+`server` 93 項 unittest 全綠、boot-check 33 項全綠。另外把手機區塊的媒體查詢外殼拆掉跑一次
+boot-check，確認「手機那條映射」本身解得出真顏色（jsdom 不套用 media query，不然驗不到）：
+`--bg=#0e121b --surface=#161c28 --ink=#e7eaf1 --accent=#d9ad57 --up=#ff5d51 --down=#34c48d`，
+且 `data-theme` 為 none／light／dark 三種狀態都是深色。
+
+**待驗**：真機（jsdom 不做 media query 也不做 CSP）。
+
 ### 2026-07-31 Funnel 靜默失效（手機連不上）＋ 發佈閘門補主機名掃描
 
 使用者回報「手機看不到了，電腦可以」。**「電腦可以」是誤導性的對照組**——電腦走 tailnet
