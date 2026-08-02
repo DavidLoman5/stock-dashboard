@@ -38,7 +38,7 @@
 | `lib/pagedata.ps1` | `Set-PageBlocks` / `Get-PageBlockText`：唯一的 splice 實作 | 六支 .ps1 全部 |
 | `lib/publish-gate.ps1` | `Invoke-PublishGate`：唯一的對外出口（allowlist 上架＋內容掃描＋commit/push） | `publish.ps1` |
 | `lib/stance.ps1` | `Get-StanceGrade`：唯一的判級公式 | `update-holdings.ps1`；頁面只顯示結果 |
-| `lib/feed.ps1` | 唯一的抓取／快取／欄位索引／民國日期／politeness。**十一個端點都在這裡解析**（`Get-FeedIndexHistory`／`Get-FeedInstitutional`／`Get-FeedMargin`／`Get-FeedMarketInstAmount`／`Get-FeedMarketQuotes`／`Get-FeedDailySeries`／`Get-FeedIssuedShares`），快取目錄的建立與清理也是（`Get-FeedCacheDir`／`Invoke-FeedCachePrune`）。市值排序 `Select-FeedTopByMarketCap` 是純函式、不抓資料 | `screen.ps1`、`update-holdings.ps1`、`backtest.ps1` |
+| `lib/feed.ps1` | 唯一的抓取／快取／欄位索引／民國日期／politeness。**十一個官方端點都在這裡解析**（`Get-FeedIndexHistory`／`Get-FeedInstitutional`／`Get-FeedMargin`／`Get-FeedMarketInstAmount`／`Get-FeedMarketQuotes`／`Get-FeedDailySeries`／`Get-FeedIssuedShares`），快取目錄的建立與清理也是（`Get-FeedCacheDir`／`Invoke-FeedCachePrune`）。市值排序 `Select-FeedTopByMarketCap` 是純函式、不抓資料。檔尾另有**唯一的第三方來源** `Get-FeedUsChart`＋`$FeedUsSymbols`（Yahoo，隔夜美股，見下） | `screen.ps1`、`update-holdings.ps1`、`backtest.ps1`、`overnight.ps1` |
 | `lib/score.ps1` | **唯一的選股規則**：`Get-RegimeLight`／`Get-ChipStats`／`Test-ChipGate`／`Get-ChipScore`／`Get-TechScore`／`Get-FundScore`／`Get-TotalReturnSeries`／`Test-ExitRules`。股票與 ETF 是同一組函式的兩個 **profile**（`$ScreenProfiles`），不是兩份程式 | `screen.ps1`、`backtest.ps1`（回測直接呼叫生產規則，不再手抄） |
 | `lib/picks-log.ps1` | `picks-log.json` 的唯一讀寫者：retry＋FATAL 保護、`[ordered]` key 順序、保留期封存、`-ErrorAction Stop` | `screen.ps1`、`publish.ps1` |
 | `lib/stance-log.ps1` | `stance-log.json` 的唯一讀寫者＋`Get-PrevStanceMap`（純函式） | `update-holdings.ps1` |
@@ -55,9 +55,10 @@
 - **新增每日產出檔 → 預設不會被發佈**。要公開必須明確加進 `lib/publish-gate.ps1` 的 `$PublishAllowlist`；`tests.ps1` [8] 會擋下「已被 git 追蹤但不在 allowlist」的檔案
 
 ## 別手改：每日流程會覆寫的部分
-- `guest-notes.json`（Gemini 每日產出，gitignore）；`prev-recs.json`（每日由 holdings-notes.json 抽出，gitignore）
+- `guest-notes.json`（Gemini 每日產出，gitignore）；`prev-recs.json`（每日由 holdings-notes.json 抽出，含昨日 `rec` 與昨日 `_market`，gitignore）
+- `overnight-context.json`（`overnight.ps1` 每日重寫，gitignore）
 - `data/heavyweights.json`（市值前 30 大，`screen.ps1` **每週重算一次**、當週固定，gitignore）與 `data/heavyweights-context.json`（`update-holdings.ps1` 每日重寫，gitignore）。想改名單大小改 `screen.ps1` 的 `$hwTopN`，不要手改 JSON——長度不符會被判定為過期、下次執行就整份重算蓋掉
-- splice 區塊全部：`<script id>` = `dashdata`、`holdingsmeta`、`holdingsnotes`（含 `_market` 市場風向）、`pkdata`、`pkline`、`pknotes`、`evaldata`（週五）、`backtest`（月跑）、`meta`（報告日期／行情基準日）、`tokenusage`（`finish-daily-push.ps1` 寫，非 AI）、`appuser`（伺服器逐使用者注入，committed 檔案內**必須留空**）
+- splice 區塊全部：`<script id>` = `dashdata`、`holdingsmeta`、`holdingsnotes`（含 `_market` 市場風向＋`_market.night` 隔夜前瞻）、`pkdata`、`pkline`、`pknotes`、`evaldata`（週五）、`backtest`（月跑）、`meta`（報告日期／行情基準日）、`tokenusage`（`finish-daily-push.ps1` 寫，非 AI）、`appuser`（伺服器逐使用者注入，committed 檔案內**必須留空**）
 - Hero 市值/損益/整體傾向（heroStance）、大盤數字、市場風向區（windBox/miSox/miMood）、權重、今日訊號、績效曲線 → 頁面 JS 自動算或 `_market` 覆寫，勿寫死；HTML 內殘留文字只是 JS 失敗時的 fallback
 
 ## 可以安全改
@@ -83,6 +84,7 @@ CSS／版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯�
 - 伺服器只綁 `127.0.0.1`，對外一律經 tunnel（目前 Tailscale Funnel）；不要改成 `0.0.0.0` 或在路由器開埠
 - 換 tunnel 必須同步改 `config.json` 的 `proxyHeader`（Funnel=`X-Forwarded-For`、cloudflared=`CF-Connecting-IP`）——設錯不是無效，是讓所有按 IP 的節流可被偽造繞過
 - 抓官方 API 用 `Invoke-WebRequest`+手動 UTF-8 解碼（`Invoke-RestMethod` 會亂碼）；用現成的 `GetJson()`
+- **隔夜美股（`overnight.ps1` → `overnight-context.json`）是全專案唯一的第三方資料來源**（Yahoo chart API，2026-08-02 起）。三條規則：① **fail-open**，任何失敗都不可擋住每日流程，全部失敗時**刪掉舊檔**而不是留著（過期的期貨報價比沒有更危險，AI 分不出來）；② 這些數字只是 AI 分析的情境，**永遠不進評分、不進判級、不當成官方數字呈現**；③ 變動百分比一律**從日 K 陣列自己算**——`previousClose` 在指數上是空的、`chartPreviousClose` 是整個 range 之前的收盤，拿來當「昨收」會算出看起來合理的錯數字。存在理由：20:00 執行時美股還沒開盤，最近一個美股收盤已被當日台股消化完，真正沒被定價的是盤後財報與期貨（2026-07-30 就是這樣漏掉微軟財報）
 - `index.html` 要有 `<!DOCTYPE html>`＋`<meta charset="utf-8">`＋viewport；CSP `default-src 'none'` → 圖表 Canvas 手繪、零外部資源
 - **台股紅漲綠跌**（--up 紅、--down 綠）；證交所日期是民國年（西元−1911）
 - picks-log／stance-log 讀取失敗**絕不可用空資料覆寫**（FATAL/skip 防護勿移除）

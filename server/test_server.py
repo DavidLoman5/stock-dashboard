@@ -989,9 +989,12 @@ class TestShell(Base):
         # the live server shipped whatever this module said. tests.ps1 [9] asserts the same
         # lists on the PowerShell side; this is the Python half of that pair.
         self.assertEqual(pagedata.guest_note_fields(), ("sigFund", "tech", "chip", "fund"))
-        self.assertEqual(pagedata.owner_only_fields(), ("rec", "news", "wind"))
+        self.assertEqual(pagedata.owner_only_fields(), ("rec", "news", "wind", "night"))
         self.assertEqual(pagedata.market_public_fields(),
                          ("windLead", "sox", "mood", "moodK"))
+        # `night` is _market's second owner-only field: the overnight read is written as
+        # 若X則Y against this portfolio's own levels, which is advice rather than a market fact.
+        self.assertNotIn("night", pagedata.market_public_fields())
         # and no guest field may also be owner-only
         self.assertEqual(
             set(pagedata.guest_note_fields()) & set(pagedata.owner_only_fields()), set())

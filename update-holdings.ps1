@@ -79,6 +79,14 @@ Write-Host "  codes: $($ownCodes -join ', ')$(if($extraCodes.Count){" (+$($extra
 # screen.ps1 runs AFTER this script, so a freshly rebuilt list lands here one day later. That is
 # fine for a weekly list and costs no extra request; the alternative was fetching the whole
 # market a second time just to be same-day.
+#
+# Subtracted here is $ownCodes and ONLY $ownCodes. The daily prompt is allowed to name these
+# codes precisely because none of them is a holding of the reader's, and it must never name one
+# from holdings-context.json; the owner's portfolio is what that guarantee is about.
+# Subtracting the whole user union instead - which this did until 2026-08-02 - silently deleted
+# any heavyweight some guest happened to hold. Measured that day: 8 of 30 gone, 2330 台積電
+# among them, on a day it moved the index 1,746 points. Same class of bug as the one c9d36e3
+# fixed: the constituent view is not allowed to depend on who else registered.
 $hwCodes=@()
 $hwPath=Join-Path $DataDir 'heavyweights.json'
 if(Test-Path $hwPath){
@@ -86,12 +94,14 @@ if(Test-Path $hwPath){
   if($null -eq $hw){ Write-Host "  WARN: heavyweights.json unreadable - skipping constituent view today" }
   else {
     $hwCodes=@(@($hw.codes) | ForEach-Object { "$_" } |
-                Where-Object { $_ -and $codes -notcontains $_ } | Select-Object -Unique)
-    Write-Host "  heavyweights: $($hwCodes.Count) code(s) from $($hw.asOfWeek) (holdings already in the set are skipped)"
+                Where-Object { $_ -and $ownCodes -notcontains $_ } | Select-Object -Unique)
+    Write-Host "  heavyweights: $($hwCodes.Count) code(s) from $($hw.asOfWeek) (owner holdings skipped)"
   }
 }
-# everything that gets fetched; $codes stays the union that feeds codes-context.json
-$fetchCodes = @($codes) + @($hwCodes)
+# Everything that gets fetched; $codes stays the union that feeds codes-context.json. Deduped,
+# because $hwCodes and $codes now legitimately overlap (a guest may hold a heavyweight) and
+# fetching a code twice doubles its requests against the exchange's rate limit for nothing.
+$fetchCodes = @(@($codes) + @($hwCodes) | Select-Object -Unique)
 
 Write-Host "[2/6] STOCK_DAY per holding (4 months) + FMTQIK (TAIEX)..."
 $today = Get-Date

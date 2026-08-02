@@ -381,13 +381,16 @@ Assert (@($hj.trades).Count -eq 0) "holdings.json demo carries no trades (found 
 # The field lists live in page-contract.json now, so assert the contract rather than the source.
 $contract = Get-PageContract
 Assert (@($contract.noteFields.guest).Count -gt 0) "contract declares guest note fields"
-foreach($f in @('rec','news','wind')){
+foreach($f in @('rec','news','wind','night')){
   Assert (@($contract.noteFields.ownerOnly) -contains $f) "contract marks '$f' owner-only"
   Assert (@($contract.noteFields.guest) -notcontains $f) "contract never lets '$f' through to guests"
 }
-# _market has its own allowlist for the same reason; `wind` names owner holdings in prose.
+# _market has its own allowlist for the same reason; `wind` names owner holdings in prose, and
+# `night` is 若X則Y written against this portfolio's own levels - advice, not a market fact.
 Assert (@($contract.noteFields.marketPublic).Count -gt 0) "contract declares public _market fields"
-Assert (@($contract.noteFields.marketPublic) -notcontains 'wind') "contract keeps _market.wind private"
+foreach($f in @('wind','night')){
+  Assert (@($contract.noteFields.marketPublic) -notcontains $f) "contract keeps _market.$f private"
+}
 $bd = Get-Content (Join-Path $root 'build-demo.ps1') -Raw
 Assert ($bd -match 'noteFields\.guest') "build-demo filters by the contract's guest field list"
 Assert ($bd -match 'noteFields\.marketPublic') "build-demo filters _market by the contract too"
@@ -415,8 +418,11 @@ $p1=$idxTxt.IndexOf($mkr)
 Assert ($p1 -ge 0) "index.html has a holdingsnotes marker"
 if($p1 -ge 0){
   $noteBlock=$idxTxt.Substring($p1+$mkr.Length, $idxTxt.IndexOf('</script>',$p1)-($p1+$mkr.Length))
-  foreach($f in @('"rec"','"wind"','"news"')){
-    Assert (-not $noteBlock.Contains($f)) "index.html at rest carries no owner-only note field $f"
+  # Derived from the contract, not listed here: a hand-copied trio silently stopped covering
+  # `night` the day it was added to noteFields.ownerOnly (2026-08-02), which is the same drift
+  # page-contract.json exists to end.
+  foreach($f in @($contract.noteFields.ownerOnly)){
+    Assert (-not $noteBlock.Contains("`"$f`"")) "index.html at rest carries no owner-only note field `"$f`""
   }
 }
 # The real check is no longer "are these particular names untracked" but "is everything git
@@ -922,7 +928,12 @@ Assert ((Select-FeedTopByMarketCap -Profile $null -Quotes $quoF).Count -eq 0) "a
 $uh=Get-Content (Join-Path $root 'update-holdings.ps1') -Raw -Encoding UTF8
 Assert ($uh -match '\$allContext=@\(\)\s*\r?\n\s*foreach\(\$c in \$codes\)') "codes-context.json still iterates `$codes, not `$fetchCodes"
 Assert ($uh -match 'heavyweights-context\.json') "heavyweights get their own context file"
-Assert ($uh -match '\$fetchCodes = @\(\$codes\) \+ @\(\$hwCodes\)') "heavyweights join the fetch set but not `$codes"
+Assert ($uh -match '\$fetchCodes = @\(@\(\$codes\) \+ @\(\$hwCodes\) \| Select-Object -Unique\)') "heavyweights join the fetch set but not `$codes, deduped"
+# The constituent view must not depend on who else registered. Subtracting the whole user union
+# (the pre-2026-08-02 wording, `$codes) deleted any heavyweight a guest happened to hold: 8 of 30
+# vanished on 2026-08-02, 2330 among them. Only the OWNER's holdings may be subtracted - that is
+# the codes the daily prompt is forbidden to name.
+Assert ($uh -match 'Where-Object \{ \$_ -and \$ownCodes -notcontains \$_ \} \| Select-Object -Unique\)\s*\r?\n\s*Write-Host "  heavyweights:') "heavyweights subtract the owner's holdings, not the whole user union"
 # the FATAL guard is now graded: owner short series aborts, anyone else's is skipped
 Assert ($uh -match '\$emptyOwn=@\(\$ownCodes \|') "FATAL guard tests the owner's holdings only"
 Assert ($uh -match 'WARN: series too short, skipping today') "a non-owner short series is skipped, not fatal"
@@ -931,6 +942,84 @@ Assert ($uh -match 'WARN: series too short, skipping today') "a non-owner short 
 Assert ($uh -match ([regex]::Escape('foreach($k in $DASH.Keys){ if($k -eq ''TAIEX'' -or $codes -contains $k){ $DASHOut'))) "quotes.json ships holdings only, never the heavyweights"
 # grading and stance-log stay on $codes: heavyweights must not dilute evaluate.ps1's sample
 Assert ($uh -notmatch '\$psAll\[\$c\]=\$prevStanceMap\[\$c\]\.s \}[\s\S]{0,200}\$fetchCodes') "stance history stays on holdings, not the fetch set"
+
+Write-Host ""
+Write-Host "[14] overnight drivers (third-party, must fail open)..."
+# The 20:00 schedule fires before the US opens, so the last US close is already inside the Taiwan
+# session that just ended. These numbers are the part that is NOT priced in yet. Everything here
+# runs through Set-FeedTransport, so the parsing is exercised without a network.
+
+# a. the shape Yahoo actually returns. Bars, not meta: `previousClose` is absent on indices and
+#    `chartPreviousClose` is the close before the whole range window - reading either as
+#    "yesterday" yields a plausible, wrong percentage.
+$soxFixture = @{
+  chart = @{ result = @(@{
+    meta = @{ symbol='^SOX'; regularMarketPrice=11311.075; regularMarketTime=1785532559
+              chartPreviousClose=14246.96 }
+    # the real 2026-07-24..07-31 sessions, at 13:30 UTC = the 09:30 ET open
+    timestamp  = @(1784899800,1785159000,1785245400,1785331800,1785418200,1785504600)
+    indicators = @{ quote = @(@{ close=@(11818.88,11554.88,11035.68,10447.49,11302.99,11311.08) }) }
+  }) }
+}
+Set-FeedTransport { param($u) if($u -match 'query1\.finance\.yahoo\.com'){ return $soxFixture }; return $null }
+$us=Get-FeedUsChart -Symbol '^SOX'
+Assert ($us.Ok) "US chart: fixture parsed"
+Assert ($us.Bars.Count -eq 6) "US chart: one bar per timestamp (got $($us.Bars.Count))"
+Assert ($us.Bars[0].d -eq '2026-07-24' -and $us.Bars[5].d -eq '2026-07-31') "US chart: bar timestamps become US trading dates"
+Assert ($us.Last -eq 11311.075) "US chart: Last is the live quote, not the last bar"
+Assert ($us.Bars[3].c -eq 10447.49) "US chart: closes land in bar order"
+
+# b. nulls and malformed responses must degrade, never throw. A holiday arrives as a null close;
+#    a shape change arrives as a missing branch; 429 arrives as $null from the transport.
+$holed = @{ chart = @{ result = @(@{
+  meta=@{ symbol='^SOX'; regularMarketPrice=100.0 }
+  timestamp=@(1784727000,1784986200,1785072600)
+  indicators=@{ quote=@(@{ close=@(10.0,$null,12.0) }) } }) } }
+Set-FeedTransport { param($u) return $holed }
+$h=Get-FeedUsChart -Symbol '^SOX'
+Assert ($h.Ok -and $h.Bars.Count -eq 2) "US chart: a null close drops that bar rather than becoming 0"
+Set-FeedTransport { param($u) return @{ chart=@{ result=@() } } }
+Assert (-not (Get-FeedUsChart -Symbol '^SOX').Ok) "US chart: an empty result reports Ok=false"
+Set-FeedTransport { param($u) return @{ nothing='useful' } }
+Assert (-not (Get-FeedUsChart -Symbol '^SOX').Ok) "US chart: an unrecognised shape reports Ok=false, no throw"
+Set-FeedTransport { param($u) return $null }
+Assert (-not (Get-FeedUsChart -Symbol '^SOX').Ok) "US chart: a failed fetch (429/offline) reports Ok=false"
+Set-FeedTransport $null
+
+# c. every symbol the daily run needs is declared, and the ADR ratio is not a magic number
+Assert ($FeedUsSymbols.Contains('sox') -and $FeedUsSymbols.Contains('nq') -and $FeedUsSymbols.Contains('tsm') -and $FeedUsSymbols.Contains('twd')) "overnight symbol table covers index, future, ADR and FX"
+$ov=Get-Content (Join-Path $root 'overnight.ps1') -Raw -Encoding UTF8
+Assert ($ov -match '\$AdrRatio\s*=\s*5') "1 ADR = 5 TWSE shares, named rather than inlined"
+
+# c2. the date arithmetic, on the real week the miss happened in. `sox` is a WEEK-to-date figure,
+#     so the baseline is the last close BEFORE Monday - five sessions back is a different, and
+#     wrong, number. Hand-typed on 2026-07-30 as -10.1%; the bars say -11.60%.
+. (Join-Path $root 'overnight.ps1') -DefineOnly
+Assert ((WeekStart '2026-07-31') -eq '2026-07-27') "week starts Monday (Friday input)"
+Assert ((WeekStart '2026-07-27') -eq '2026-07-27') "week starts Monday (Monday input is its own start)"
+Assert ((WeekStart '2026-07-26') -eq '2026-07-20') "week starts Monday (Sunday belongs to the week just ended)"
+$wkBars=@(
+  @{d='2026-07-24'; c=11818.88}, @{d='2026-07-27'; c=11554.88}, @{d='2026-07-28'; c=11035.68}
+  @{d='2026-07-29'; c=10447.49}, @{d='2026-07-30'; c=11302.99}
+)
+Assert ((LastBarBefore $wkBars (WeekStart '2026-07-29')).d -eq '2026-07-24') "week-to-date baseline is the last close before Monday"
+Assert ((Pct 10447.49 (LastBarBefore $wkBars (WeekStart '2026-07-29')).c) -eq -11.60) "SOX week-to-date on the day of the miss (2026-07-29 close)"
+Assert ((Pct 11302.99 10447.49) -eq 8.19) "the +8.19% session the 20:00 run could not see yet"
+Assert ($null -eq (Pct 100 $null) -and $null -eq (Pct 100 0)) "a missing or zero baseline yields null, not a divide-by-zero"
+Assert ($null -eq (LastBarBefore $wkBars '2026-07-24')) "no earlier bar yields null rather than the first bar"
+
+# d. fail-open, asserted on the wiring. A stale snapshot is worse than a missing one here:
+#    yesterday's futures quote read as tonight's is a wrong number the analysis step cannot
+#    detect, whereas a missing file is a documented "skip this section".
+Assert ($ov -match 'Remove-Item \$outPath -Force') "a total failure deletes the stale snapshot"
+Assert ($ov -match "exit 0\s*\r?\n?\s*\}") "a total failure still exits 0 - the daily run continues"
+Assert ($ov -notmatch "\`$ErrorActionPreference='Stop'") "overnight.ps1 must not abort the fetch phase"
+Assert ($ov -match "asOf=\(Get-Date\)") "the snapshot stamps asOf so staleness is detectable"
+# the premium needs the FX rate AND 2330; a partial one would be a wrong number, not a gap
+Assert ($ov -match "if\(\`$q\.ContainsKey\('tsm'\) -and \`$q\.ContainsKey\('twd'\)\)") "ADR premium requires both the ADR and the FX rate"
+# run-daily.sh must call it best-effort, and last: nq/tsm/twd are live quotes
+$rd=Get-Content (Join-Path $root 'run-daily.sh') -Raw -Encoding UTF8
+Assert ($rd -match 'overnight\.ps1 \|\| true') "run-daily.sh calls overnight.ps1 best-effort"
 
 Write-Host ""
 if($fails.Count -eq 0){ Write-Host "ALL TESTS PASSED"; exit 0 }

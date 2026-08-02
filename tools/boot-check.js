@@ -269,3 +269,35 @@ process.exitCode = failed === 0 ? 0 : 1;
   }
   if (bad) process.exitCode = 1;
 })();
+
+// --- _market.night: the overnight read. It is owner-only (page-contract.json), so the public
+// demo and every guest page render this element with no data at all - an empty box would be a
+// visible artefact of a field they are not allowed to see. There is deliberately no HTML
+// fallback either, unlike windBox: a stale overnight forecast is worse than none.
+(function nightBoxFixtures(){
+  const el = w.document.getElementById('nightBox');
+  if (!el) { console.log('FAIL night: #nightBox exists'); process.exitCode = 1; return; }
+  if (typeof w.buildWind !== 'function') { console.log('FAIL night: buildWind is callable'); process.exitCode = 1; return; }
+  const ok = [];
+  const render = m => { w.HOLDINGS_NOTES._market = m; w.buildWind(); };
+  const base = { windLead: 'x', sox: '-1.0%', mood: 'y', moodK: 'neu' };
+
+  render({ ...base, night: '今晚 21:30 美股開盤；若費半收紅逾 3%，明日開高守 42,800 視為有效。' });
+  ok.push(['night renders when present', el.hidden === false && el.textContent.includes('42,800'), el.hidden]);
+  ok.push(['night is labelled', el.textContent.includes('隔夜前瞻'), '']);
+
+  render({ ...base });
+  ok.push(['no night hides the box entirely', el.hidden === true, el.hidden]);
+  render({ ...base, night: '   ' });
+  ok.push(['whitespace-only night hides the box too', el.hidden === true, el.hidden]);
+
+  render({ ...base, night: '<img src=x onerror=alert(1)>盤前' });
+  ok.push(['night is escaped, not parsed', el.querySelector('img') === null && el.textContent.includes('<img'), '']);
+
+  let bad = 0;
+  for (const [name, pass, val] of ok) {
+    if (!pass) bad++;
+    console.log(`${pass ? 'PASS' : 'FAIL'} night: ${name}${val === '' ? '' : '  [' + val + ']'}`);
+  }
+  if (bad) process.exitCode = 1;
+})();

@@ -44,6 +44,10 @@ fetch() {
   # 1b. yesterday's per-code advice, on its own, BEFORE anything overwrites holdings-notes.json.
   #     The AI step needs it to check whether yesterday's triggers fired; reading the whole
   #     ~10KB notes file to get at ~1KB of `rec` was most of that step's input budget.
+  #
+  #     `_market` rides along for the same reason picks-log exists: yesterday's market call has
+  #     to be answerable today. On 2026-07-30 the run published moodK "bear" and the next session
+  #     was +7.97%; nothing in the pipeline ever made the next day's run look at that.
   python3 - <<'PY' || true
 import json, os
 try:
@@ -53,12 +57,14 @@ except (OSError, ValueError):
     raise SystemExit(0)
 recs = {c: n["rec"] for c, n in notes.items()
         if not c.startswith("_") and isinstance(n, dict) and n.get("rec")}
-if not recs:
+mkt = notes.get("_market") or {}
+market = {k: mkt[k] for k in ("windLead", "mood", "moodK", "night") if mkt.get(k)}
+if not recs and not market:
     raise SystemExit(0)
-out = {"writtenAt": os.path.getmtime("holdings-notes.json"), "recs": recs}
+out = {"writtenAt": os.path.getmtime("holdings-notes.json"), "recs": recs, "market": market}
 with open("prev-recs.json", "w", encoding="utf-8") as fh:
     json.dump(out, fh, ensure_ascii=False, indent=1)
-print("  prev-recs.json: %d 檔昨日建議" % len(recs))
+print("  prev-recs.json: %d 檔昨日建議%s" % (len(recs), "＋昨日市場判斷" if market else ""))
 PY
 
   # 2. quotes for that union -> data/quotes.json (shared) + holdings-context.json (owner only,
@@ -81,6 +87,12 @@ PY
 
   # 4. Friday attribution
   [ "$(date +%u)" = "5" ] && pwsh -File evaluate.ps1 || true
+
+  # 5. the overnight drivers of TOMORROW's open - US futures, the TSMC ADR, the last SOX close.
+  #    Deliberately last: nq/tsm/twd are live quotes, so the closer to the analysis step the
+  #    better. Best-effort like gnotes above; the source is third-party and nothing may block on
+  #    it. A total failure removes the file, and the AI step skips the section (see SKILL.md).
+  pwsh -File overnight.ps1 || true
 }
 
 publish() {

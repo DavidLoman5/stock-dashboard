@@ -18,6 +18,10 @@ guest-notes.json
 # derived each morning from holdings-notes.json purely so the AI step can read ~1KB instead of
 # the whole file; nothing reads it afterwards, so it is churn in every diff
 prev-recs.json
+# overnight.ps1's snapshot of the US drivers of tomorrow's open. Rewritten daily, and the only
+# file here whose numbers are third-party (Yahoo) rather than the exchange's - it is context for
+# the analysis step, not a figure this project publishes.
+overnight-context.json
 # Owner-derived daily artifacts. Every one of these was committed to the public repo until
 # 2026-07-25, because the privacy check only ever looked at index.html while `git add -A`
 # published the whole tree. Nothing needs them in git - build-demo.ps1, publish.ps1,

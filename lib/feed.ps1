@@ -519,3 +519,69 @@ function Get-FeedDailySeries {
   $rows = & $fetch $Market
   return @{ Rows=$rows; Market=$Market }
 }
+
+# ------------------------------------------------- overnight drivers (third-party, NOT official)
+# Everything above this line comes from TWSE/TPEx, the authoritative record for every number this
+# project publishes. What follows does not. Yahoo's chart endpoint is undocumented, can change
+# shape without notice, and answers 429 when it feels like it (a bare curl with no User-Agent
+# gets one immediately; Invoke-WebRequest's default UA does not). Two rules follow:
+#   * every caller must survive $null - nothing in the daily run may block on this
+#   * these numbers are context for the analysis step. They never feed scoring, never feed the
+#     rule engine, and are never presented as an official figure.
+#
+# Why the daily run wants them at all: the 20:00 schedule fires ~90 minutes before the US opens,
+# so the most recent US *close* has already been priced into the Taiwan session that just ended.
+# What has NOT been priced in is what moves tomorrow's open - index futures, the TSMC ADR, and
+# earnings released after last night's US close. On 2026-07-30 that gap was the whole story:
+# Microsoft's results were public from 04:05 Taipei that morning, the 20:00 run never saw them,
+# and the next session was +7.97%. See plan.md 2026-08-02.
+#
+# It lives in this file rather than a script of its own so Set-FeedTransport covers it too - the
+# parsing is then testable offline, which is the entire reason this file exists.
+
+$FeedUsSymbols = [ordered]@{
+  sox = '^SOX'    # Philadelphia Semiconductor: the index Taiwan's electronics weight tracks
+  nq  = 'NQ=F'    # Nasdaq-100 front month. Trades ~23h/day, so this one IS live at 20:00 Taipei
+  tsm = 'TSM'     # TSMC ADR. 1 ADR = 5 TWSE shares
+  twd = 'TWD=X'   # USD/TWD, to put the ADR back into NT dollars
+}
+
+function Get-FeedUsChart {
+  <#  One symbol's recent daily bars. Returns
+        @{ Ok=$true; Symbol; Last; QuoteAt=[datetime] UTC; Bars=@(@{d='yyyy-MM-dd'; c=<close>}) }
+      or @{ Ok=$false } for a failed fetch or any response that is not shaped as expected.
+
+      Bars, not meta, are the source of truth for changes. `previousClose` is absent on indices
+      and `chartPreviousClose` is the close before the whole range window, not the prior session
+      - reading either as "yesterday" silently produces a wrong percentage. `Last` is the live
+      quote (meta.regularMarketPrice), which for futures and FX at 20:00 Taipei is exactly the
+      forward-looking number we came for.
+
+      Bar timestamps are the session OPEN in UTC (13:30 for a US equity day), so the UTC date and
+      the US trading date are the same calendar day. #>
+  param([Parameter(Mandatory=$true)][string]$Symbol,[string]$Range='1mo')
+  $url = 'https://query1.finance.yahoo.com/v8/finance/chart/{0}?range={1}&interval=1d' -f
+           [uri]::EscapeDataString($Symbol),$Range
+  $r = Get-FeedJson $url
+  Wait-FeedPolite
+  $res = $null
+  try{ $res = @($r.chart.result)[0] }catch{}
+  if(-not $res){ return @{ Ok=$false } }
+  $ts = @($res.timestamp)
+  $cl = @()
+  try{ $cl = @(@($res.indicators.quote)[0].close) }catch{}
+  if($ts.Count -eq 0 -or $ts.Count -ne $cl.Count){ return @{ Ok=$false } }
+  $bars=@()
+  for($i=0;$i -lt $ts.Count;$i++){
+    if($null -eq $cl[$i]){ continue }          # holidays and half-formed bars arrive as null
+    $bars += ,@{ d=([DateTimeOffset]::FromUnixTimeSeconds([long]$ts[$i])).UtcDateTime.ToString('yyyy-MM-dd')
+                 c=[double]$cl[$i] }
+  }
+  if($bars.Count -eq 0){ return @{ Ok=$false } }
+  $qa=$null
+  try{ if($res.meta.regularMarketTime){ $qa=([DateTimeOffset]::FromUnixTimeSeconds([long]$res.meta.regularMarketTime)).UtcDateTime } }catch{}
+  $last=$null
+  try{ if($null -ne $res.meta.regularMarketPrice){ $last=[double]$res.meta.regularMarketPrice } }catch{}
+  if($null -eq $last){ $last=$bars[$bars.Count-1].c }
+  return @{ Ok=$true; Symbol="$($res.meta.symbol)"; Last=$last; QuoteAt=$qa; Bars=$bars }
+}

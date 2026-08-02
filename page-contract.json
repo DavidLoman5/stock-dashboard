@@ -16,8 +16,11 @@
     "`marketPublic` is the same idea for the pseudo-code `_market`: the fields there that are",
     "genuinely market-wide. `wind` is deliberately absent - the daily prompt writes it as",
     "commentary on the owner's portfolio ('投組今日明顯分化：00990A…'), so it names real",
-    "holdings; buildWind() renders fine from windLead alone. Allowlist, not blocklist: a field",
-    "added upstream stays private until it is named here.",
+    "holdings; buildWind() renders fine from windLead alone. `night` (the overnight read: what",
+    "tonight's US session could do to tomorrow's open, and what to do if it does) is absent for",
+    "the same reason - it is written as 若X則Y against this portfolio's own levels, which is",
+    "advice, not a market fact. Allowlist, not blocklist: a field added upstream stays private",
+    "until it is named here.",
     "",
     "One narrower exception, live server only (build-demo.ps1/publish-gate.ps1 are unaffected -",
     "the git-published demo has no guest_plus accounts, so `rec` there is still unconditionally",
@@ -44,7 +47,7 @@
   },
   "noteFields": {
     "guest": ["sigFund", "tech", "chip", "fund"],
-    "ownerOnly": ["rec", "news", "wind"],
+    "ownerOnly": ["rec", "news", "wind", "night"],
     "marketPublic": ["windLead", "sox", "mood", "moodK"]
   }
 }
