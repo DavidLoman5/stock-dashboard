@@ -1,8 +1,8 @@
 {
-  "date": "2026-07-30",
-  "inputTokens": 1185,
-  "outputTokens": 60316,
-  "cacheReadTokens": 2926682,
-  "cacheCreationTokens": 122493,
+  "date": "2026-08-03",
+  "inputTokens": 52,
+  "outputTokens": 53396,
+  "cacheReadTokens": 2401894,
+  "cacheCreationTokens": 135968,
   "runs": 1
 }
