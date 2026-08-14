@@ -1,86 +1,92 @@
 {
-  "generated": "2026-08-07",
-  "closedN": 23,
+  "generated": "2026-08-14",
+  "closedN": 35,
   "overall": {
-    "n": 23,
-    "winRate": 61.0,
-    "avgAlpha": 1.73,
-    "avgRet": -0.39
+    "n": 35,
+    "winRate": 49.0,
+    "avgAlpha": 0.91,
+    "avgRet": 0.49
   },
   "byReason": {
+    "20日到期": {
+      "n": 2,
+      "winRate": 100.0,
+      "avgAlpha": 15.47,
+      "avgRet": 15.2
+    },
     "外資連2日轉賣": {
-      "n": 15,
-      "winRate": 67.0,
-      "avgAlpha": 2.45,
-      "avgRet": 1.15
+      "n": 24,
+      "winRate": 46.0,
+      "avgAlpha": 0.02,
+      "avgRet": 0.58
     },
     "跌破月線": {
-      "n": 8,
-      "winRate": 50.0,
-      "avgAlpha": 0.39,
-      "avgRet": -3.28
+      "n": 9,
+      "winRate": 44.0,
+      "avgAlpha": 0.06,
+      "avgRet": -3.01
     }
   },
   "byLight": {
     "green": {
-      "n": 4,
+      "n": 6,
       "winRate": 50.0,
-      "avgAlpha": -0.51,
-      "avgRet": 0.16
+      "avgAlpha": -0.24,
+      "avgRet": 1.06
     },
     "red": {
-      "n": 9,
-      "winRate": 33.0,
-      "avgAlpha": 0.23,
-      "avgRet": 0.37
+      "n": 16,
+      "winRate": 19.0,
+      "avgAlpha": -2.21,
+      "avgRet": -0.41
     },
     "yellow": {
-      "n": 3,
-      "winRate": 100.0,
-      "avgAlpha": 2.19,
-      "avgRet": -1.87
+      "n": 4,
+      "winRate": 75.0,
+      "avgAlpha": 1.14,
+      "avgRet": -1.4
     }
   },
   "byInd": {
     "金融保險業": {
-      "n": 4,
-      "winRate": 50.0,
-      "avgAlpha": -0.24,
-      "avgRet": 0.08
+      "n": 6,
+      "winRate": 33.0,
+      "avgAlpha": -0.56,
+      "avgRet": 0.06
     },
     "電腦及週邊設備業": {
-      "n": 3,
-      "winRate": 100.0,
-      "avgAlpha": 7.62,
-      "avgRet": 0.05
+      "n": 6,
+      "winRate": 50.0,
+      "avgAlpha": 2.48,
+      "avgRet": -0.18
     }
   },
   "byAiTag": {
     "one-off": {
-      "n": 5,
-      "winRate": 40.0,
-      "avgAlpha": 0.49,
-      "avgRet": 0.93
+      "n": 7,
+      "winRate": 43.0,
+      "avgAlpha": 3.02,
+      "avgRet": 3.63
     },
     "sustainable": {
-      "n": 14,
-      "winRate": 71.0,
-      "avgAlpha": 2.97,
-      "avgRet": 0.29
+      "n": 24,
+      "winRate": 50.0,
+      "avgAlpha": 0.63,
+      "avgRet": 0.39
     }
   },
   "byChip": {
     "chip30-37": {
-      "n": 13,
-      "winRate": 62.0,
-      "avgAlpha": 1.39,
-      "avgRet": -0.26
+      "n": 20,
+      "winRate": 45.0,
+      "avgAlpha": 0.12,
+      "avgRet": -0.23
     },
     "chip38+": {
-      "n": 2,
+      "n": 5,
       "winRate": 0.0,
-      "avgAlpha": -4.68,
-      "avgRet": -0.56
+      "avgAlpha": -6.48,
+      "avgRet": -0.83
     }
   },
   "byTech": {
@@ -91,30 +97,30 @@
       "avgRet": 0.0
     },
     "tech15-24": {
-      "n": 5,
-      "winRate": 60.0,
-      "avgAlpha": -0.41,
-      "avgRet": -1.14
-    },
-    "tech25+": {
       "n": 9,
       "winRate": 44.0,
-      "avgAlpha": 0.29,
-      "avgRet": 0.13
+      "avgAlpha": -1.49,
+      "avgRet": -0.77
+    },
+    "tech25+": {
+      "n": 15,
+      "winRate": 27.0,
+      "avgAlpha": -1.66,
+      "avgRet": -0.12
     }
   },
   "byFund": {
     "fund10-19": {
-      "n": 5,
-      "winRate": 40.0,
-      "avgAlpha": 0.28,
-      "avgRet": -0.7
+      "n": 11,
+      "winRate": 27.0,
+      "avgAlpha": -0.33,
+      "avgRet": 0.2
     },
     "fund20+": {
-      "n": 10,
-      "winRate": 60.0,
-      "avgAlpha": 0.73,
-      "avgRet": -0.1
+      "n": 14,
+      "winRate": 43.0,
+      "avgAlpha": -1.89,
+      "avgRet": -0.78
     }
   },
   "byYoy": {
@@ -125,16 +131,16 @@
       "avgRet": 0.7
     },
     "yoy0-30": {
-      "n": 8,
-      "winRate": 62.0,
-      "avgAlpha": -0.16,
-      "avgRet": -0.11
+      "n": 14,
+      "winRate": 36.0,
+      "avgAlpha": -2.35,
+      "avgRet": -0.47
     },
     "yoy30+": {
-      "n": 5,
-      "winRate": 60.0,
-      "avgAlpha": 2.33,
-      "avgRet": -1.01
+      "n": 9,
+      "winRate": 44.0,
+      "avgAlpha": 0.49,
+      "avgRet": -0.39
     }
   }
 }
