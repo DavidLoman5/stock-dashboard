@@ -421,6 +421,21 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
+    def process_request_thread(self, request, client_address):
+        """Hand the thread's sqlite connections back when the connection is done.
+
+        db.get() caches per thread and ThreadingHTTPServer runs every connection on a fresh
+        thread, so without this each request leaves a connection behind holding its fds
+        (app.db + -wal). At the default RLIMIT_NOFILE of 1024 the process runs out after
+        ~500 requests, and from then on every sqlite3.connect() raises "unable to open
+        database file" - the socket still accepts, so the symptom is an empty reply on every
+        request, not a 500. That took the site down on 2026-08-16; see plan.md.
+        """
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            db.close_all()
+
 
 def make_server(cfg, index_path=None):
     index_path = index_path or os.path.join(config.ROOT, "index.html")

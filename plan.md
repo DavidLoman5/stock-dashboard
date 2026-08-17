@@ -284,6 +284,35 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## ✅ 已完成
 
+### 2026-08-17 事故：伺服器 fd 耗盡（每個請求漏一條 sqlite 連線）
+
+使用者回報「網頁掛了」。GitHub Pages 正常（200），自架站從 **2026-08-16 21:46** 起
+每個請求都回**空回應**（`curl` 說 `Empty reply from server`，不是 500、不是 timeout）。
+
+**根因**：`db.get()` 是 thread-local 快取，而 `ThreadingHTTPServer` 每條連線開一條新執行緒，
+`db.close_all()` 卻**只有測試在呼叫**——所以每個請求留下一條沒關的連線，各佔 2 個 fd
+（`app.db` ＋ `app.db-wal`）。`RLIMIT_NOFILE` 預設 1024，累積 **509 條**連線後打滿
+（實測 fd 1023/1024），之後每次 `sqlite3.connect()` 都拋
+`sqlite3.OperationalError: unable to open database file`。
+
+**為什麼症狀是空回應而不是 500**：listen socket 還在，kernel 照樣完成三方交握、執行緒照樣起，
+但 handler 在 `Ctx.__init__` 建連線時就爆掉，`respond()` 從沒被呼叫 → 連線直接關閉、零位元組。
+`tailscale funnel status`、`systemctl is-active`、`ps` 全部顯示正常，所以**外部探測與服務狀態
+都不構成證據**；真正指出根因的是 `ls /proc/<pid>/fd | wc -l` 與 journal 裡的 traceback。
+這次跟 2026-07-31 的 Funnel 失效**不是同一類**，別再往 tunnel 查。
+
+**修法**（`server/server.py` 的 `Server.process_request_thread`）：`finally: db.close_all()`。
+連線生命週期從此綁在執行緒生命週期上，是唯一涵蓋全部路由（頁面／API／prune）的收口點。
+`test_server.py::TestHttp::test_requests_do_not_leak_db_file_descriptors` 數 `/proc/self/fd`
+指向 db 的數量，斷言 12 個請求後**不隨請求數成長**（移掉修法會紅：實測漏 24 個 = 2×12）。
+
+DB 完好（9 users／36 holdings），重啟前已另存備份；重啟後 10 次請求 fd 持平（4 個）、
+公網 ingress 兩個 IP 都回 302。
+
+**沒做但值得記著**：這個 bug 從 2026-07-23 建置就存在，撐 15 天才爆是因為要累積 ~500 個請求；
+service 沒有任何「連續 N 次請求失敗就重啟」的守衛（Funnel 有 watchdog，應用層沒有），
+所以下次應用層自己壞掉還是要靠人回報。
+
 ### 2026-08-02 找資料系統：加上前瞻層與隔夜美股
 
 使用者指出「美股會影響台股但有時候沒搜到」，並問為什麼 7/30 沒能預見 7/31 的大漲。

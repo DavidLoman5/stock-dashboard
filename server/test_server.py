@@ -1068,6 +1068,31 @@ class TestHttp(Base):
         status, body, _ = self.request("/healthz")
         self.assertEqual((status, body["ok"]), (200, True))
 
+    def test_requests_do_not_leak_db_file_descriptors(self):
+        """Thread-local connections have to be closed when the request thread ends. If they are
+        not, each request keeps two fds (db + -wal) and the process dies of EMFILE at ~500
+        requests - after which sqlite3.connect() fails and every reply is empty (2026-08-16)."""
+        fd_dir = "/proc/self/fd"
+        if not os.path.isdir(fd_dir):
+            self.skipTest("needs /proc")
+
+        def db_fds():
+            n = 0
+            for name in os.listdir(fd_dir):
+                try:
+                    target = os.readlink(os.path.join(fd_dir, name))
+                except OSError:
+                    continue          # fd closed while we walked the dir
+                if target.startswith(self.cfg["dbPath"]):
+                    n += 1
+            return n
+
+        self.request("/api/bootstrap")            # warm-up: first request opens the shared files
+        before = db_fds()
+        for _ in range(12):
+            self.request("/api/bootstrap")        # 401, but route() opens the db before routing
+        self.assertLessEqual(db_fds() - before, 2)
+
     def test_icon_is_served_as_bytes_without_login(self):
         # every page <link>s it, including /login, so it has to work logged out - and it is
         # the only response here that is not text, which is what this actually guards
