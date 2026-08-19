@@ -34,20 +34,20 @@
 
 | 檔案 | 是什麼 | 誰用 |
 |---|---|---|
-| `page-contract.json` | 頁面資料契約：每個 `<script id>` 對應的 `window.*` 名稱與 JSON depth，＋ 筆記欄位隱私政策（`noteFields.guest` / `noteFields.ownerOnly`） | 下面三個 lib＋`server/pagedata.py` |
+| `page-contract.json` | 頁面資料契約：每個 `<script id>` 對應的 `window.*` 名稱與 JSON depth，＋ **兩份**隱私政策：個股筆記 `noteFields.guest`/`ownerOnly`、市場風向 `marketFields.guest`/`ownerOnly` | 下面三個 lib＋`server/pagedata.py` |
 | `lib/pagedata.ps1` | `Set-PageBlocks` / `Get-PageBlockText`：唯一的 splice 實作 | 六支 .ps1 全部 |
 | `lib/publish-gate.ps1` | `Invoke-PublishGate`：唯一的對外出口（allowlist 上架＋內容掃描＋commit/push） | `publish.ps1` |
 | `lib/stance.ps1` | `Get-StanceGrade`：唯一的判級公式 | `update-holdings.ps1`；頁面只顯示結果 |
 | `lib/feed.ps1` | 唯一的抓取／快取／欄位索引／民國日期／politeness。**十一個官方端點都在這裡解析**（`Get-FeedIndexHistory`／`Get-FeedInstitutional`／`Get-FeedMargin`／`Get-FeedMarketInstAmount`／`Get-FeedMarketQuotes`／`Get-FeedDailySeries`／`Get-FeedIssuedShares`），快取目錄的建立與清理也是（`Get-FeedCacheDir`／`Invoke-FeedCachePrune`）。市值排序 `Select-FeedTopByMarketCap` 是純函式、不抓資料。檔尾另有**唯一的第三方來源** `Get-FeedUsChart`＋`$FeedUsSymbols`（Yahoo，隔夜美股，見下） | `screen.ps1`、`update-holdings.ps1`、`backtest.ps1`、`overnight.ps1` |
-| `lib/score.ps1` | **唯一的選股規則**：`Get-RegimeLight`／`Get-ChipStats`／`Test-ChipGate`／`Get-ChipScore`／`Get-TechScore`／`Get-FundScore`／`Get-TotalReturnSeries`／`Test-ExitRules`。股票與 ETF 是同一組函式的兩個 **profile**（`$ScreenProfiles`），不是兩份程式 | `screen.ps1`、`backtest.ps1`（回測直接呼叫生產規則，不再手抄） |
+| `lib/score.ps1` | **唯一的選股規則**：`Get-RegimeLight`／`Test-RegimeEntryGate`／`Get-ChipStats`／`Test-ChipGate`／`Get-ChipScore`／`Get-TechScore`／`Get-FundScore`／`Get-FundSignal`／`Get-CompositeScore`／`Get-TotalReturnSeries`／`Test-ExitRules`。三面各自回傳 `@{Raw; Score(0-100); Signals[]; Drop; Reason}`，由 `Get-CompositeScore` 依 profile 權重合成 0-100。股票與 ETF 是同一組函式的兩個 **profile**（`$ScreenProfiles`），不是兩份程式 | `screen.ps1`、`backtest.ps1`（回測直接呼叫生產規則，不再手抄） |
 | `lib/picks-log.ps1` | `picks-log.json` 的唯一讀寫者：retry＋FATAL 保護、`[ordered]` key 順序、保留期封存、`-ErrorAction Stop` | `screen.ps1`、`publish.ps1` |
-| `lib/stance-log.ps1` | `stance-log.json` 的唯一讀寫者＋`Get-PrevStanceMap`（純函式） | `update-holdings.ps1` |
-| `tools/boot-check.js` | jsdom 實跑 index.html 並斷言（33 項：`window.ANALYTICS` 純函式、三個 modal、圖表投影往返、boot 冪等、逸出、canvas 色彩 token 解析得出來、封面圖視窗與標註同源） | 改前端後手動跑 |
+| `lib/stance-log.ps1` | `stance-log.json` 的唯一讀寫者＋`Get-PrevStanceMap`／`Get-StanceAttribution`（純函式；後者是判級前瞻驗證，產出 `eval-report.json` 的 `byStance`） | `update-holdings.ps1`、`evaluate.ps1` |
+| `tools/boot-check.js` | jsdom 實跑 index.html 並斷言（42 項：`window.ANALYTICS` 純函式、三個 modal、圖表投影往返、boot 冪等、逸出、canvas 色彩 token 解析得出來、封面圖視窗與標註同源、三面數字列、MARKET 區塊缺席） | 改前端後手動跑 |
 | `server/pagedata.py` | 同一份 `page-contract.json` 的 Python 端（含 `noteFields` 隱私政策，`payload.py` 實際讀它） | `server/server.py`、`payload.py` |
 
 - **splice 一律用 `Set-PageBlocks`**，別再手寫 `IndexOf('<script id=...')`。找不到 marker 或不認識的 block id 都會 throw（以前只警告然後照樣寫檔）
 - **`window.META` 是一般 block**，不再是對 HTML 做正則取代；報告日期由頁面從 META 帶出
-- **判級公式只改 `lib/stance.ps1`**，頁面 `adviseHolding` 只把分數翻成文字、不得再寫一份門檻
+- **判級公式只改 `lib/stance.ps1`**，頁面 `adviseHolding` 只把分數翻成文字、不得再寫一份門檻。改公式必須同時 bump `$StanceEngineVersion`——`stance-log.json` 每列蓋版本，`evaluate.ps1` 的 `byStance` 只在同版本內比較，否則改一次公式就會讓歸因數字因為與市場無關的理由移動
 - **抓官方資料一律走 `lib/feed.ps1`**，包括**解析**：呼叫端不可以再自己寫 `$row[10]` 這種位置索引。欄位索引全部在 `$FeedCols`——**T86（上市）與 TPEx dailyTrade（上櫃）欄位不同**（trust/total 是 10/18 vs 13/23），別混用。**兩張欄位表**：`$FeedCols` 是陣列的 0-based 位置，`$FeedFields` 是物件式 openapi 端點的**欄位名稱**（公司基本資料），別把名稱放到吃索引的地方。取發行股數一律用 `已發行普通股數`／`IssueShares`，**永遠不要用「實收資本額 ÷ 面額」**——有 21 家上市公司面額不是 10 元（2327 國巨是 2.5），那個算法會少算四倍、把真正的權值股擠出榜外。民國年轉換只有 `ConvertFrom-FeedRocDate` 一份（以前五份，其中兩份靠 API 自己補零）。測試用 `Set-FeedTransport` 換掉傳輸層即可離線驗真正的解析路徑
 - **選股／評分／出場規則只改 `lib/score.ps1`**，且股票與 ETF 用 profile 區分而不是複製一份。`backtest.ps1` 直接呼叫同一組函式，所以「回測跟生產一致」是結構保證、不再是註解裡的承諾。單位注意：`Get-FeedInstitutional` 回傳**股**（交易所原始單位），頁面顯示的**張**由呼叫端自己除 1000
 - **`picks-log.json`／`stance-log.json` 一律經各自的 lib 模組讀寫**，別再自己 `Get-Content`＋`Out-File`：retry、FATAL 保護、`[ordered]` key 順序、封存與 `-ErrorAction Stop` 都在模組裡
@@ -58,8 +58,26 @@
 - `guest-notes.json`（Gemini 每日產出，gitignore）；`prev-recs.json`（每日由 holdings-notes.json 抽出，含昨日 `rec` 與昨日 `_market`，gitignore）
 - `overnight-context.json`（`overnight.ps1` 每日重寫，gitignore）
 - `data/heavyweights.json`（市值前 30 大，`screen.ps1` **每週重算一次**、當週固定，gitignore）與 `data/heavyweights-context.json`（`update-holdings.ps1` 每日重寫，gitignore）。想改名單大小改 `screen.ps1` 的 `$hwTopN`，不要手改 JSON——長度不符會被判定為過期、下次執行就整份重算蓋掉
-- splice 區塊全部：`<script id>` = `dashdata`、`holdingsmeta`、`holdingsnotes`（含 `_market` 市場風向＋`_market.night` 隔夜前瞻）、`pkdata`、`pkline`、`pknotes`、`evaldata`（週五）、`backtest`（月跑）、`meta`（報告日期／行情基準日）、`tokenusage`（`finish-daily-push.ps1` 寫，非 AI）、`appuser`（伺服器逐使用者注入，committed 檔案內**必須留空**）
+- splice 區塊全部：`<script id>` = `dashdata`、`holdingsmeta`、`holdingsnotes`、`marketnotes`（市場風向，含 `night` 隔夜前瞻；2026-08-19 起從 `holdingsnotes._market` 抽出成獨立檔 `market-notes.json`）、`pkdata`、`pkline`、`pknotes`、`evaldata`（週五）、`backtest`（月跑）、`meta`（報告日期／行情基準日）、`tokenusage`（`finish-daily-push.ps1` 寫，非 AI）、`appuser`（伺服器逐使用者注入，committed 檔案內**必須留空**）
 - Hero 市值/損益/整體傾向（heroStance）、大盤數字、市場風向區（windBox/miSox/miMood）、權重、今日訊號、績效曲線 → 頁面 JS 自動算或 `_market` 覆寫，勿寫死；HTML 內殘留文字只是 JS 失敗時的 fallback
+
+## 三面分析的硬規則（2026-08-19 起）
+
+個股分析嚴格由**技術面／籌碼面／基本面**三段構成，每段只能引用自己那一面的證據：
+
+| 欄位 | 只能引用 | 來源 |
+|---|---|---|
+| `tech` | 價格、均線、量價、距 40 日高 | `holdings-context.json` |
+| `chip` | 三大法人、融資融券 | 同上 |
+| `fund` | 月營收 `yoy`/`yoyCum`/`mom`、`pe`/`pb`/`dy`、`ind`、除息 | 同上（2026-08-19 新增） |
+
+- **三段皆不得提到大盤、加權指數、費半、美股、隔夜或其他持股。** 市場風向是 `market-notes.json`
+  ／`window.MARKET` 的獨立區塊與獨立卡片，由使用者自己讀、自己做綜合判斷
+- **`fund` 欄位以前寫成大盤敘事，根因是管線沒送基本面數字給它**（`CodeContext()` 只有價格/均線/籌碼），
+  不是寫作風格問題。加欄位時務必維持 ETF 為 `null` 而非 `0`——`0` 會被讀成「本益比 0」
+- 三個多空 chip **全部由引擎算**：技術／籌碼來自判級，基本面來自 `Get-FundSignal`。
+  AI 只寫解讀文字，`sigFund` 欄位已廢除（`gnotes.py` 即使模型主動給也不採用）
+- **`rec` 是刻意的例外**：維持原狀，仍為 ownerOnly，仍可引用風向與投組
 
 ## 可以安全改
 CSS／版面、圖表函式（priceChart/candleChart/volChart）、互動邏輯、渲染器、`screen.ps1` 選股演算法、`holdings.json`

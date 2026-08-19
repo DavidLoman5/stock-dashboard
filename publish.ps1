@@ -43,6 +43,20 @@ if((Test-Path $hnPath) -and -not (IsFresh $hnPath)){
   } else { Write-Host "WARN: holdings-notes.json unreadable after retries - skipping this splice, publish continues" }
 } else { Write-Host "no holdings-notes.json found - skipping (holdings text stays as-is)" }
 
+# The market read, its own file and its own block since the three-face split. Same freshness
+# rule: an overnight outlook from yesterday is worse than none, so a stale file is skipped
+# rather than spliced (the page hides #nightBox when the field is absent).
+$mnPath = Join-Path $root 'market-notes.json'
+if((Test-Path $mnPath) -and -not (IsFresh $mnPath)){
+  Write-Host "market-notes.json older than 15h - stale, skipping splice"
+} elseif(Test-Path $mnPath){
+  $mn = ReadJsonRetry $mnPath
+  if($null -ne $mn){
+    $blocks['marketnotes'] = $mn
+    Write-Host "spliced market-notes.json -> window.MARKET"
+  } else { Write-Host "WARN: market-notes.json unreadable after retries - skipping this splice, publish continues" }
+} else { Write-Host "no market-notes.json found - skipping (market text stays as-is)" }
+
 $pnPath = Join-Path $root 'picks-notes.json'
 if((Test-Path $pnPath) -and -not (IsFresh $pnPath)){
   Write-Host "picks-notes.json older than 15h - stale, skipping splice"

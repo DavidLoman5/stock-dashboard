@@ -13,6 +13,37 @@
 # (An older comment pointed at a `stanceLevels` key in page-contract.json - that key never
 # existed; the page's LEVEL_VIEW is the thing that has to agree with this file.)
 
+# Which formula produced a grade. Stamped onto every stance-log row so evaluate.ps1 can bucket
+# by it and never average two engines together - without that, any rewrite of this file makes the
+# weekly attribution numbers move for reasons that have nothing to do with the market.
+#
+#   1  four levels (add/hold/trim/defend), score -4..+4, no confirmation delay. Never stamped:
+#      rows from this era predate the field and are identified by the absence of `raw`.
+#   2  six levels, score -8..+8, two-day confirmation requiring two identical raw readings.
+#      Withdrawn: that rule could freeze a level indefinitely (see the confirmation block below).
+#   3  six levels, score -8..+8, hysteresis that always makes progress.
+$StanceEngineVersion = 3
+
+# The six levels, best to worst. Rank is the index, so "how far apart are two levels" is just
+# arithmetic. Defined here because this is the module that emits them; lib/stance-log.ps1
+# dot-sources this file rather than keeping a second copy.
+#
+# WARNING: index.html's STANCE_RANK runs the OTHER WAY (exit:0 .. add:5) because it answers
+# "did this get worse?" with a < comparison. Both are self-consistent and this module only ever
+# takes abs() of a difference, so the two never have to agree - but do not assume a rank from one
+# side means the same thing on the other.
+$StanceLevelOrder = @('add','addwatch','hold','cutwatch','cut','exit')
+
+function Get-StanceLevelRank {
+  <#  0..5 for a current level name, $null for anything else - including the retired four-level
+      names (trim/defend/up). $null callers must treat as "no opinion", which on the switchover
+      day means "just take today's reading". #>
+  param([string]$Level)
+  $i=[array]::IndexOf($StanceLevelOrder,"$Level")
+  if($i -lt 0){ return $null }
+  return $i
+}
+
 # simple moving average of the last $n values; $null when there is not enough history
 function Get-StanceSma($values,$n){
   $a=@($values)
@@ -104,7 +135,29 @@ function Get-StanceGrade {
   # a bucket - a moving-average line-up never outvotes a bad tape.
   $score=$tech+$chip+$extra+$vp
   $raw= if($score -ge 3){'add'} elseif($score -ge 1){'addwatch'} elseif($score -eq 0){'hold'} elseif($score -eq -1){'cutwatch'} elseif($score -eq -2){'cut'} else {'exit'}
+
+  # Confirmation. The point is to swallow a one-day wobble without freezing.
+  #
+  # v2 required two IDENTICAL raw readings in a row ($PrevRaw -eq $raw). Readings that oscillate
+  # between adjacent levels never satisfy that, so the displayed level could stick indefinitely:
+  # across the live log 47% of rows were sitting on a suppressed reading and one code held the
+  # same stale level for 9 trade days. Code 8150 spent 8/14-8/18 showing 加碼觀察 while the raw
+  # reading was cut / cutwatch / cut - the badge said buy for three days of a decline.
+  #
+  # v3 keeps a one-day delay but guarantees progress. Today's reading is adopted unless it is
+  # BOTH adjacent to the current level AND yesterday's reading agreed with the current level -
+  # i.e. only an isolated one-rung blip is suppressed. Two rungs or more is a real move and takes
+  # effect at once (a 續抱 -> 清倉 crash must not wait for confirmation), and two consecutive days
+  # of disagreement always resolve, whatever direction they point in.
   $level=$raw
-  if($PrevLevel -and $raw -ne $PrevLevel -and $PrevRaw -ne $raw){ $level=$PrevLevel }
+  if($PrevLevel){
+    $rl=Get-StanceLevelRank $PrevLevel
+    $rr=Get-StanceLevelRank $raw
+    if($null -ne $rl -and $null -ne $rr -and $rr -ne $rl){
+      $prevRank=Get-StanceLevelRank $PrevRaw
+      $prevAgreed = ($null -eq $prevRank -or $prevRank -eq $rl)
+      if([math]::Abs($rr-$rl) -lt 2 -and $prevAgreed){ $level=$PrevLevel }
+    }
+  }
   return [ordered]@{ score=$score; level=$level; raw=$raw; pending=($level -ne $raw); tech=$tech; chip=$chip; extra=$extra; vp=$vp }
 }

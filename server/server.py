@@ -74,6 +74,7 @@ BLOCK_SOURCES = (
     ("dashdata", "dash"),
     ("holdingsmeta", "holdingsMeta"),
     ("holdingsnotes", "holdingsNotes"),
+    ("marketnotes", "market"),
     ("pkdata", "picks"),
     ("pkline", "picksKline"),
     ("pknotes", "picksNotes"),

@@ -68,10 +68,17 @@ foreach($h in $demo.holdings){
   # judgement formula in JS; without it a demo holding shows no stance badge at all.
   $stance = $null
   if($sharedMeta -and $sharedMeta.PSObject.Properties[$c]){ $stance = $sharedMeta.$c.stance }
+  # Fundamentals per DEMO code, from the `_fund` union map. Exchange figures (revenue growth,
+  # PE/PB, yield) with no AI call behind them and nothing personal in them - the union KEY SET is
+  # never copied, only this demo code's own entry, same discipline as `_prevStance` above.
+  # Without it the demo page's 基本面 section silently loses its number row, and an ETF shows
+  # nothing at all rather than saying it has no company financials.
+  $fund = $null
+  if($sharedMeta -and $sharedMeta.PSObject.Properties['_fund'] -and $sharedMeta._fund.PSObject.Properties[$c]){ $fund = $sharedMeta._fund.$c }
   $HOLDINGS_META[$c]=[ordered]@{
     name=$h.name; type=$h.type; theme=$h.theme; shares=(SharesOf $h); color=$h.color
     techLike=$(if($h.PSObject.Properties['techLike']){[bool]$h.techLike}else{$false}); divNote=$divNote
-    prevStance=$prevStance; stance=$stance
+    prevStance=$prevStance; stance=$stance; fund=$fund
   }
 }
 
@@ -81,23 +88,24 @@ foreach($h in $demo.holdings){
 # with, so the published page and a logged-in guest can never disagree about what is factual.
 $guestFields = @((Get-PageContract).noteFields.guest)
 if($guestFields.Count -eq 0){ Write-Host "FATAL: page-contract.json has no noteFields.guest"; exit 1 }
-$marketFields = @((Get-PageContract).noteFields.marketPublic)
-if($marketFields.Count -eq 0){ Write-Host "FATAL: page-contract.json has no noteFields.marketPublic"; exit 1 }
+$marketFields = @((Get-PageContract).marketFields.guest)
+if($marketFields.Count -eq 0){ Write-Host "FATAL: page-contract.json has no marketFields.guest"; exit 1 }
+# The market read is its own file and its own page block now (window.MARKET). It used to be a
+# `_market` pseudo-code inside holdings-notes.json, read one line below - splitting it is what
+# stops a per-stock paragraph from reaching for index commentary in the first place.
+# Allowlist only: `wind` is deliberately off it, being commentary on the OWNER's portfolio
+# ("投組今日明顯分化：00990A...") that names real holdings, and `night` likewise. buildWind()
+# renders correctly from windLead alone.
+$allMarket = ReadJson (Join-Path $root 'market-notes.json')
+$MARKET=[ordered]@{}
+if($allMarket){
+  foreach($f in $marketFields){
+    if($allMarket.PSObject.Properties[$f]){ $MARKET[$f]=$allMarket.$f }
+  }
+}
 $allNotes = ReadJson (Join-Path $root 'holdings-notes.json')
 $NOTES=[ordered]@{}
 if($allNotes){
-  # _market: allowlist only, from page-contract.json's `noteFields.marketPublic` - the same list
-  # server/payload.py slims _market with. `wind` is deliberately not on it: it is written as
-  # commentary on the OWNER's portfolio ("投組今日明顯分化：00990A...") and names real holdings,
-  # so publishing it would leak the very thing this script exists to hide. buildWind() renders
-  # correctly from windLead alone.
-  if($allNotes.PSObject.Properties['_market']){
-    $mk=[ordered]@{}
-    foreach($f in $marketFields){
-      if($allNotes._market.PSObject.Properties[$f]){ $mk[$f]=$allNotes._market.$f }
-    }
-    if($mk.Count){ $NOTES['_market']=$mk }
-  }
   # A per-code note is written with the whole owner portfolio in view, so it can name other
   # holdings ("成分股與0050/00947/00981A高度重疊"). Drop any field that mentions one of the
   # owner's OTHER codes - matching the real code list means no false positives on prices.
@@ -127,7 +135,8 @@ Set-PageBlocks -IndexPath $idxPath -Blocks @{
   dashdata      = $DASH
   holdingsmeta  = $HOLDINGS_META
   holdingsnotes = $NOTES
+  marketnotes   = $MARKET
   # appuser is server-injected per request; it must stay empty in the committed file
   appuser       = $null
 }
-Write-Host "index.html rebuilt for public demo ($($demoCodes.Count) holdings, $($NOTES.Count) note entries)"
+Write-Host "index.html rebuilt for public demo ($($demoCodes.Count) holdings, $($NOTES.Count) note entries, $($MARKET.Count) market field(s))"

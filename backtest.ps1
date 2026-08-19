@@ -132,7 +132,9 @@ for($i=$evalLo; $i -le $evalHi; $i++){
     $stats=Get-ChipStats -Trust $tArr -Foreign $fArr
     if(-not (Test-ChipGate -Stats $stats -Profile $ProfBT)){ continue }
     # no margin data in the panel, so the -5 margin-down bonus never applies here
-    $chipS=Get-ChipScore -Stats $stats
+    # .Raw keeps the backtest on the same 0-40/0-30 scale it has always used, so results stay
+    # comparable with previous runs. The 0-100 composite is a display/ranking concern.
+    $chipS=(Get-ChipScore -Stats $stats).Raw
     $cl=CloseAt $code $i; if($cl -eq $null){ continue }
     # 60-day history: last 25 days must be complete (MA20/slope/ret5 exact); older gaps tolerated (MA60 null like prod)
     $hist=@(); $miss=$false
@@ -161,7 +163,7 @@ for($i=$evalLo; $i -le $evalHi; $i++){
                           -Ma @{ ma20=$ma20; ma20p=$ma20p; ma60=$ma60; ret5=$ret5; dist=$dist } `
                           -Light 'na' -Profile $ProfBT
     if($tsBT.Drop){ continue }
-    $techS=$tsBT.Score
+    $techS=$tsBT.Raw
     $scored += [pscustomobject]@{ code=$code; chip=$chipS; tech=$techS; tSum=$tSum }
   }
   if($scored.Count -eq 0){ continue }

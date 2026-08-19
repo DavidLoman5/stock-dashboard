@@ -47,9 +47,14 @@ $PublishAllowlist = @(
   'token-usage.json'
 )
 
-# Owner-only note fields, from page-contract.json. Same list build-demo.ps1 strips to and
-# server/payload.py filters guests with.
-function Get-OwnerOnlyFields { return @((Get-PageContract).noteFields.ownerOnly) }
+# Owner-only fields, from page-contract.json. Same lists build-demo.ps1 strips to and
+# server/payload.py filters guests with. BOTH policies are scanned: per-code notes (rec/news) and
+# the market block (wind/night). They are separate declarations now that the market read has its
+# own file and block - scanning only the first would let `night` through unnoticed.
+function Get-OwnerOnlyFields {
+  $c=Get-PageContract
+  return @($c.noteFields.ownerOnly) + @($c.marketFields.ownerOnly)
+}
 
 # Recursively collect JSON property names, so a nested `_market.wind` is found as readily as a
 # top-level one. Depth-capped: these files are shallow and a cycle would otherwise hang the run.

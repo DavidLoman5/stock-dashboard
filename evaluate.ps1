@@ -5,7 +5,8 @@
 # UTF-8 with BOM (the comments below name the CJK exit reasons; tests.ps1 [2] enforces it).
 $ErrorActionPreference='Continue'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-. (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
+. (Join-Path $root 'lib/pagedata.ps1')     # Set-PageBlocks / Get-PageBlockText / Get-PageContract
+. (Join-Path $root 'lib/stance-log.ps1')  # Get-StanceLog / Get-StanceAttribution
 
 function Grp($rows){
   $a=@($rows | Where-Object { $_.PSObject.Properties['alphaFinal'] -and $null -ne $_.alphaFinal })
@@ -94,41 +95,40 @@ $out.byTech=Bucket $closed 'techS' @(0,15,25,101)        @('tech<15','tech15-24'
 $out.byFund=Bucket $closed 'fundS' @(0,10,20,101)        @('fund<10','fund10-19','fund20+')
 $out.byYoy =Bucket $closed 'yoy'   @(-100000,0,30,100000) @('yoy<0','yoy0-30','yoy30+')
 
-# holding-stance forward validation: avg return 20 rows (trade days) after each stance
+# Holding-stance forward validation - "is the 判級 grade worth anything?".
+#
+# The previous version of this block asked for 20 forward rows PER CODE and offered nothing else.
+# Since the six-level switchover each code has had roughly 14 rows, so that loop never executed a
+# single time and `stanceForward` silently never appeared in eval-report.json - the grading engine
+# was the one part of the system with no accuracy measurement at all. Three windows now (5/10/20),
+# so the short ones report while 20 is still filling, plus an alpha baseline, a win rate, and the
+# monotonicity score that is the actual answer to "does the ordering of the six levels hold up".
+# Bucketed by engine version so a rewrite of lib/stance.ps1 can be judged against its predecessor
+# instead of being averaged into it. Full contract in lib/stance-log.ps1.
 $stancePath=Join-Path $root 'stance-log.json'
 if(Test-Path $stancePath){
   try{
-    $sl=@((Get-Content $stancePath -Raw -Encoding UTF8 | ConvertFrom-Json).rows)
-    # Only rows written under the six-level scheme are comparable: the old four levels came from a
-    # different score range (-4..+4, no two-day confirmation), so mixing them would average apples
-    # with pears. Presence of `raw` is the cutover marker - self-describing, no hard-coded date.
-    # Cost: ~21 new rows per code are needed before any forward return exists, so the weekly
-    # "持股判級驗證" block stays empty for about a month after the switch.
-    $sl=@($sl | Where-Object { $null -ne $_.raw })
-    $byCode=@{}
-    foreach($r in $sl){ $c="$($r.code)"; if(-not $byCode.ContainsKey($c)){ $byCode[$c]=@() }; $byCode[$c]+=,$r }
-    $fw=@{}
-    foreach($c in $byCode.Keys){
-      $rows=$byCode[$c]
-      for($i=0;$i -lt $rows.Count-20;$i++){
-        $r0=$rows[$i]; $r1=$rows[$i+20]
-        if($r0.close -gt 0){
-          $ret=($r1.close/$r0.close-1)*100
-          $k="$($r0.stance)"
-          if(-not $fw.ContainsKey($k)){ $fw[$k]=@() }
-          $fw[$k]+=,$ret
+    $sl=Get-StanceLog -Path $stancePath
+    if(-not $sl.Ok){ Write-Host '  WARN: stance-log.json unreadable - byStance omitted from this report' }
+    else{
+      $st=Get-StanceAttribution -Rows $sl.Rows
+      if($st){
+        $out.byStance=$st
+        foreach($vk in $st.Keys){
+          $w=$st[$vk].windows
+          $bits=@()
+          foreach($wk in $w.Keys){ if($w[$wk].Contains('monotonicity')){ $bits += "$wk=$($w[$wk].monotonicity)" } }
+          Write-Host "  byStance $vk (n=$($st[$vk].n)) monotonicity: $($bits -join ' ')"
         }
       }
     }
-    $stanceFw=[ordered]@{}
-    foreach($k in @('add','addwatch','hold','cutwatch','cut','exit')){
-      if($fw.ContainsKey($k)){ $v=$fw[$k]; $stanceFw[$k]=@{ n=$v.Count; avgFwd20=[math]::Round(($v|Measure-Object -Average).Average,2) } }
-    }
-    if($stanceFw.Keys.Count -gt 0){ $out.stanceForward=$stanceFw }
   }catch{ Write-Host "stance-log skipped: $($_.Exception.Message)" }
 }
 
-$out | ConvertTo-Json -Depth 5 | Out-File (Join-Path $root 'eval-report.json') -Encoding UTF8
+# Depth 8, not 5: byStance nests version -> windows -> fwd5 -> levels -> add -> n. At depth 5 the
+# level maps serialise as the literal string "System.Collections.Specialized.OrderedDictionary",
+# which is valid JSON and therefore fails silently. page-contract.json's evaldata depth matches.
+$out | ConvertTo-Json -Depth 8 | Out-File (Join-Path $root 'eval-report.json') -Encoding UTF8
 Write-Host "wrote eval-report.json"
 
 # splice into the page (card auto-hides below 5 closed samples)

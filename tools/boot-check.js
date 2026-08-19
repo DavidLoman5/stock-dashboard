@@ -121,6 +121,34 @@ check('holding modal opens without throwing', skipIf(EMPTY || UNGRADED, 'no grad
   w.eval('closeModal()');
   return open && title.length > 0 && `mTitle=${title.trim()}`;
 }));
+// The fundamentals face had no numbers at all - just a paragraph - which is why the daily
+// analysis filled it with index commentary. All three faces must now render a number row.
+check('fundamentals section renders its own number row', skipIf(EMPTY || UNGRADED, 'no graded holding to open', () => {
+  if (!w.eval('H.length')) return 'no holdings to open';
+  w.eval('openModal(0)');
+  const html = (w.document.getElementById('mContent') || {}).innerHTML || '';
+  w.eval('closeModal()');
+  const fundIdx = html.indexOf('基本面');
+  if (fundIdx < 0) return 'no fundamentals block in the modal';
+  // ETFs legitimately have no company financials; either a number row or the stated reason,
+  // never a bare paragraph and never a row of zeroes.
+  const tail = html.slice(fundIdx);
+  const hasRow = tail.includes('class="levels"');
+  return hasRow && `levels row present`;
+}));
+check('ETF fundamentals say why they are empty rather than showing zeroes', () => {
+  const r = w.eval(`(function(){
+    if (typeof fundLevelsHtml !== 'function') return 'missing';
+    const etf = fundLevelsHtml({sig:['neu','ETF無個別基本面'],score:null,yoy:null,pe:null,dy:null});
+    const stock = fundLevelsHtml({sig:['bull','基本面強'],score:80,yoy:44.7,yoyCum:37,mom:5.6,pe:27.82,pb:9.68,dy:0.92,ind:'半導體業'});
+    return JSON.stringify([etf, stock]);
+  })()`);
+  if (r === 'missing') return false;
+  const [etf, stock] = JSON.parse(r);
+  return etf.includes('ETF無個別基本面') && !etf.includes('0.00')
+      && stock.includes('44.7') && stock.includes('27.82') && stock.includes('半導體業')
+      && 'etf explains, stock shows numbers';
+});
 check('pick modal opens without throwing', () => {
   const has = w.eval('!!(window.PICKS_DATA && PICKS_DATA.picks && PICKS_DATA.picks.length)');
   if (!has) return 'no picks in this build';
@@ -279,7 +307,9 @@ process.exitCode = failed === 0 ? 0 : 1;
   if (!el) { console.log('FAIL night: #nightBox exists'); process.exitCode = 1; return; }
   if (typeof w.buildWind !== 'function') { console.log('FAIL night: buildWind is callable'); process.exitCode = 1; return; }
   const ok = [];
-  const render = m => { w.HOLDINGS_NOTES._market = m; w.buildWind(); };
+  // window.MARKET, not HOLDINGS_NOTES._market: the market read is its own block and its own
+  // file since the three-face split, so a per-stock note can no longer carry market commentary.
+  const render = m => { w.MARKET = m; w.buildWind(); };
   const base = { windLead: 'x', sox: '-1.0%', mood: 'y', moodK: 'neu' };
 
   render({ ...base, night: '今晚 21:30 美股開盤；若費半收紅逾 3%，明日開高守 42,800 視為有效。' });
@@ -293,6 +323,20 @@ process.exitCode = failed === 0 ? 0 : 1;
 
   render({ ...base, night: '<img src=x onerror=alert(1)>盤前' });
   ok.push(['night is escaped, not parsed', el.querySelector('img') === null && el.textContent.includes('<img'), '']);
+
+  // guest / demo pages get no market block at all (marketFields.guest may filter it to nothing,
+  // and a failed AI step leaves the file missing). buildWind must return quietly, not throw.
+  // On a real page load buildWind runs once, so what protects the empty case is the HTML default
+  // (#nightBox ships with `hidden`) plus buildWind returning without touching anything. Reset to
+  // that default first - asserting on state left by the fixture above would prove nothing.
+  let threw = null;
+  el.hidden = true;
+  try { w.MARKET = {}; w.buildWind(); } catch (e) { threw = e; }
+  ok.push(['an empty market block leaves the night box hidden and does not throw', threw === null && el.hidden === true, threw ? String(threw) : '']);
+  threw = null;
+  el.hidden = true;
+  try { w.MARKET = undefined; w.buildWind(); } catch (e) { threw = e; }
+  ok.push(['an absent market block does not throw', threw === null && el.hidden === true, threw ? String(threw) : '']);
 
   let bad = 0;
   for (const [name, pass, val] of ok) {

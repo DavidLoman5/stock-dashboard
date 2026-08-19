@@ -39,29 +39,35 @@ ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateC
 BATCH = 40                 # codes per request; the free tier's limit is requests/day, not size
 TIMEOUT = 120
 MAX_FIELD = 400            # characters; the page shows these in a card, not an essay
-SIG_KINDS = ("bull", "neu", "bear")
 
 SYSTEM = """你是台股分析助理。根據提供的每檔數值資料，為每一檔股票寫三面分析與一句操作觀點。
 
 台股慣例：紅漲綠跌；法人買賣超與融資餘額單位為「張」；ETF 沒有 EPS 與本益比，基本面請以
 成分題材與產業景氣替代。
 
-欄位意義：price 收盤價、chg 漲跌、pct 漲跌%、ma20 月線、ma60 季線、ma20SlopeUp 月線是否上揚、
-distFromHigh40 距 40 日高的百分比、foreignSum5d 外資近 5 日合計買賣超（張）、foreignLast2
-外資最近兩日買賣超（張，後者為最新）、marginToday 融資餘額（張）、marginDelta 融資增減（張）、
-divNote 近期除息日。
+欄位意義：
+- 技術面用：price 收盤價、chg 漲跌、pct 漲跌%、ma20 月線、ma60 季線、ma20SlopeUp 月線是否上揚、
+  distFromHigh40 距 40 日高的百分比
+- 籌碼面用：foreignSum5d 外資近 5 日合計買賣超（張）、foreignLast2 外資最近兩日買賣超（張，
+  後者為最新）、marginToday 融資餘額（張）、marginDelta 融資增減（張）
+- 基本面用：yoy 月營收年增率%、yoyCum 累計營收年增率%、mom 月營收月增率%、pe 本益比、
+  pb 股價淨值比、dy 殖利率%、ind 產業別、divNote 近期除息日
+  （ETF 這些欄位一律為 null，代表沒有個別公司財報，不是數值為零）
 
 每一檔輸出這些欄位：
-- sigFund: [方向, 12字內短語]，方向只能是 bull / neu / bear
 - tech: 技術面 2-3 句。要引用 ma20 / ma60 的實際數字說明價格位置與月線斜率。
 - chip: 籌碼面 2-3 句。外資連續買賣的方向與力道變化、融資是增是減，兩者合起來代表什麼。
-- fund: 基本面 2-3 句。個股講產業與獲利結構；ETF 講成分題材與產業景氣。
+- fund: 基本面 2-3 句。個股要引用 yoy / pe / dy 的實際數字，並注意 yoy 與 yoyCum、mom 是否
+  同向——單月年增率高但累計年增率低或月增率為負，代表成長正在減速，這點必須講出來。
+  ETF 沒有這些數字，改講成分題材與產業景氣，不要編造財務數字。
 - rec: 一句操作觀點，必須包含「若…則…」的條件句與至少一個取自 ma20/ma60 的具體價位。
   禁用「酌量」「視情況」「保持關注」這類沒有觸發條件的模糊詞。
 
 硬性限制：
 - 只根據提供的數字寫，不要引用你記憶中的新聞、財報或目標價，也不要編造。
 - 每檔獨立描述，不要提到其他檔的代號，也不要說「投組」「持股組合」——你不知道誰持有什麼。
+- 三面各守各的證據，不可越界：tech 只談價格與均線，chip 只談法人與融資，fund 只談營收與評價。
+  三者都不可提到大盤、加權指數、費半、美股或隔夜行情——那是另一區的內容，讀的人自己看。
 - 每個欄位不超過 200 字。用繁體中文。
 """
 
@@ -74,13 +80,15 @@ SCHEMA = {
                 "type": "object",
                 "properties": {
                     "code": {"type": "string"},
-                    "sigFund": {"type": "array", "items": {"type": "string"}},
+                    # no sigFund: the direction chip is computed by lib/score.ps1's
+                    # Get-FundSignal from the exchange's own figures, like the technical and
+                    # chip chips always were. The model writes prose only.
                     "tech": {"type": "string"},
                     "chip": {"type": "string"},
                     "fund": {"type": "string"},
                     "rec": {"type": "string"},
                 },
-                "required": ["code", "sigFund", "tech", "chip", "fund", "rec"],
+                "required": ["code", "tech", "chip", "fund", "rec"],
             },
         }
     },
@@ -121,12 +129,10 @@ def parse_response(text, wanted_codes):
             cleaned = _clean(item.get(field))
             if cleaned:
                 note[field] = cleaned
-        sig = item.get("sigFund")
-        if isinstance(sig, list) and len(sig) >= 2:
-            kind = str(sig[0]).strip().lower()
-            label = _clean(sig[1])
-            if kind in SIG_KINDS and label:
-                note["sigFund"] = [kind, label[:20]]
+        # sigFund is deliberately NOT read even if the model volunteers one: the fundamentals
+        # direction chip comes from lib/score.ps1's Get-FundSignal, scored from the exchange's
+        # own figures. A model-written label had no defined relationship to any number shown
+        # next to it, and the page would have had two disagreeing sources for one chip.
         if note:
             out[code] = note
     return out

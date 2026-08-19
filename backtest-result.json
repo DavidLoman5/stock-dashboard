@@ -1,509 +1,893 @@
-﻿{
-    "note":  "walk-forward: IS=first 60% (optimize), OOS=last 40% (validate); TWSE-only; fund factor not replayable; overlapping windows",
-    "panelDays":  200,
-    "current":  {
-                    "rank":  "chip+t",
-                    "exit":  "prod",
-                    "is":  {
-                               "winRate":  43.3,
-                               "avgAlpha":  0.39,
-                               "avgRet":  2.3,
-                               "avgDays":  5.1,
-                               "n":  360
-                           },
-                    "oos":  {
-                                "winRate":  37.9,
-                                "avgAlpha":  -0.39,
-                                "avgRet":  2.36,
-                                "avgDays":  5.7,
-                                "n":  240
-                            },
-                    "bear":  {
-                                 "winRate":  60,
-                                 "avgAlpha":  6.17,
-                                 "avgRet":  12.84,
-                                 "avgDays":  3.6,
-                                 "n":  5
-                             }
-                },
-    "grid":  [
-                 {
-                     "rank":  "chip",
-                     "exit":  "hold20",
-                     "is":  {
-                                "winRate":  48.6,
-                                "avgAlpha":  2.99,
-                                "avgRet":  11.42,
-                                "avgDays":  20,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  55.4,
-                                 "avgAlpha":  7.29,
-                                 "avgRet":  15,
-                                 "avgDays":  20,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  80,
-                                  "avgAlpha":  31.27,
-                                  "avgRet":  53.98,
-                                  "avgDays":  20,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip",
-                     "exit":  "stop",
-                     "is":  {
-                                "winRate":  40.3,
-                                "avgAlpha":  2.6,
-                                "avgRet":  7.16,
-                                "avgDays":  12.4,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  46.2,
-                                 "avgAlpha":  5.86,
-                                 "avgRet":  10.6,
-                                 "avgDays":  13.3,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  60,
-                                  "avgAlpha":  26.11,
-                                  "avgRet":  43.57,
-                                  "avgDays":  14.8,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip",
-                     "exit":  "prod",
-                     "is":  {
-                                "winRate":  42.5,
-                                "avgAlpha":  0.62,
-                                "avgRet":  2.54,
-                                "avgDays":  4.9,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  39.6,
-                                 "avgAlpha":  0.35,
-                                 "avgRet":  3.24,
-                                 "avgDays":  5.8,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  60,
-                                  "avgAlpha":  4.32,
-                                  "avgRet":  11.02,
-                                  "avgDays":  3.8,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+0.5t",
-                     "exit":  "hold20",
-                     "is":  {
-                                "winRate":  51.7,
-                                "avgAlpha":  4.04,
-                                "avgRet":  12.48,
-                                "avgDays":  20,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  55,
-                                 "avgAlpha":  7.19,
-                                 "avgRet":  14.9,
-                                 "avgDays":  20,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  80,
-                                  "avgAlpha":  20.57,
-                                  "avgRet":  43.28,
-                                  "avgDays":  20,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+0.5t",
-                     "exit":  "stop",
-                     "is":  {
-                                "winRate":  41.1,
-                                "avgAlpha":  2.63,
-                                "avgRet":  7.25,
-                                "avgDays":  12.8,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  45.8,
-                                 "avgAlpha":  5.71,
-                                 "avgRet":  10.68,
-                                 "avgDays":  13.8,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  60,
-                                  "avgAlpha":  15.41,
-                                  "avgRet":  32.87,
-                                  "avgDays":  14.8,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+0.5t",
-                     "exit":  "prod",
-                     "is":  {
-                                "winRate":  43.6,
-                                "avgAlpha":  0.66,
-                                "avgRet":  2.65,
-                                "avgDays":  5.1,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  38.8,
-                                 "avgAlpha":  -0.16,
-                                 "avgRet":  2.62,
-                                 "avgDays":  5.8,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  60,
-                                  "avgAlpha":  6.17,
-                                  "avgRet":  12.84,
-                                  "avgDays":  3.6,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+t",
-                     "exit":  "hold20",
-                     "is":  {
-                                "winRate":  48.9,
-                                "avgAlpha":  3.45,
-                                "avgRet":  11.89,
-                                "avgDays":  20,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  52.9,
-                                 "avgAlpha":  6.42,
-                                 "avgRet":  14.13,
-                                 "avgDays":  20,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  80,
-                                  "avgAlpha":  20.57,
-                                  "avgRet":  43.28,
-                                  "avgDays":  20,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+t",
-                     "exit":  "stop",
-                     "is":  {
-                                "winRate":  39.7,
-                                "avgAlpha":  2.36,
-                                "avgRet":  6.95,
-                                "avgDays":  12.9,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  44.6,
-                                 "avgAlpha":  4.99,
-                                 "avgRet":  9.84,
-                                 "avgDays":  13.7,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  60,
-                                  "avgAlpha":  15.41,
-                                  "avgRet":  32.87,
-                                  "avgDays":  14.8,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+t",
-                     "exit":  "prod",
-                     "is":  {
-                                "winRate":  43.3,
-                                "avgAlpha":  0.39,
-                                "avgRet":  2.3,
-                                "avgDays":  5.1,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  37.9,
-                                 "avgAlpha":  -0.39,
-                                 "avgRet":  2.36,
-                                 "avgDays":  5.7,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  60,
-                                  "avgAlpha":  6.17,
-                                  "avgRet":  12.84,
-                                  "avgDays":  3.6,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+2t",
-                     "exit":  "hold20",
-                     "is":  {
-                                "winRate":  49.4,
-                                "avgAlpha":  3.58,
-                                "avgRet":  12.02,
-                                "avgDays":  20,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  52.9,
-                                 "avgAlpha":  6.77,
-                                 "avgRet":  14.48,
-                                 "avgDays":  20,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  80,
-                                  "avgAlpha":  15.95,
-                                  "avgRet":  38.66,
-                                  "avgDays":  20,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+2t",
-                     "exit":  "stop",
-                     "is":  {
-                                "winRate":  39.7,
-                                "avgAlpha":  2.32,
-                                "avgRet":  6.99,
-                                "avgDays":  13,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  45,
-                                 "avgAlpha":  5.39,
-                                 "avgRet":  10.26,
-                                 "avgDays":  13.8,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  60,
-                                  "avgAlpha":  8,
-                                  "avgRet":  27.14,
-                                  "avgDays":  15.8,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+2t",
-                     "exit":  "prod",
-                     "is":  {
-                                "winRate":  42.8,
-                                "avgAlpha":  0.38,
-                                "avgRet":  2.26,
-                                "avgDays":  5,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  38.8,
-                                 "avgAlpha":  -0.18,
-                                 "avgRet":  2.59,
-                                 "avgDays":  5.8,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  40,
-                                  "avgAlpha":  3.41,
-                                  "avgRet":  10.09,
-                                  "avgDays":  3.8,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+4t",
-                     "exit":  "hold20",
-                     "is":  {
-                                "winRate":  49.4,
-                                "avgAlpha":  3.58,
-                                "avgRet":  12.02,
-                                "avgDays":  20,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  52.9,
-                                 "avgAlpha":  6.77,
-                                 "avgRet":  14.48,
-                                 "avgDays":  20,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  80,
-                                  "avgAlpha":  15.95,
-                                  "avgRet":  38.66,
-                                  "avgDays":  20,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+4t",
-                     "exit":  "stop",
-                     "is":  {
-                                "winRate":  39.7,
-                                "avgAlpha":  2.32,
-                                "avgRet":  6.99,
-                                "avgDays":  13,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  45,
-                                 "avgAlpha":  5.39,
-                                 "avgRet":  10.26,
-                                 "avgDays":  13.8,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  60,
-                                  "avgAlpha":  8,
-                                  "avgRet":  27.14,
-                                  "avgDays":  15.8,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "chip+4t",
-                     "exit":  "prod",
-                     "is":  {
-                                "winRate":  42.8,
-                                "avgAlpha":  0.38,
-                                "avgRet":  2.26,
-                                "avgDays":  5,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  38.8,
-                                 "avgAlpha":  -0.18,
-                                 "avgRet":  2.59,
-                                 "avgDays":  5.8,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  40,
-                                  "avgAlpha":  3.41,
-                                  "avgRet":  10.09,
-                                  "avgDays":  3.8,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "tech",
-                     "exit":  "hold20",
-                     "is":  {
-                                "winRate":  40.3,
-                                "avgAlpha":  1.89,
-                                "avgRet":  10.33,
-                                "avgDays":  20,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  55.4,
-                                 "avgAlpha":  9.06,
-                                 "avgRet":  16.77,
-                                 "avgDays":  20,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  80,
-                                  "avgAlpha":  15.95,
-                                  "avgRet":  38.66,
-                                  "avgDays":  20,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "tech",
-                     "exit":  "stop",
-                     "is":  {
-                                "winRate":  39.4,
-                                "avgAlpha":  1.75,
-                                "avgRet":  5.84,
-                                "avgDays":  11.7,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  51.7,
-                                 "avgAlpha":  8.68,
-                                 "avgRet":  14.09,
-                                 "avgDays":  14,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  60,
-                                  "avgAlpha":  8,
-                                  "avgRet":  27.14,
-                                  "avgDays":  15.8,
-                                  "n":  5
-                              }
-                 },
-                 {
-                     "rank":  "tech",
-                     "exit":  "prod",
-                     "is":  {
-                                "winRate":  43.9,
-                                "avgAlpha":  0.55,
-                                "avgRet":  2.22,
-                                "avgDays":  4,
-                                "n":  360
-                            },
-                     "oos":  {
-                                 "winRate":  49.6,
-                                 "avgAlpha":  3.2,
-                                 "avgRet":  5.33,
-                                 "avgDays":  4.3,
-                                 "n":  240
-                             },
-                     "bear":  {
-                                  "winRate":  40,
-                                  "avgAlpha":  3.41,
-                                  "avgRet":  10.09,
-                                  "avgDays":  3.8,
-                                  "n":  5
-                              }
-                 }
-             ],
-    "bestOOS":  {
-                    "rank":  "tech",
-                    "exit":  "hold20",
-                    "is":  {
-                               "winRate":  40.3,
-                               "avgAlpha":  1.89,
-                               "avgRet":  10.33,
-                               "avgDays":  20,
-                               "n":  360
-                           },
-                    "oos":  {
-                                "winRate":  55.4,
-                                "avgAlpha":  9.06,
-                                "avgRet":  16.77,
-                                "avgDays":  20,
-                                "n":  240
-                            },
-                    "bear":  {
-                                 "winRate":  80,
-                                 "avgAlpha":  15.95,
-                                 "avgRet":  38.66,
-                                 "avgDays":  20,
-                                 "n":  5
-                             }
-                },
-    "splitDate":  "20260409",
-    "generated":  "2026-07-19 21:17",
-    "period":  "2025/09/16-07/17"
+{
+  "splitDate": "20260512",
+  "generated": "2026-08-19 00:11",
+  "note": "v2.2 walk-forward: IS=first 60% (optimize), OOS=last 40% (validate); dividend-adjusted exits+returns; volume/candle factors replayed; stopTrail=prod minus foreign-2-day rule; avgAlphaNet=alpha-0.585% round-trip cost; nDistinct=non-overlapping entries; TWSE-only; fund factor + regime-green bonus not replayable; NOT comparable to v2.1",
+  "bestOOS": {
+    "rank": "chip",
+    "exit": "stop",
+    "is": {
+      "nDistinct": 132,
+      "avgRet": 9.37,
+      "medAlpha": -0.74,
+      "winRate": 47.2,
+      "n": 360,
+      "avgAlpha": 4.79,
+      "avgAlphaNet": 4.2,
+      "avgDays": 12.6
+    },
+    "oos": {
+      "nDistinct": 98,
+      "avgRet": 2.06,
+      "medAlpha": -1.53,
+      "winRate": 42.5,
+      "n": 240,
+      "avgAlpha": 1.67,
+      "avgAlphaNet": 1.08,
+      "avgDays": 10.5
+    },
+    "bear": {
+      "nDistinct": 12,
+      "avgRet": 15.19,
+      "medAlpha": 4.66,
+      "winRate": 60.0,
+      "n": 15,
+      "avgAlpha": 9.18,
+      "avgAlphaNet": 8.59,
+      "avgDays": 12.1
+    }
+  },
+  "panelDays": 200,
+  "grid": [
+    {
+      "rank": "chip",
+      "exit": "hold20",
+      "is": {
+        "nDistinct": 132,
+        "avgRet": 15.33,
+        "medAlpha": 2.89,
+        "winRate": 57.8,
+        "n": 360,
+        "avgAlpha": 6.54,
+        "avgAlphaNet": 5.96,
+        "avgDays": 20.0
+      },
+      "oos": {
+        "nDistinct": 98,
+        "avgRet": 2.0,
+        "medAlpha": -0.04,
+        "winRate": 50.0,
+        "n": 240,
+        "avgAlpha": 1.05,
+        "avgAlphaNet": 0.47,
+        "avgDays": 20.0
+      },
+      "bear": {
+        "nDistinct": 12,
+        "avgRet": 19.37,
+        "medAlpha": 0.58,
+        "winRate": 53.3,
+        "n": 15,
+        "avgAlpha": 6.67,
+        "avgAlphaNet": 6.08,
+        "avgDays": 20.0
+      }
+    },
+    {
+      "rank": "chip",
+      "exit": "stop",
+      "is": {
+        "nDistinct": 132,
+        "avgRet": 9.37,
+        "medAlpha": -0.74,
+        "winRate": 47.2,
+        "n": 360,
+        "avgAlpha": 4.79,
+        "avgAlphaNet": 4.2,
+        "avgDays": 12.6
+      },
+      "oos": {
+        "nDistinct": 98,
+        "avgRet": 2.06,
+        "medAlpha": -1.53,
+        "winRate": 42.5,
+        "n": 240,
+        "avgAlpha": 1.67,
+        "avgAlphaNet": 1.08,
+        "avgDays": 10.5
+      },
+      "bear": {
+        "nDistinct": 12,
+        "avgRet": 15.19,
+        "medAlpha": 4.66,
+        "winRate": 60.0,
+        "n": 15,
+        "avgAlpha": 9.18,
+        "avgAlphaNet": 8.59,
+        "avgDays": 12.1
+      }
+    },
+    {
+      "rank": "chip",
+      "exit": "prod",
+      "is": {
+        "nDistinct": 132,
+        "avgRet": 2.76,
+        "medAlpha": -1.19,
+        "winRate": 43.1,
+        "n": 360,
+        "avgAlpha": 0.48,
+        "avgAlphaNet": -0.1,
+        "avgDays": 5.6
+      },
+      "oos": {
+        "nDistinct": 98,
+        "avgRet": 1.24,
+        "medAlpha": -1.22,
+        "winRate": 41.7,
+        "n": 240,
+        "avgAlpha": 0.5,
+        "avgAlphaNet": -0.08,
+        "avgDays": 5.0
+      },
+      "bear": {
+        "nDistinct": 12,
+        "avgRet": 4.88,
+        "medAlpha": 2.68,
+        "winRate": 53.3,
+        "n": 15,
+        "avgAlpha": 1.36,
+        "avgAlphaNet": 0.78,
+        "avgDays": 6.3
+      }
+    },
+    {
+      "rank": "chip",
+      "exit": "stopTrail",
+      "is": {
+        "nDistinct": 132,
+        "avgRet": 8.89,
+        "medAlpha": -0.65,
+        "winRate": 47.5,
+        "n": 360,
+        "avgAlpha": 4.47,
+        "avgAlphaNet": 3.88,
+        "avgDays": 12.1
+      },
+      "oos": {
+        "nDistinct": 98,
+        "avgRet": 1.7,
+        "medAlpha": -1.53,
+        "winRate": 42.9,
+        "n": 240,
+        "avgAlpha": 1.18,
+        "avgAlphaNet": 0.6,
+        "avgDays": 10.1
+      },
+      "bear": {
+        "nDistinct": 12,
+        "avgRet": 15.28,
+        "medAlpha": 3.78,
+        "winRate": 60.0,
+        "n": 15,
+        "avgAlpha": 9.16,
+        "avgAlphaNet": 8.57,
+        "avgDays": 11.9
+      }
+    },
+    {
+      "rank": "chip+0.5t",
+      "exit": "hold20",
+      "is": {
+        "nDistinct": 127,
+        "avgRet": 16.88,
+        "medAlpha": 4.15,
+        "winRate": 60.6,
+        "n": 360,
+        "avgAlpha": 8.1,
+        "avgAlphaNet": 7.52,
+        "avgDays": 20.0
+      },
+      "oos": {
+        "nDistinct": 98,
+        "avgRet": 0.9,
+        "medAlpha": -0.77,
+        "winRate": 45.8,
+        "n": 240,
+        "avgAlpha": -0.06,
+        "avgAlphaNet": -0.64,
+        "avgDays": 20.0
+      },
+      "bear": {
+        "nDistinct": 11,
+        "avgRet": 19.73,
+        "medAlpha": 0.58,
+        "winRate": 53.3,
+        "n": 15,
+        "avgAlpha": 7.03,
+        "avgAlphaNet": 6.44,
+        "avgDays": 20.0
+      }
+    },
+    {
+      "rank": "chip+0.5t",
+      "exit": "stop",
+      "is": {
+        "nDistinct": 127,
+        "avgRet": 10.64,
+        "medAlpha": -0.06,
+        "winRate": 50.0,
+        "n": 360,
+        "avgAlpha": 5.78,
+        "avgAlphaNet": 5.2,
+        "avgDays": 13.4
+      },
+      "oos": {
+        "nDistinct": 98,
+        "avgRet": 1.3,
+        "medAlpha": -2.08,
+        "winRate": 40.0,
+        "n": 240,
+        "avgAlpha": 0.94,
+        "avgAlphaNet": 0.36,
+        "avgDays": 11.1
+      },
+      "bear": {
+        "nDistinct": 11,
+        "avgRet": 15.42,
+        "medAlpha": 4.66,
+        "winRate": 60.0,
+        "n": 15,
+        "avgAlpha": 8.64,
+        "avgAlphaNet": 8.06,
+        "avgDays": 11.7
+      }
+    },
+    {
+      "rank": "chip+0.5t",
+      "exit": "prod",
+      "is": {
+        "nDistinct": 127,
+        "avgRet": 3.02,
+        "medAlpha": -1.19,
+        "winRate": 44.4,
+        "n": 360,
+        "avgAlpha": 0.66,
+        "avgAlphaNet": 0.08,
+        "avgDays": 5.9
+      },
+      "oos": {
+        "nDistinct": 98,
+        "avgRet": 0.84,
+        "medAlpha": -1.1,
+        "winRate": 42.9,
+        "n": 240,
+        "avgAlpha": 0.14,
+        "avgAlphaNet": -0.44,
+        "avgDays": 5.1
+      },
+      "bear": {
+        "nDistinct": 11,
+        "avgRet": 5.35,
+        "medAlpha": 2.68,
+        "winRate": 53.3,
+        "n": 15,
+        "avgAlpha": 1.15,
+        "avgAlphaNet": 0.56,
+        "avgDays": 5.9
+      }
+    },
+    {
+      "rank": "chip+0.5t",
+      "exit": "stopTrail",
+      "is": {
+        "nDistinct": 127,
+        "avgRet": 9.91,
+        "medAlpha": 0.03,
+        "winRate": 50.3,
+        "n": 360,
+        "avgAlpha": 5.26,
+        "avgAlphaNet": 4.68,
+        "avgDays": 12.9
+      },
+      "oos": {
+        "nDistinct": 98,
+        "avgRet": 1.09,
+        "medAlpha": -1.74,
+        "winRate": 40.8,
+        "n": 240,
+        "avgAlpha": 0.53,
+        "avgAlphaNet": -0.05,
+        "avgDays": 10.7
+      },
+      "bear": {
+        "nDistinct": 11,
+        "avgRet": 15.52,
+        "medAlpha": 3.78,
+        "winRate": 60.0,
+        "n": 15,
+        "avgAlpha": 8.62,
+        "avgAlphaNet": 8.04,
+        "avgDays": 11.5
+      }
+    },
+    {
+      "rank": "chip+t",
+      "exit": "hold20",
+      "is": {
+        "nDistinct": 128,
+        "avgRet": 17.69,
+        "medAlpha": 5.21,
+        "winRate": 61.7,
+        "n": 360,
+        "avgAlpha": 8.9,
+        "avgAlphaNet": 8.32,
+        "avgDays": 20.0
+      },
+      "oos": {
+        "nDistinct": 100,
+        "avgRet": 1.17,
+        "medAlpha": -0.74,
+        "winRate": 47.1,
+        "n": 240,
+        "avgAlpha": 0.22,
+        "avgAlphaNet": -0.36,
+        "avgDays": 20.0
+      },
+      "bear": {
+        "nDistinct": 11,
+        "avgRet": 19.73,
+        "medAlpha": 0.58,
+        "winRate": 53.3,
+        "n": 15,
+        "avgAlpha": 7.03,
+        "avgAlphaNet": 6.44,
+        "avgDays": 20.0
+      }
+    },
+    {
+      "rank": "chip+t",
+      "exit": "stop",
+      "is": {
+        "nDistinct": 128,
+        "avgRet": 11.91,
+        "medAlpha": 0.55,
+        "winRate": 52.8,
+        "n": 360,
+        "avgAlpha": 6.91,
+        "avgAlphaNet": 6.32,
+        "avgDays": 13.7
+      },
+      "oos": {
+        "nDistinct": 100,
+        "avgRet": 1.4,
+        "medAlpha": -1.7,
+        "winRate": 41.2,
+        "n": 240,
+        "avgAlpha": 1.06,
+        "avgAlphaNet": 0.48,
+        "avgDays": 11.2
+      },
+      "bear": {
+        "nDistinct": 11,
+        "avgRet": 15.42,
+        "medAlpha": 4.66,
+        "winRate": 60.0,
+        "n": 15,
+        "avgAlpha": 8.64,
+        "avgAlphaNet": 8.06,
+        "avgDays": 11.7
+      }
+    },
+    {
+      "rank": "chip+t",
+      "exit": "prod",
+      "is": {
+        "nDistinct": 128,
+        "avgRet": 3.56,
+        "medAlpha": -0.6,
+        "winRate": 46.9,
+        "n": 360,
+        "avgAlpha": 1.25,
+        "avgAlphaNet": 0.66,
+        "avgDays": 5.9
+      },
+      "oos": {
+        "nDistinct": 100,
+        "avgRet": 0.39,
+        "medAlpha": -1.28,
+        "winRate": 41.2,
+        "n": 240,
+        "avgAlpha": -0.29,
+        "avgAlphaNet": -0.88,
+        "avgDays": 5.2
+      },
+      "bear": {
+        "nDistinct": 11,
+        "avgRet": 5.35,
+        "medAlpha": 2.68,
+        "winRate": 53.3,
+        "n": 15,
+        "avgAlpha": 1.15,
+        "avgAlphaNet": 0.56,
+        "avgDays": 5.9
+      }
+    },
+    {
+      "rank": "chip+t",
+      "exit": "stopTrail",
+      "is": {
+        "nDistinct": 128,
+        "avgRet": 10.81,
+        "medAlpha": 0.36,
+        "winRate": 52.5,
+        "n": 360,
+        "avgAlpha": 6.12,
+        "avgAlphaNet": 5.54,
+        "avgDays": 13.1
+      },
+      "oos": {
+        "nDistinct": 100,
+        "avgRet": 1.4,
+        "medAlpha": -1.7,
+        "winRate": 42.1,
+        "n": 240,
+        "avgAlpha": 0.82,
+        "avgAlphaNet": 0.24,
+        "avgDays": 10.9
+      },
+      "bear": {
+        "nDistinct": 11,
+        "avgRet": 15.52,
+        "medAlpha": 3.78,
+        "winRate": 60.0,
+        "n": 15,
+        "avgAlpha": 8.62,
+        "avgAlphaNet": 8.04,
+        "avgDays": 11.5
+      }
+    },
+    {
+      "rank": "chip+2t",
+      "exit": "hold20",
+      "is": {
+        "nDistinct": 141,
+        "avgRet": 16.0,
+        "medAlpha": 4.0,
+        "winRate": 59.7,
+        "n": 360,
+        "avgAlpha": 7.21,
+        "avgAlphaNet": 6.62,
+        "avgDays": 20.0
+      },
+      "oos": {
+        "nDistinct": 105,
+        "avgRet": 0.96,
+        "medAlpha": -0.77,
+        "winRate": 47.5,
+        "n": 240,
+        "avgAlpha": 0.0,
+        "avgAlphaNet": -0.58,
+        "avgDays": 20.0
+      },
+      "bear": {
+        "nDistinct": 12,
+        "avgRet": 12.5,
+        "medAlpha": -0.14,
+        "winRate": 46.7,
+        "n": 15,
+        "avgAlpha": -0.2,
+        "avgAlphaNet": -0.78,
+        "avgDays": 20.0
+      }
+    },
+    {
+      "rank": "chip+2t",
+      "exit": "stop",
+      "is": {
+        "nDistinct": 141,
+        "avgRet": 10.29,
+        "medAlpha": -0.36,
+        "winRate": 49.4,
+        "n": 360,
+        "avgAlpha": 5.23,
+        "avgAlphaNet": 4.65,
+        "avgDays": 13.5
+      },
+      "oos": {
+        "nDistinct": 105,
+        "avgRet": 1.13,
+        "medAlpha": -2.25,
+        "winRate": 39.6,
+        "n": 240,
+        "avgAlpha": 0.53,
+        "avgAlphaNet": -0.05,
+        "avgDays": 11.4
+      },
+      "bear": {
+        "nDistinct": 12,
+        "avgRet": 7.69,
+        "medAlpha": -0.14,
+        "winRate": 46.7,
+        "n": 15,
+        "avgAlpha": 0.36,
+        "avgAlphaNet": -0.22,
+        "avgDays": 12.5
+      }
+    },
+    {
+      "rank": "chip+2t",
+      "exit": "prod",
+      "is": {
+        "nDistinct": 141,
+        "avgRet": 3.46,
+        "medAlpha": -1.16,
+        "winRate": 45.0,
+        "n": 360,
+        "avgAlpha": 1.19,
+        "avgAlphaNet": 0.6,
+        "avgDays": 5.9
+      },
+      "oos": {
+        "nDistinct": 105,
+        "avgRet": 0.94,
+        "medAlpha": -0.89,
+        "winRate": 42.1,
+        "n": 240,
+        "avgAlpha": 0.14,
+        "avgAlphaNet": -0.44,
+        "avgDays": 5.3
+      },
+      "bear": {
+        "nDistinct": 12,
+        "avgRet": 3.46,
+        "medAlpha": -0.1,
+        "winRate": 46.7,
+        "n": 15,
+        "avgAlpha": 0.02,
+        "avgAlphaNet": -0.56,
+        "avgDays": 5.5
+      }
+    },
+    {
+      "rank": "chip+2t",
+      "exit": "stopTrail",
+      "is": {
+        "nDistinct": 141,
+        "avgRet": 9.24,
+        "medAlpha": -0.53,
+        "winRate": 48.9,
+        "n": 360,
+        "avgAlpha": 4.48,
+        "avgAlphaNet": 3.9,
+        "avgDays": 13.0
+      },
+      "oos": {
+        "nDistinct": 105,
+        "avgRet": 1.1,
+        "medAlpha": -2.08,
+        "winRate": 40.8,
+        "n": 240,
+        "avgAlpha": 0.25,
+        "avgAlphaNet": -0.34,
+        "avgDays": 11.0
+      },
+      "bear": {
+        "nDistinct": 12,
+        "avgRet": 7.79,
+        "medAlpha": -0.14,
+        "winRate": 46.7,
+        "n": 15,
+        "avgAlpha": 0.34,
+        "avgAlphaNet": -0.24,
+        "avgDays": 12.3
+      }
+    },
+    {
+      "rank": "chip+4t",
+      "exit": "hold20",
+      "is": {
+        "nDistinct": 151,
+        "avgRet": 15.05,
+        "medAlpha": 2.5,
+        "winRate": 57.2,
+        "n": 360,
+        "avgAlpha": 6.26,
+        "avgAlphaNet": 5.68,
+        "avgDays": 20.0
+      },
+      "oos": {
+        "nDistinct": 115,
+        "avgRet": 0.17,
+        "medAlpha": -2.75,
+        "winRate": 45.0,
+        "n": 240,
+        "avgAlpha": -0.79,
+        "avgAlphaNet": -1.38,
+        "avgDays": 20.0
+      },
+      "bear": {
+        "nDistinct": 14,
+        "avgRet": 11.34,
+        "medAlpha": -6.64,
+        "winRate": 33.3,
+        "n": 15,
+        "avgAlpha": -1.36,
+        "avgAlphaNet": -1.94,
+        "avgDays": 20.0
+      }
+    },
+    {
+      "rank": "chip+4t",
+      "exit": "stop",
+      "is": {
+        "nDistinct": 151,
+        "avgRet": 9.46,
+        "medAlpha": -1.41,
+        "winRate": 46.4,
+        "n": 360,
+        "avgAlpha": 4.34,
+        "avgAlphaNet": 3.76,
+        "avgDays": 13.5
+      },
+      "oos": {
+        "nDistinct": 115,
+        "avgRet": 0.38,
+        "medAlpha": -3.52,
+        "winRate": 37.5,
+        "n": 240,
+        "avgAlpha": -0.46,
+        "avgAlphaNet": -1.04,
+        "avgDays": 11.3
+      },
+      "bear": {
+        "nDistinct": 14,
+        "avgRet": 6.66,
+        "medAlpha": -3.38,
+        "winRate": 26.7,
+        "n": 15,
+        "avgAlpha": -1.76,
+        "avgAlphaNet": -2.34,
+        "avgDays": 12.8
+      }
+    },
+    {
+      "rank": "chip+4t",
+      "exit": "prod",
+      "is": {
+        "nDistinct": 151,
+        "avgRet": 2.59,
+        "medAlpha": -1.69,
+        "winRate": 41.4,
+        "n": 360,
+        "avgAlpha": 0.27,
+        "avgAlphaNet": -0.31,
+        "avgDays": 6.0
+      },
+      "oos": {
+        "nDistinct": 115,
+        "avgRet": 0.68,
+        "medAlpha": -1.53,
+        "winRate": 39.2,
+        "n": 240,
+        "avgAlpha": -0.22,
+        "avgAlphaNet": -0.8,
+        "avgDays": 4.8
+      },
+      "bear": {
+        "nDistinct": 14,
+        "avgRet": 2.04,
+        "medAlpha": -4.31,
+        "winRate": 20.0,
+        "n": 15,
+        "avgAlpha": -3.16,
+        "avgAlphaNet": -3.74,
+        "avgDays": 5.5
+      }
+    },
+    {
+      "rank": "chip+4t",
+      "exit": "stopTrail",
+      "is": {
+        "nDistinct": 151,
+        "avgRet": 8.58,
+        "medAlpha": -1.41,
+        "winRate": 46.4,
+        "n": 360,
+        "avgAlpha": 3.75,
+        "avgAlphaNet": 3.16,
+        "avgDays": 13.0
+      },
+      "oos": {
+        "nDistinct": 115,
+        "avgRet": 0.22,
+        "medAlpha": -3.38,
+        "winRate": 38.8,
+        "n": 240,
+        "avgAlpha": -0.84,
+        "avgAlphaNet": -1.42,
+        "avgDays": 11.0
+      },
+      "bear": {
+        "nDistinct": 14,
+        "avgRet": 6.67,
+        "medAlpha": -3.38,
+        "winRate": 26.7,
+        "n": 15,
+        "avgAlpha": -1.88,
+        "avgAlphaNet": -2.46,
+        "avgDays": 12.7
+      }
+    },
+    {
+      "rank": "tech",
+      "exit": "hold20",
+      "is": {
+        "nDistinct": 203,
+        "avgRet": 12.87,
+        "medAlpha": -0.63,
+        "winRate": 48.1,
+        "n": 360,
+        "avgAlpha": 4.08,
+        "avgAlphaNet": 3.5,
+        "avgDays": 20.0
+      },
+      "oos": {
+        "nDistinct": 148,
+        "avgRet": -1.58,
+        "medAlpha": -4.0,
+        "winRate": 41.2,
+        "n": 240,
+        "avgAlpha": -2.54,
+        "avgAlphaNet": -3.12,
+        "avgDays": 20.0
+      },
+      "bear": {
+        "nDistinct": 14,
+        "avgRet": 12.12,
+        "medAlpha": -6.8,
+        "winRate": 26.7,
+        "n": 15,
+        "avgAlpha": -0.58,
+        "avgAlphaNet": -1.16,
+        "avgDays": 20.0
+      }
+    },
+    {
+      "rank": "tech",
+      "exit": "stop",
+      "is": {
+        "nDistinct": 203,
+        "avgRet": 8.03,
+        "medAlpha": -3.43,
+        "winRate": 39.2,
+        "n": 360,
+        "avgAlpha": 2.99,
+        "avgAlphaNet": 2.41,
+        "avgDays": 13.1
+      },
+      "oos": {
+        "nDistinct": 148,
+        "avgRet": -0.3,
+        "medAlpha": -3.38,
+        "winRate": 39.2,
+        "n": 240,
+        "avgAlpha": -0.87,
+        "avgAlphaNet": -1.46,
+        "avgDays": 11.9
+      },
+      "bear": {
+        "nDistinct": 14,
+        "avgRet": 5.63,
+        "medAlpha": -3.38,
+        "winRate": 20.0,
+        "n": 15,
+        "avgAlpha": -2.13,
+        "avgAlphaNet": -2.72,
+        "avgDays": 12.2
+      }
+    },
+    {
+      "rank": "tech",
+      "exit": "prod",
+      "is": {
+        "nDistinct": 203,
+        "avgRet": 3.38,
+        "medAlpha": -1.74,
+        "winRate": 40.0,
+        "n": 360,
+        "avgAlpha": 1.04,
+        "avgAlphaNet": 0.46,
+        "avgDays": 6.1
+      },
+      "oos": {
+        "nDistinct": 148,
+        "avgRet": 0.41,
+        "medAlpha": -1.06,
+        "winRate": 42.5,
+        "n": 240,
+        "avgAlpha": -0.1,
+        "avgAlphaNet": -0.68,
+        "avgDays": 3.7
+      },
+      "bear": {
+        "nDistinct": 14,
+        "avgRet": 2.22,
+        "medAlpha": -4.16,
+        "winRate": 20.0,
+        "n": 15,
+        "avgAlpha": -3.32,
+        "avgAlphaNet": -3.9,
+        "avgDays": 4.9
+      }
+    },
+    {
+      "rank": "tech",
+      "exit": "stopTrail",
+      "is": {
+        "nDistinct": 203,
+        "avgRet": 7.22,
+        "medAlpha": -3.38,
+        "winRate": 40.0,
+        "n": 360,
+        "avgAlpha": 2.52,
+        "avgAlphaNet": 1.94,
+        "avgDays": 12.6
+      },
+      "oos": {
+        "nDistinct": 148,
+        "avgRet": -0.58,
+        "medAlpha": -3.38,
+        "winRate": 39.2,
+        "n": 240,
+        "avgAlpha": -1.23,
+        "avgAlphaNet": -1.82,
+        "avgDays": 11.4
+      },
+      "bear": {
+        "nDistinct": 14,
+        "avgRet": 5.64,
+        "medAlpha": -3.38,
+        "winRate": 20.0,
+        "n": 15,
+        "avgAlpha": -2.25,
+        "avgAlphaNet": -2.84,
+        "avgDays": 12.1
+      }
+    }
+  ],
+  "current": {
+    "rank": "chip+t",
+    "exit": "prod",
+    "is": {
+      "nDistinct": 128,
+      "avgRet": 3.56,
+      "medAlpha": -0.6,
+      "winRate": 46.9,
+      "n": 360,
+      "avgAlpha": 1.25,
+      "avgAlphaNet": 0.66,
+      "avgDays": 5.9
+    },
+    "oos": {
+      "nDistinct": 100,
+      "avgRet": 0.39,
+      "medAlpha": -1.28,
+      "winRate": 41.2,
+      "n": 240,
+      "avgAlpha": -0.29,
+      "avgAlphaNet": -0.88,
+      "avgDays": 5.2
+    },
+    "bear": {
+      "nDistinct": 11,
+      "avgRet": 5.35,
+      "medAlpha": 2.68,
+      "winRate": 53.3,
+      "n": 15,
+      "avgAlpha": 1.15,
+      "avgAlphaNet": 0.56,
+      "avgDays": 5.9
+    }
+  },
+  "period": "2025/10/21-08/18"
 }

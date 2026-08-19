@@ -61,6 +61,24 @@ $FeedCols = @{
 $FeedFields = @{
   CompanyTwse = @{ code='公司代號'; name='公司簡稱'; shares='已發行普通股數或TDR原股發行股數' }
   CompanyTpex = @{ code='SecuritiesCompanyCode'; name='CompanyAbbreviation'; shares='IssueShares' }
+
+  # Valuation. The two boards disagree on every single name, including which of PE/PB/yield
+  # comes first, so there is nothing to share here beyond the shape.
+  ValuationTwse = @{ code='Code'; pe='PEratio'; pb='PBratio'; dy='DividendYield' }
+  ValuationTpex = @{ code='SecuritiesCompanyCode'; pe='PriceEarningRatio'; pb='PriceBookRatio'; dy='YieldRatio' }
+
+  # Monthly revenue (t187ap05). Unusually, BOTH boards publish identical field names here, so one
+  # map serves both - do not "helpfully" split it into two.
+  #
+  # These were previously read by POSITION ($p[9].Value) with a warning that fired when the
+  # column order shifted. Positions are what $FeedCols is for; this endpoint returns objects, so
+  # it is read by name like every other object endpoint. mom / yoyCum were sitting unread in the
+  # same response the whole time - single-month YoY alone cannot say whether revenue is
+  # ACCELERATING, which is the only momentum a monthly fundamental feed can offer.
+  Revenue = @{ code='公司代號'; name='公司名稱'; ind='產業別'
+               yoy='營業收入-去年同月增減(%)'
+               mom='營業收入-上月比較增減(%)'
+               yoyCum='累計營業收入-前期比較增減(%)' }
 }
 
 # Swap the transport. $Transport is a scriptblock taking a url and returning parsed JSON
@@ -361,6 +379,92 @@ function Get-FeedIssuedShares {
       $sh=ConvertTo-FeedNum $row.($f.shares)
       if($null -eq $sh -or $sh -le 0){ continue }      # no share count = cannot be ranked
       $out[$code]=@{ name="$($row.($f.name))".Trim(); shares=$sh; market=$src.mkt }
+      $n++
+    }
+    if($n -gt 0){ $okAny=$true }
+    Wait-FeedPolite
+  }
+  return @{ Ok=$okAny; Rows=$out }
+}
+
+function Test-FeedRowFields {
+  <#  Does this response still carry the field names we read? Returns $true/$false and warns with
+      the specific names that vanished.
+
+      Replaces screen.ps1's CheckRevCols, which could only say "column 9 is not called 增減
+      any more" because it read by position. Reading by name means a rename shows up as a $null
+      value rather than a silently wrong column, and this check names the culprit. #>
+  param($Rows, [hashtable]$Fields, [string]$Label)
+  $r=@($Rows)
+  if($r.Count -eq 0){ return $true }
+  $have=@{}
+  foreach($p in $r[0].PSObject.Properties){ $have[$p.Name]=$true }
+  $missing=@()
+  foreach($k in ($Fields.Keys | Sort-Object)){ if(-not $have.ContainsKey($Fields[$k])){ $missing += "$k='$($Fields[$k])'" } }
+  if($missing.Count -gt 0){
+    Write-Host "  WARN: $Label field names changed - missing $($missing -join ', ') - review `$FeedFields in lib/feed.ps1"
+    return $false
+  }
+  return $true
+}
+
+function Get-FeedValuation {
+  <#  PE / PB / dividend yield per code, both boards.
+      Returns @{ Ok; Rows=@{ code -> @{ pe; pb; dy } } }, TWSE winning a dual-listed code to
+      match the $px precedence in screen.ps1. Ok is $false only when BOTH boards fail. #>
+  $out=@{}
+  $okAny=$false
+  foreach($src in @(
+    @{ url='https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL'; f=$FeedFields.ValuationTwse; label='BWIBBU_ALL' }
+    @{ url='https://www.tpex.org.tw/openapi/v1/tpex_mainboard_peratio_analysis'; f=$FeedFields.ValuationTpex; label='tpex peratio_analysis' }
+  )){
+    $r=Get-FeedJson $src.url
+    if(-not $r){ continue }
+    [void](Test-FeedRowFields -Rows $r -Fields $src.f -Label $src.label)
+    $f=$src.f
+    $n=0
+    foreach($row in @($r)){
+      $code="$($row.($f.code))".Trim()
+      if(-not $code){ continue }
+      if($out.ContainsKey($code)){ continue }
+      $out[$code]=@{ pe=(ConvertTo-FeedNum $row.($f.pe))
+                     pb=(ConvertTo-FeedNum $row.($f.pb))
+                     dy=(ConvertTo-FeedNum $row.($f.dy)) }
+      $n++
+    }
+    if($n -gt 0){ $okAny=$true }
+    Wait-FeedPolite
+  }
+  return @{ Ok=$okAny; Rows=$out }
+}
+
+function Get-FeedRevenue {
+  <#  Monthly revenue growth and industry per code, both boards.
+      Returns @{ Ok; Rows=@{ code -> @{ name; ind; yoy; mom; yoyCum } } }, all three growth
+      figures already in percent as published. TWSE wins a dual-listed code.
+
+      `ind` is the exchange's own industry label, which is also the only industry classification
+      anywhere in this project. #>
+  $out=@{}
+  $okAny=$false
+  $f=$FeedFields.Revenue
+  foreach($src in @(
+    @{ url='https://openapi.twse.com.tw/v1/opendata/t187ap05_L'; label='t187ap05_L' }
+    @{ url='https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O'; label='mopsfin_t187ap05_O' }
+  )){
+    $r=Get-FeedJson $src.url
+    if(-not $r){ continue }
+    [void](Test-FeedRowFields -Rows $r -Fields $f -Label $src.label)
+    $n=0
+    foreach($row in @($r)){
+      $code="$($row.($f.code))".Trim()
+      if(-not $code){ continue }
+      if($out.ContainsKey($code)){ continue }
+      $out[$code]=@{ name="$($row.($f.name))".Trim()
+                     ind="$($row.($f.ind))".Trim()
+                     yoy=(ConvertTo-FeedNum $row.($f.yoy))
+                     mom=(ConvertTo-FeedNum $row.($f.mom))
+                     yoyCum=(ConvertTo-FeedNum $row.($f.yoyCum)) }
       $n++
     }
     if($n -gt 0){ $okAny=$true }

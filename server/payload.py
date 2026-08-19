@@ -87,12 +87,13 @@ def user_trades(conn, user_id):
     ).fetchall()
 
 
-def holdings_meta(conn, user_id, div_notes=None, prev_stance=None, stance=None):
+def holdings_meta(conn, user_id, div_notes=None, prev_stance=None, stance=None, fund=None):
     """Same shape as window.HOLDINGS_META that update-holdings.ps1 splices into the static page,
     so the front-end needs no branch for where it came from."""
     div_notes = div_notes or {}
     prev_stance = prev_stance or {}
     stance = stance or {}
+    fund = fund or {}
     meta = {"_trades": [dict(t) for t in user_trades(conn, user_id)]}
     for h in user_holdings(conn, user_id):
         meta[h["code"]] = {
@@ -110,6 +111,10 @@ def holdings_meta(conn, user_id, div_notes=None, prev_stance=None, stance=None):
             # rides along in the shared daily export; the page renders it rather than
             # recomputing the judgement formula in JavaScript.
             "stance": stance.get(h["code"]),
+            # exchange fundamentals (revenue growth, PE/PB, yield) plus the engine's direction
+            # chip. Pure market data with no AI call behind it, so unlike `stance` it is exported
+            # for the union of all users' codes and every reader gets it for what they hold.
+            "fund": fund.get(h["code"]),
         }
     return meta
 
@@ -204,16 +209,7 @@ def notes_for(tier, codes, all_notes, private_codes, guest_notes=None):
     all_notes = all_notes or {}
     guest_notes = guest_notes or {}
     guest_fields = pagedata.guest_note_fields()
-    market_fields = pagedata.market_public_fields()
     out = {}
-    market = all_notes.get("_market")
-    if isinstance(market, dict):
-        if tier == "owner":
-            out["_market"] = market
-        else:
-            slim = {k: market[k] for k in market_fields if k in market}
-            if slim:
-                out["_market"] = slim
     for code in codes:
         note = all_notes.get(code)
         if tier == "owner":
@@ -239,6 +235,24 @@ def notes_for(tier, codes, all_notes, private_codes, guest_notes=None):
     return out
 
 
+def market_for(tier, market):
+    """The market block (window.MARKET) as this reader may see it.
+
+    Used to be a pseudo-code `_market` living inside the per-code notes, which is precisely what
+    let a stock's `fund` paragraph drift into index commentary. It is its own block now, written
+    to its own file, and read as its own thing.
+
+    Allowlist, not blocklist: a field added upstream stays private until page-contract.json's
+    marketFields.guest names it. `wind` and `night` are ownerOnly because the daily prompt writes
+    them against this portfolio's holdings and levels - they are advice, not market facts.
+    """
+    if not isinstance(market, dict):
+        return {}
+    if tier == "owner":
+        return market
+    return {k: market[k] for k in pagedata.market_guest_fields() if k in market}
+
+
 def notes_for_reader(conn, reader, codes, all_notes, guest_notes=None):
     """notes_for() with the privacy set derived rather than passed.
 
@@ -261,6 +275,12 @@ def bootstrap(conn, cfg, user):
     notes_dir = cfg.get("notesDir", config.ROOT)
     picks_notes = _read_json(os.path.join(notes_dir, "picks-notes.json"), {}) or {}
     all_notes = _read_json(os.path.join(notes_dir, "holdings-notes.json"), {}) or {}
+    # The market read is its own file now, not a `_market` pseudo-code inside the per-code notes.
+    # Fall back to the old location for one changeover day, after which the daily run has
+    # rewritten both and this branch never fires again.
+    market_raw = _read_json(os.path.join(notes_dir, "market-notes.json"), None)
+    if not isinstance(market_raw, dict):
+        market_raw = all_notes.get("_market") if isinstance(all_notes, dict) else None
     # Gemini's per-code analysis (server/gnotes.py). Only guests read it; missing file just means
     # the step has not run yet, and notes_for() then behaves exactly as it did before.
     guest_notes = ({} if user["tier"] == "owner"
@@ -300,6 +320,11 @@ def bootstrap(conn, cfg, user):
         for c, v in shared_meta.items()
         if isinstance(v, dict) and v.get("stance")
     }
+    # `_fund` is a union-code map like `_prevStance`: fundamentals are exchange figures, so a
+    # guest gets them for their own codes even when the owner does not hold them.
+    fund = shared_meta.get("_fund") or {}
+    if not isinstance(fund, dict):
+        fund = {}
 
     codes = [h["code"] for h in user_holdings(conn, user["id"])]
     dash = {"TAIEX": quotes.get("TAIEX", [])}
@@ -312,7 +337,7 @@ def bootstrap(conn, cfg, user):
             # on DASH[code].series, so drop it from meta rather than ship a broken payload.
             missing.append(code)
 
-    hmeta = holdings_meta(conn, user["id"], div_notes, prev_stance, stance)
+    hmeta = holdings_meta(conn, user["id"], div_notes, prev_stance, stance, fund)
     for code in missing:
         hmeta.pop(code, None)
 
@@ -328,6 +353,7 @@ def bootstrap(conn, cfg, user):
         "dash": dash,
         "holdingsMeta": hmeta,
         "holdingsNotes": notes_for_reader(conn, user, codes, all_notes, guest_notes),
+        "market": market_for(user["tier"], market_raw),
         "picks": picks,
         "picksKline": picks_kline,
         "picksNotes": picks_notes,

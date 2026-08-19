@@ -48,20 +48,43 @@ fetch() {
   #     `_market` rides along for the same reason picks-log exists: yesterday's market call has
   #     to be answerable today. On 2026-07-30 the run published moodK "bear" and the next session
   #     was +7.97%; nothing in the pipeline ever made the next day's run look at that.
+  #     The market half comes from market-notes.json now that the market read is its own file.
+  #     A missing file is normal (first run after the split, or the AI step skipped it); a file
+  #     that exists but cannot be parsed is NOT, and used to vanish into `|| true` - the AI then
+  #     silently lost yesterday's context with nothing in the log to say so.
   python3 - <<'PY' || true
-import json, os
-try:
-    with open("holdings-notes.json", encoding="utf-8-sig") as fh:
-        notes = json.load(fh)
-except (OSError, ValueError):
-    raise SystemExit(0)
+import json, os, sys
+
+def load(path):
+    """(data, ok). ok=False only for a file that exists and is broken - that is worth shouting
+    about; simply not being there is an ordinary state."""
+    if not os.path.exists(path):
+        return {}, True
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            return json.load(fh), True
+    except (OSError, ValueError) as exc:
+        print("  WARN: %s unreadable (%s) - yesterday's context will be missing from today's "
+              "analysis" % (path, exc), file=sys.stderr)
+        return {}, False
+
+notes, _ = load("holdings-notes.json")
+mkt, _ = load("market-notes.json")
+if not isinstance(notes, dict):
+    notes = {}
+if not isinstance(mkt, dict):
+    mkt = {}
+# one changeover day: before the split the market read lived here as a pseudo-code
+if not mkt:
+    mkt = notes.get("_market") or {}
 recs = {c: n["rec"] for c, n in notes.items()
         if not c.startswith("_") and isinstance(n, dict) and n.get("rec")}
-mkt = notes.get("_market") or {}
 market = {k: mkt[k] for k in ("windLead", "mood", "moodK", "night") if mkt.get(k)}
 if not recs and not market:
     raise SystemExit(0)
-out = {"writtenAt": os.path.getmtime("holdings-notes.json"), "recs": recs, "market": market}
+stamp = max((os.path.getmtime(p) for p in ("holdings-notes.json", "market-notes.json")
+             if os.path.exists(p)), default=0)
+out = {"writtenAt": stamp, "recs": recs, "market": market}
 with open("prev-recs.json", "w", encoding="utf-8") as fh:
     json.dump(out, fh, ensure_ascii=False, indent=1)
 print("  prev-recs.json: %d 檔昨日建議%s" % (len(recs), "＋昨日市場判斷" if market else ""))

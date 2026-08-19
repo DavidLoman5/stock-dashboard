@@ -432,10 +432,13 @@ class TestGuestPlusCodeBudget(Base):
 
 
 class TestTiers(Base):
+    # The market read is its own block now (window.MARKET / market-notes.json), not a `_market`
+    # pseudo-code inside the per-code notes - which is what used to let a stock's `fund`
+    # paragraph wander into index commentary.
+    MARKET = {"mood": "偏多", "windLead": "大盤收紅",
+              "wind": "投組今日明顯分化：00990A(+0.96%)與00981A(+0.67%)靠外資續買收紅"}
     NOTES = {
-        "_market": {"mood": "偏多", "windLead": "大盤收紅",
-                    "wind": "投組今日明顯分化：00990A(+0.96%)與00981A(+0.67%)靠外資續買收紅"},
-        "0050": {"sigFund": ["neu", "中性"], "tech": "站上月線", "chip": "外資買超",
+        "0050": {"tech": "站上月線", "chip": "外資買超",
                  "fund": "追蹤大盤", "rec": "建議續抱兩成部位", "news": [{"t": "x", "u": "http://a"}]},
     }
 
@@ -447,15 +450,26 @@ class TestTiers(Base):
         self.assertEqual(got["0050"]["tech"], "站上月線")
         self.assertNotIn("rec", got["0050"])    # portfolio-level advice is owner-only
         self.assertNotIn("news", got["0050"])
-        self.assertIn("_market", got)           # market view is genuinely shared
+
+    def test_per_code_notes_no_longer_carry_the_market_block(self):
+        # structural: the two are separate payloads, so a per-code read cannot silently become
+        # a market call and the market block cannot leak through the per-code path
+        got = payload.notes_for("guest", ["0050"], self.NOTES, private_codes={"0050"})
+        self.assertNotIn("_market", got)
+        self.assertNotIn("_market", payload.notes_for("owner", ["0050"], self.NOTES, ()))
 
     def test_market_commentary_naming_owner_holdings_is_not_shared(self):
-        got = payload.notes_for("guest", ["0050"], self.NOTES, private_codes={"0050"})
+        got = payload.market_for("guest", self.MARKET)
         # `wind` is written about the owner's portfolio and names real holdings
-        self.assertNotIn("wind", got["_market"])
+        self.assertNotIn("wind", got)
         self.assertNotIn("00990A", json.dumps(got, ensure_ascii=False))
-        self.assertEqual(got["_market"]["windLead"], "大盤收紅")   # the market-level part survives
-        self.assertIn("wind", payload.notes_for("owner", [], self.NOTES, ())["_market"])
+        self.assertEqual(got["windLead"], "大盤收紅")   # the market-level part survives
+        self.assertIn("wind", payload.market_for("owner", self.MARKET))
+
+    def test_market_block_handles_a_missing_file(self):
+        # market-notes.json absent (first run after the switchover, or a failed AI step)
+        self.assertEqual(payload.market_for("guest", None), {})
+        self.assertEqual(payload.market_for("owner", None), {})
 
     def test_note_naming_another_owner_holding_is_dropped(self):
         notes = {"0050": {
@@ -486,9 +500,9 @@ class TestTiers(Base):
         self.assertIn("tech", got["0050"])   # numbers are not codes; own code is allowed
 
     def test_market_allowlist_keeps_new_fields_private_by_default(self):
-        notes = {"_market": {"mood": "偏多", "somethingNew": "未來新增的欄位"}}
-        got = payload.notes_for("guest", [], notes, private_codes={"0050"})
-        self.assertNotIn("somethingNew", got["_market"])
+        got = payload.market_for("guest", {"mood": "偏多", "somethingNew": "未來新增的欄位"})
+        self.assertNotIn("somethingNew", got)
+        self.assertIn("mood", got)
 
     def test_owner_gets_everything(self):
         got = payload.notes_for("owner", ["0050"], self.NOTES, ())
@@ -504,12 +518,12 @@ class TestGuestNoteMerge(Base):
     """Guests read Claude's factual fields where they exist and Gemini's everywhere else.
     `rec` always comes from Gemini: the owner's is written against the owner's portfolio."""
 
-    CLAUDE = {"0050": {"sigFund": ["neu", "中性"], "tech": "Claude 技術", "chip": "Claude 籌碼",
+    CLAUDE = {"0050": {"tech": "Claude 技術", "chip": "Claude 籌碼",
                        "fund": "Claude 基本", "rec": "owner 專屬建議", "news": [{"t": "x"}]}}
     GEMINI = {
-        "0050": {"sigFund": ["bull", "偏多"], "tech": "Gemini 技術", "chip": "Gemini 籌碼",
+        "0050": {"tech": "Gemini 技術", "chip": "Gemini 籌碼",
                  "fund": "Gemini 基本", "rec": "若跌破季線則減碼。"},
-        "2330": {"sigFund": ["bear", "偏空"], "tech": "Gemini 技術", "chip": "Gemini 籌碼",
+        "2330": {"tech": "Gemini 技術", "chip": "Gemini 籌碼",
                  "fund": "Gemini 基本", "rec": "若站回月線則加碼。"},
     }
 
@@ -518,7 +532,7 @@ class TestGuestNoteMerge(Base):
         # above for the code NOT in private_codes, where Claude's rec is meant to win too).
         got = payload.notes_for("guest", ["0050"], self.CLAUDE, private_codes={"0050"}, guest_notes=self.GEMINI)
         self.assertEqual(got["0050"]["tech"], "Claude 技術")
-        self.assertEqual(got["0050"]["sigFund"], ["neu", "中性"])
+        self.assertEqual(got["0050"]["chip"], "Claude 籌碼")
         self.assertEqual(got["0050"]["rec"], "若跌破季線則減碼。")
         self.assertNotIn("owner 專屬建議", json.dumps(got, ensure_ascii=False))
         self.assertNotIn("news", got["0050"])
@@ -550,18 +564,20 @@ class TestBootstrapPrivacyWiring(Base):
     would have leaked every owner rec to every guest with the whole suite green."""
 
     NOTES = {
-        "_market": {"mood": "偏多", "windLead": "大盤收紅",
-                    "wind": "投組今日分化：00990A 靠外資續買收紅"},
         "0050": {"tech": "站上月線", "chip": "外資買超", "fund": "追蹤大盤",
                  "rec": "建議續抱兩成部位", "news": [{"t": "x", "u": "http://a"}]},
         "2330": {"tech": "季線之上", "fund": "成分股與 0050 高度重疊"},
     }
+    MARKET = {"mood": "偏多", "windLead": "大盤收紅",
+              "wind": "投組今日分化：00990A 靠外資續買收紅"}
 
     def setUp(self):
         super().setUp()
         self.cfg["notesDir"] = self.tmp
         with open(os.path.join(self.tmp, "holdings-notes.json"), "w", encoding="utf-8") as fh:
             json.dump(self.NOTES, fh, ensure_ascii=False)
+        with open(os.path.join(self.tmp, "market-notes.json"), "w", encoding="utf-8") as fh:
+            json.dump(self.MARKET, fh, ensure_ascii=False)
         with open(os.path.join(self.cfg["dataDir"], "quotes.json"), "w", encoding="utf-8") as fh:
             json.dump({"TAIEX": [], "0050": {"series": []}, "2330": {"series": []}}, fh)
         owner = self.mkuser("owner_acct", tier="owner")
@@ -581,24 +597,31 @@ class TestBootstrapPrivacyWiring(Base):
         return payload.bootstrap(self.conn, self.cfg, user)
 
     def test_guest_bootstrap_never_carries_owner_advice(self):
-        notes = self._boot_for("gwen", "guest")["holdingsNotes"]
-        blob = json.dumps(notes, ensure_ascii=False)
+        boot = self._boot_for("gwen", "guest")
+        notes = boot["holdingsNotes"]
+        # the whole payload, so a leak through ANY key fails this - not just holdingsNotes
+        blob = json.dumps(boot, ensure_ascii=False)
         self.assertEqual(notes["0050"]["tech"], "站上月線")   # factual fields still arrive
         self.assertNotIn("rec", notes["0050"])
         self.assertNotIn("news", notes["0050"])
         self.assertNotIn("建議續抱兩成部位", blob)
-        self.assertNotIn("wind", notes.get("_market", {}))
+        self.assertNotIn("wind", boot["market"])
         self.assertNotIn("00990A", blob)
         # 2330's fund text names the owner's 0050, so the whole field goes
         self.assertNotIn("0050 高度重疊", blob)
+
+    def test_guest_bootstrap_still_gets_the_shared_market_view(self):
+        boot = self._boot_for("gmarket", "guest")
+        self.assertEqual(boot["market"]["windLead"], "大盤收紅")
+        self.assertEqual(boot["market"]["mood"], "偏多")
 
     def test_owner_bootstrap_still_gets_the_unfiltered_analysis(self):
         uid = self.conn.execute(
             "SELECT id FROM users WHERE tier = 'owner'").fetchone()["id"]
         user = self.conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
-        notes = payload.bootstrap(self.conn, self.cfg, user)["holdingsNotes"]
-        self.assertEqual(notes["0050"]["rec"], "建議續抱兩成部位")
-        self.assertIn("wind", notes["_market"])
+        boot = payload.bootstrap(self.conn, self.cfg, user)
+        self.assertEqual(boot["holdingsNotes"]["0050"]["rec"], "建議續抱兩成部位")
+        self.assertIn("wind", boot["market"])
 
     def test_notes_for_cannot_be_called_without_a_privacy_set(self):
         # the omission that used to mean "publish everything"
@@ -614,10 +637,19 @@ class TestGeminiResponseParsing(Base):
 
     def test_good_reply_is_accepted(self):
         got = gnotes.parse_response(self._reply([{
-            "code": "2330", "sigFund": ["bull", "偏多"], "tech": "t", "chip": "c", "fund": "f",
+            "code": "2330", "tech": "t", "chip": "c", "fund": "f",
             "rec": "若跌破月線則減碼。"}]), ["2330"])
-        self.assertEqual(got["2330"]["sigFund"], ["bull", "偏多"])
+        self.assertEqual(got["2330"]["tech"], "t")
         self.assertEqual(got["2330"]["rec"], "若跌破月線則減碼。")
+
+    def test_a_volunteered_direction_chip_is_ignored(self):
+        # the fundamentals chip is the engine's (lib/score.ps1 Get-FundSignal), scored from
+        # exchange figures. Accepting a model-written one would give the page two sources for
+        # the same chip, one of them unrelated to any number displayed beside it.
+        got = gnotes.parse_response(self._reply([{
+            "code": "2330", "sigFund": ["bull", "偏多"], "tech": "t", "chip": "c", "fund": "f",
+            "rec": "r"}]), ["2330"])
+        self.assertNotIn("sigFund", got["2330"])
 
     def test_a_code_we_did_not_ask_about_is_refused(self):
         got = gnotes.parse_response(self._reply([{
@@ -988,16 +1020,22 @@ class TestShell(Base):
         # payload.py used to hardcode these, so the contract governed what got published while
         # the live server shipped whatever this module said. tests.ps1 [9] asserts the same
         # lists on the PowerShell side; this is the Python half of that pair.
-        self.assertEqual(pagedata.guest_note_fields(), ("sigFund", "tech", "chip", "fund"))
-        self.assertEqual(pagedata.owner_only_fields(), ("rec", "news", "wind", "night"))
-        self.assertEqual(pagedata.market_public_fields(),
+        # the three guest fields ARE the analysis: technicals, chips, fundamentals, each confined
+        # to its own evidence. sigFund left this list when the direction chip became the engine's
+        # job (lib/score.ps1 Get-FundSignal), leaving the AI only the prose.
+        self.assertEqual(pagedata.guest_note_fields(), ("tech", "chip", "fund"))
+        self.assertEqual(pagedata.owner_only_fields(), ("rec", "news"))
+        self.assertEqual(pagedata.market_guest_fields(),
                          ("windLead", "sox", "mood", "moodK"))
-        # `night` is _market's second owner-only field: the overnight read is written as
+        self.assertEqual(pagedata.market_owner_fields(), ("wind", "night"))
+        # `night` is the market block's second owner-only field: the overnight read is written as
         # 若X則Y against this portfolio's own levels, which is advice rather than a market fact.
-        self.assertNotIn("night", pagedata.market_public_fields())
-        # and no guest field may also be owner-only
+        self.assertNotIn("night", pagedata.market_guest_fields())
+        # and nothing may be both shareable and owner-only, on either policy
         self.assertEqual(
             set(pagedata.guest_note_fields()) & set(pagedata.owner_only_fields()), set())
+        self.assertEqual(
+            set(pagedata.market_guest_fields()) & set(pagedata.market_owner_fields()), set())
 
     def test_a_field_added_to_the_contract_reaches_notes_for(self):
         # the drift that had no detector: adding a field to noteFields.guest changed the demo

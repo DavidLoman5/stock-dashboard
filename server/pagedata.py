@@ -47,9 +47,14 @@ def owner_only_fields():
     return tuple(contract()["noteFields"]["ownerOnly"])
 
 
-def market_public_fields():
-    """`_market` fields that are genuinely market-wide and may be shown to non-owners."""
-    return tuple(contract()["noteFields"]["marketPublic"])
+def market_guest_fields():
+    """window.MARKET fields that are genuinely market-wide and may be shown to non-owners."""
+    return tuple(contract()["marketFields"]["guest"])
+
+
+def market_owner_fields():
+    """window.MARKET fields written against the owner's own portfolio and levels."""
+    return tuple(contract()["marketFields"]["ownerOnly"])
 
 
 def js(value):

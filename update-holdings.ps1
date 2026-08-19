@@ -18,6 +18,7 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $root 'lib/pagedata.ps1')   # Set-PageBlocks / Get-PageBlockText / Get-PageContract
 . (Join-Path $root 'lib/stance.ps1')     # Get-StanceGrade (the 判級 rule engine)
 . (Join-Path $root 'lib/stance-log.ps1') # Get-StanceLog / Get-PrevStanceMap / Set-StanceLog
+. (Join-Path $root 'lib/score.ps1')      # Get-FundScore / Get-FundSignal (same formula screen.ps1 ranks on)
 # bodies live in lib/feed.ps1; names kept so the call sites below read the same
 function Num($s){ ConvertTo-FeedNum $s }
 function GetJson($url){ Get-FeedJson $url }
@@ -234,6 +235,53 @@ if($r){
 }
 Write-Host "  div notes: $($divMap.Count) upcoming"
 
+Write-Host "[4b/6] valuation (PE/PB/yield) + monthly revenue..."
+# The fundamentals face had NOTHING to work with. CodeContext below produced price, moving
+# averages, institutional flow and margin - not one fundamental number - so the daily analysis
+# step was asked to write a 基本面 paragraph with no fundamentals in front of it, and filled the
+# gap with index commentary ("today's drop was led by TSMC dragging the market down"). That is a
+# missing-input bug, not a writing-style problem, and no prompt wording fixes it.
+#
+# screen.ps1 has been fetching exactly these two feeds for the whole market every day; they were
+# simply never routed to the holdings side. Same lib/feed.ps1 parsers, so the numbers the AI
+# reads and the numbers Get-FundScore scores can never disagree.
+$valRows=(Get-FeedValuation).Rows
+$revRows=(Get-FeedRevenue).Rows
+Write-Host "  valuation=$($valRows.Count) revenue=$($revRows.Count) codes"
+# ETFs are absent from both feeds (they have no company financials), so these come back $null -
+# which is the point. A 0 would read as "PE is zero", i.e. free money.
+function FundVal($map,$c,$k,$dp){
+  if(-not $map.ContainsKey($c)){ return $null }
+  $v=$map[$c][$k]
+  if($null -eq $v){ return $null }
+  return [math]::Round([double]$v,$dp)
+}
+
+# The regime light for Get-FundScore's defensive bonus. screen.ps1 computes the real one from
+# breadth and institutional totals, but it runs AFTER this script, so the freshest available here
+# is its previous output. One trade day stale, on a term worth at most 5 of 30 points - the
+# alternative is a second, differently-derived light, and two lights disagreeing about the same
+# day is a worse failure than one being a day old. 'yellow' on a first run: never 'green', so the
+# defensive bonus is applied rather than silently withheld.
+$fundLight='yellow'
+try{
+  $pj=Get-Content (Join-Path $root 'data/picks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+  if($pj.regime -and $pj.regime.light){ $fundLight="$($pj.regime.light)" }
+}catch{ Write-Host "  note: no previous regime light available, using '$fundLight'" }
+
+# code -> the fundamentals, resolved once. CodeContext (below) and the HOLDINGS_META face (further
+# down) both read this, so the numbers the AI is given and the numbers the engine scores are
+# literally the same values rather than two lookups that could drift.
+$fundCtx=@{}
+foreach($c in $fetchCodes){
+  $fundCtx[$c]=[ordered]@{
+    yoy=(FundVal $revRows $c 'yoy' 1); mom=(FundVal $revRows $c 'mom' 1); yoyCum=(FundVal $revRows $c 'yoyCum' 1)
+    pe=(FundVal $valRows $c 'pe' 2);   pb=(FundVal $valRows $c 'pb' 2);   dy=(FundVal $valRows $c 'dy' 2)
+    ind=$(if($revRows.ContainsKey($c)){ $revRows[$c].ind } else { $null })
+  }
+}
+Write-Host "  fundamentals resolved for $(@($fundCtx.Values | Where-Object { $null -ne $_.pe -or $null -ne $_.yoy }).Count)/$($fetchCodes.Count) codes (ETFs have none by design)"
+
 Write-Host "[5/6] compute holdings-context.json (small, for AI to read) + HOLDINGS_META..."
 $HOLDINGS_META=[ordered]@{}
 # trades ride along as a special _-prefixed key (like _market in notes); page filters _ keys out of H
@@ -243,6 +291,7 @@ $HOLDINGS_META['_trades']=@($hj.trades | ForEach-Object { [ordered]@{ d=$_.d; si
 function CodeContext($c,$nm){
   $ser=@($DASH[$c].series | ForEach-Object { $_.c })
   if($ser.Count -lt 1){ return $null }
+  $fv=$(if($fundCtx.ContainsKey($c)){ $fundCtx[$c] } else { @{} })
   $last=$DASH[$c].series[$DASH[$c].series.Count-1]
   $ma20=SMAlast $ser 20; $ma60=SMAlast $ser 60
   $ma20p = if($ser.Count -ge 25){ SMAlast ($ser[0..($ser.Count-6)]) 20 } else { $null }
@@ -259,6 +308,11 @@ function CodeContext($c,$nm){
     foreignSum5d=$fSum; foreignLast2=$fLast2
     marginToday=$(if($mg){$mg.fin}else{$null}); marginDelta=$marginDelta
     divNote=$(if($divMap.ContainsKey($c)){$divMap[$c]}else{$null})
+    # fundamentals, all $null for ETFs. yoy/mom/yoyCum are percent as the exchange publishes
+    # them; yoy alone cannot say whether revenue is ACCELERATING, which is why mom and the
+    # cumulative figure are here too - they were in the same response all along, just unread.
+    yoy=$fv.yoy; mom=$fv.mom; yoyCum=$fv.yoyCum
+    pe=$fv.pe; pb=$fv.pb; dy=$fv.dy; ind=$fv.ind
   }
 }
 
@@ -323,6 +377,37 @@ foreach($c in @($HOLDINGS_META.Keys)){
 $psAll=[ordered]@{}
 foreach($c in $codes){ if($prevStanceMap.ContainsKey($c)){ $psAll[$c]=$prevStanceMap[$c].s } }
 $HOLDINGS_META['_prevStance']=$psAll   # union-code map for server mode (page ignores _ keys)
+
+# Fundamentals face per code: the number row the page renders under 基本面, plus the direction
+# chip. Scored by the SAME Get-FundScore that screen.ps1 ranks on, so a stock cannot read
+# "fundamentals strong" on the holdings page and score badly in the screen on the same day.
+# ETFs get $null - Get-FundSignal renders that as "no company financials", which is a different
+# statement from "scored zero" and must not look the same.
+# Built for the UNION of every user's codes, then attached two ways: onto the owner's own entries
+# (what the static page renders) and as the `_fund` union map (what server.py hands a guest for
+# codes the owner does not hold). Same split as `_prevStance` above. Costs nothing to share -
+# these are exchange numbers, not portfolio-derived advice, and no AI call produced them.
+$fundAll=[ordered]@{}
+foreach($c in ($codes | Sort-Object)){
+  $fv=$(if($fundCtx.ContainsKey($c)){ $fundCtx[$c] } else { $null })
+  $face=$null
+  if($fv -and ($null -ne $fv.yoy -or $null -ne $fv.pe -or $null -ne $fv.dy)){
+    $face=Get-FundScore -YoY $fv.yoy -PE $fv.pe -DividendYield $fv.dy -Light $fundLight -MoM $fv.mom -YoYCum $fv.yoyCum
+  }
+  $fundAll[$c]=[ordered]@{
+    sig=(Get-FundSignal $face)
+    score=$(if($face){ $face.Score } else { $null })
+    raw=$(if($face){ [int]$face.Raw } else { $null })
+    yoy=$(if($fv){$fv.yoy}else{$null}); yoyCum=$(if($fv){$fv.yoyCum}else{$null}); mom=$(if($fv){$fv.mom}else{$null})
+    pe=$(if($fv){$fv.pe}else{$null}); pb=$(if($fv){$fv.pb}else{$null}); dy=$(if($fv){$fv.dy}else{$null})
+    ind=$(if($fv){$fv.ind}else{$null})
+  }
+}
+foreach($c in @($HOLDINGS_META.Keys)){
+  if($c -like '_*'){ continue }
+  if($fundAll.Contains($c)){ $HOLDINGS_META[$c]['fund']=$fundAll[$c] }
+}
+$HOLDINGS_META['_fund']=$fundAll
 # Grade every code, every run. The log append is still once-per-day, but the page needs the
 # grade whether or not today was already logged - it renders this instead of recomputing the
 # formula in JavaScript, which is how the log and the page came to disagree about 'trim'.
@@ -346,7 +431,10 @@ if($slogOk -and -not $already){
     # `stance` stays the *confirmed* level (what the page shows, what prevStance compares against);
     # `raw` is today's unconfirmed reading, needed by tomorrow's confirmation check and used by
     # evaluate.ps1 to tell new-scheme rows from the four-level history.
-    $slog += ,[ordered]@{ date=$lastDate; code=$c; close=$s[$s.Count-1].c; score=$g.score; stance=$g.level; raw=$g.raw }
+    # `idx` is the same day's TAIEX close, so evaluate.ps1 can measure each grade against the
+    # index offline; `v` stamps the engine that produced it so two formulas never get averaged.
+    $slog += ,[ordered]@{ date=$lastDate; code=$c; close=$s[$s.Count-1].c; score=$g.score; stance=$g.level; raw=$g.raw
+                          idx=$tx[$tx.Count-1].c; v=$StanceEngineVersion }
   }
   Set-StanceLog -Path $stancePath -Rows $slog
   Write-Host "  stance-log: appended rows for $lastDate (total $($slog.Count))"
@@ -380,7 +468,9 @@ Write-Host "[6b] data exports for server mode..."
 $DASHOut=[ordered]@{}
 foreach($k in $DASH.Keys){ if($k -eq 'TAIEX' -or $codes -contains $k){ $DASHOut[$k]=$DASH[$k] } }
 $DASHOut | ConvertTo-Json -Depth 6 -Compress | Out-File (Join-Path $DataDir 'quotes.json') -Encoding UTF8
-$HOLDINGS_META | ConvertTo-Json -Depth 4 -Compress | Out-File (Join-Path $DataDir 'holdings-meta.json') -Encoding UTF8
+# Depth 5, matching page-contract.json's holdingsmeta: the `_fund` union map nests
+# root -> _fund -> code -> field -> sig[], and at depth 4 that array serialises as a type name.
+$HOLDINGS_META | ConvertTo-Json -Depth 5 -Compress | Out-File (Join-Path $DataDir 'holdings-meta.json') -Encoding UTF8
 ([ordered]@{ generated=$genDate; lastTrade=$lastTradeIso }) | ConvertTo-Json -Compress | Out-File (Join-Path $DataDir 'meta.json') -Encoding UTF8
 Write-Host "  wrote quotes.json ($($DASHOut.Keys.Count) keys), holdings-meta.json, meta.json -> $DataDir"
 

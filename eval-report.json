@@ -1,11 +1,11 @@
 {
-  "generated": "2026-08-14",
-  "closedN": 35,
+  "generated": "2026-08-19",
+  "closedN": 44,
   "overall": {
-    "n": 35,
-    "winRate": 49.0,
-    "avgAlpha": 0.91,
-    "avgRet": 0.49
+    "n": 44,
+    "winRate": 50.0,
+    "avgAlpha": 0.77,
+    "avgRet": 1.29
   },
   "byReason": {
     "20日到期": {
@@ -15,10 +15,10 @@
       "avgRet": 15.2
     },
     "外資連2日轉賣": {
-      "n": 24,
-      "winRate": 46.0,
-      "avgAlpha": 0.02,
-      "avgRet": 0.58
+      "n": 33,
+      "winRate": 48.0,
+      "avgAlpha": 0.07,
+      "avgRet": 1.61
     },
     "跌破月線": {
       "n": 9,
@@ -35,52 +35,52 @@
       "avgRet": 1.06
     },
     "red": {
-      "n": 16,
-      "winRate": 19.0,
-      "avgAlpha": -2.21,
-      "avgRet": -0.41
+      "n": 21,
+      "winRate": 29.0,
+      "avgAlpha": -1.28,
+      "avgRet": 1.79
     },
     "yellow": {
-      "n": 4,
-      "winRate": 75.0,
-      "avgAlpha": 1.14,
-      "avgRet": -1.4
+      "n": 8,
+      "winRate": 62.0,
+      "avgAlpha": -0.25,
+      "avgRet": -1.29
     }
   },
   "byInd": {
     "金融保險業": {
-      "n": 6,
-      "winRate": 33.0,
-      "avgAlpha": -0.56,
-      "avgRet": 0.06
+      "n": 10,
+      "winRate": 40.0,
+      "avgAlpha": -1.37,
+      "avgRet": 0.76
     },
     "電腦及週邊設備業": {
-      "n": 6,
-      "winRate": 50.0,
-      "avgAlpha": 2.48,
-      "avgRet": -0.18
+      "n": 10,
+      "winRate": 60.0,
+      "avgAlpha": 3.05,
+      "avgRet": 3.41
     }
   },
   "byAiTag": {
     "one-off": {
-      "n": 7,
-      "winRate": 43.0,
-      "avgAlpha": 3.02,
-      "avgRet": 3.63
+      "n": 9,
+      "winRate": 33.0,
+      "avgAlpha": 0.58,
+      "avgRet": 2.74
     },
     "sustainable": {
-      "n": 24,
-      "winRate": 50.0,
-      "avgAlpha": 0.63,
-      "avgRet": 0.39
+      "n": 31,
+      "winRate": 55.0,
+      "avgAlpha": 1.06,
+      "avgRet": 1.6
     }
   },
   "byChip": {
     "chip30-37": {
-      "n": 20,
-      "winRate": 45.0,
-      "avgAlpha": 0.12,
-      "avgRet": -0.23
+      "n": 29,
+      "winRate": 48.0,
+      "avgAlpha": 0.14,
+      "avgRet": 1.2
     },
     "chip38+": {
       "n": 5,
@@ -91,36 +91,36 @@
   },
   "byTech": {
     "tech<15": {
-      "n": 1,
-      "winRate": 100.0,
-      "avgAlpha": 8.24,
-      "avgRet": 0.0
+      "n": 2,
+      "winRate": 50.0,
+      "avgAlpha": 4.04,
+      "avgRet": 2.46
     },
     "tech15-24": {
-      "n": 9,
-      "winRate": 44.0,
-      "avgAlpha": -1.49,
-      "avgRet": -0.77
+      "n": 12,
+      "winRate": 58.0,
+      "avgAlpha": -0.2,
+      "avgRet": 0.58
     },
     "tech25+": {
-      "n": 15,
-      "winRate": 27.0,
-      "avgAlpha": -1.66,
-      "avgRet": -0.12
+      "n": 20,
+      "winRate": 30.0,
+      "avgAlpha": -1.69,
+      "avgRet": 0.94
     }
   },
   "byFund": {
     "fund10-19": {
-      "n": 11,
-      "winRate": 27.0,
-      "avgAlpha": -0.33,
-      "avgRet": 0.2
+      "n": 12,
+      "winRate": 25.0,
+      "avgAlpha": -0.75,
+      "avgRet": 0.04
     },
     "fund20+": {
-      "n": 14,
-      "winRate": 43.0,
-      "avgAlpha": -1.89,
-      "avgRet": -0.78
+      "n": 22,
+      "winRate": 50.0,
+      "avgAlpha": -0.87,
+      "avgRet": 1.37
     }
   },
   "byYoy": {
@@ -131,16 +131,117 @@
       "avgRet": 0.7
     },
     "yoy0-30": {
-      "n": 14,
-      "winRate": 36.0,
-      "avgAlpha": -2.35,
-      "avgRet": -0.47
+      "n": 15,
+      "winRate": 40.0,
+      "avgAlpha": -2.09,
+      "avgRet": 0.04
     },
     "yoy30+": {
-      "n": 9,
-      "winRate": 44.0,
-      "avgAlpha": 0.49,
-      "avgRet": -0.39
+      "n": 17,
+      "winRate": 47.0,
+      "avgAlpha": 0.28,
+      "avgRet": 1.68
+    }
+  },
+  "byStance": {
+    "v2": {
+      "n": 408,
+      "windows": {
+        "fwd5": {
+          "levels": {
+            "add": {
+              "n": 42,
+              "avgRet": 2.55,
+              "avgAlpha": 0.11,
+              "winRate": 43.0
+            },
+            "addwatch": {
+              "n": 27,
+              "avgRet": 3.58,
+              "avgAlpha": -0.73,
+              "winRate": 56.0
+            },
+            "hold": {
+              "n": 30,
+              "avgRet": 8.57,
+              "avgAlpha": 1.32,
+              "winRate": 27.0
+            },
+            "cutwatch": {
+              "n": 16,
+              "avgRet": 7.26,
+              "avgAlpha": 2.8,
+              "winRate": 62.0
+            },
+            "cut": {
+              "n": 17,
+              "avgRet": 5.1,
+              "avgAlpha": 0.57,
+              "winRate": 41.0
+            },
+            "exit": {
+              "n": 94,
+              "avgRet": 7.25,
+              "avgAlpha": -0.27,
+              "winRate": 46.0
+            }
+          },
+          "pairs": 15,
+          "inversions": 8,
+          "monotonicity": 47.0,
+          "baseline": "cross-section",
+          "nIdx": 0
+        },
+        "fwd10": {
+          "levels": {
+            "add": {
+              "n": 3,
+              "avgRet": 1.93,
+              "avgAlpha": -4.68,
+              "winRate": 0.0,
+              "provisional": true
+            },
+            "addwatch": {
+              "n": 6,
+              "avgRet": 3.51,
+              "avgAlpha": -7.5,
+              "winRate": 33.0,
+              "provisional": true
+            },
+            "hold": {
+              "n": 15,
+              "avgRet": 19.35,
+              "avgAlpha": 4.78,
+              "winRate": 53.0
+            },
+            "cutwatch": {
+              "n": 6,
+              "avgRet": 16.19,
+              "avgAlpha": 6.76,
+              "winRate": 83.0,
+              "provisional": true
+            },
+            "cut": {
+              "n": 5,
+              "avgRet": 4.45,
+              "avgAlpha": -6.91,
+              "winRate": 20.0,
+              "provisional": true
+            },
+            "exit": {
+              "n": 61,
+              "avgRet": 13.19,
+              "avgAlpha": -0.15,
+              "winRate": 46.0
+            }
+          },
+          "pairs": 15,
+          "inversions": 9,
+          "monotonicity": 40.0,
+          "baseline": "cross-section",
+          "nIdx": 0
+        }
+      }
     }
   }
 }

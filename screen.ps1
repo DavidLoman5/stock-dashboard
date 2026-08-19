@@ -217,27 +217,16 @@ foreach($mkKind in @('t','o')){
   }
 }
 
-Write-Host "[6/8] BWIBBU_ALL + revenue..."
-$pe=@{}
-$r=GetJson "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL"
-if($r){ foreach($row in $r){ $c="$($row.Code)".Trim(); $pe[$c]=@{ pe=(Num $row.PEratio); pb=(Num $row.PBratio); dy=(Num $row.DividendYield) } } }
-$r=GetJson "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_peratio_analysis"
-if($r){ foreach($row in $r){ $c="$($row.SecuritiesCompanyCode)".Trim(); if(-not $pe.ContainsKey($c)){ $pe[$c]=@{ pe=(Num $row.PriceEarningRatio); pb=(Num $row.PriceBookRatio); dy=(Num $row.YieldRatio) } } } }
-$rev=@{}
-# positional-index guard: these two endpoints are parsed by column position; warn loudly if the layout ever shifts
-function CheckRevCols($rows,$label){
-  if(-not $rows -or @($rows).Count -eq 0){ return }
-  $p0=@(@($rows)[0].PSObject.Properties)
-  if($p0.Count -le 9 -or "$($p0[2].Name)" -notlike '*代號*' -or "$($p0[9].Name)" -notlike '*增減*'){
-    Write-Host "  WARN: $label column layout changed (col2=$($p0[2].Name) col9=$($p0[9].Name)) - yoy/ind may be wrong, review parser"
-  }
-}
-$r=GetJson "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
-CheckRevCols $r 't187ap05_L'
-if($r){ foreach($row in $r){ $p=@($row.PSObject.Properties); $c="$($p[2].Value)".Trim(); $rev[$c]=@{ ind="$($p[4].Value)".Trim(); yoy=(Num $p[9].Value); name="$($p[3].Value)".Trim() } } }
-$r=GetJson "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O"
-CheckRevCols $r 'mopsfin_t187ap05_O'
-if($r){ foreach($row in $r){ $p=@($row.PSObject.Properties); $c="$($p[2].Value)".Trim(); if(-not $rev.ContainsKey($c)){ $rev[$c]=@{ ind="$($p[4].Value)".Trim(); yoy=(Num $p[9].Value); name="$($p[3].Value)".Trim() } } } }
+Write-Host "[6/8] valuation (PE/PB/yield) + monthly revenue..."
+# Both fetches (and their parsing) live in lib/feed.ps1 like every other official endpoint.
+# They used to be four inline GetJson calls here, two of them reading an OBJECT response by
+# column position with a warning bolted on for when the order shifted. update-holdings.ps1 needs
+# the same numbers to give the fundamentals face something to say, and duplicating the parser was
+# how T86-vs-TPEx column confusion happened the first time.
+$val=Get-FeedValuation
+$pe=$val.Rows
+$revF=Get-FeedRevenue
+$rev=$revF.Rows
 Write-Host "  pe=$($pe.Count) rev=$($rev.Count) (TWSE+TPEx)"
 
 # ----- regime light (computed BEFORE scoring so weights can adapt) -----
@@ -252,13 +241,14 @@ $cands=@()
 foreach($c in $chip.Keys){
   if($c -notmatch '^[1-9][0-9]{3}$'){ continue }
   if(-not $px.ContainsKey($c)){ continue }
-  if($px[$c].val -lt 1e8){ continue }             # liquidity >= NT$100M/day
+  if($px[$c].val -lt $ProfStock.minDayValue){ continue }   # liquidity floor, from the profile
   if($chip[$c].n -lt 4){ continue }               # .n = days the code actually appeared (gaps are zero-filled)
   $st=Get-ChipStats -Trust $chip[$c].t -Foreign $chip[$c].f
   if(-not (Test-ChipGate -Stats $st -Profile $ProfStock)){ continue }
   $fd=$fin[$c]
   $mDown = [bool]($fd -and $null -ne $fd.today -and $null -ne $fd.prev -and $fd.today -lt $fd.prev)
-  $cands += [pscustomobject]@{ code=$c; chip=(Get-ChipScore -Stats $st -MarginDown $mDown)
+  $cf=Get-ChipScore -Stats $st -MarginDown $mDown
+  $cands += [pscustomobject]@{ code=$c; chip=[int]$cf.Raw; chipFace=$cf
                                tPos=$st.tPos; fPos=$st.fPos; tSum=$st.tSum; fSum=$st.fSum }
 }
 Write-Host "  candidates = $($cands.Count)"
@@ -287,12 +277,15 @@ foreach($s in $short){
                       -Ma @{ ma20=$ma20; ma20p=$ma20p; ma60=$ma60; ret5=$ret5; dist=$dist } `
                       -Light $light -Profile $ProfStock
   if($ts.Drop){ Write-Host "  drop $c $($ts.Reason)"; continue }
-  $tech=$ts.Score
-  $y=$null; $ind=''
-  if($rev.ContainsKey($c)){ $y=$rev[$c].yoy; $ind=$rev[$c].ind }
+  $tech=[int]$ts.Raw
+  $y=$null; $ind=''; $yCum=$null; $yMom=$null
+  if($rev.ContainsKey($c)){ $y=$rev[$c].yoy; $ind=$rev[$c].ind; $yCum=$rev[$c].yoyCum; $yMom=$rev[$c].mom }
   $peV=$null; $dyV=$null
   if($pe.ContainsKey($c)){ $peV=$pe[$c].pe; $dyV=$pe[$c].dy }
-  $fund = Get-FundScore -YoY $y -PE $peV -DividendYield $dyV -Light $light
+  $ff = Get-FundScore -YoY $y -PE $peV -DividendYield $dyV -Light $light -MoM $yMom -YoYCum $yCum
+  $fund = [int]$ff.Raw
+  # one composite, comparable across stocks and ETFs; .Raw sums are what picks-log keeps
+  $comp = Get-CompositeScore -Tech $ts -Chip $s.chipFace -Fund $ff -Profile $ProfStock
   $fd=$fin[$c]; $finDelta = if($fd -and $fd.today -ne $null -and $fd.prev -ne $null){ [int]($fd.today-$fd.prev) } else { $null }
   $spark=@(); $nS=[math]::Min(40,$ser.Count)
   foreach($v in $ser[($ser.Count-$nS)..($ser.Count-1)]){ $spark += [math]::Round($v,2) }
@@ -302,7 +295,7 @@ foreach($s in $short){
   $chgPct=$(if($pxC -ne $null -and $pxChg -ne $null -and ($pxC-$pxChg) -ne 0){ [math]::Round($pxChg/($pxC-$pxChg)*100,2) } else { 0 })
   $picks += [pscustomobject]@{
     code=$c; name=$px[$c].name; ind=$ind; close=$cl; chgPct=$chgPct
-    score=($s.chip+$tech+$fund); chip=$s.chip; tech=$tech; fund=$fund
+    score=$comp.Total; chip=$s.chip; tech=$tech; fund=$fund
     tPos=$s.tPos; fPos=$s.fPos; tSum=[math]::Round($s.tSum/1000,0); fSum=[math]::Round($s.fSum/1000,0)
     finDelta=$finDelta; yoy=$y; pe=$peV; dy=$dyV
     ret5=[math]::Round($ret5*100,1); dist=[math]::Round($dist*100,1)
@@ -331,12 +324,17 @@ foreach($c in $chip.Keys){
   if($c -notmatch '^00[0-9A-Z]+$'){ continue }
   if($c -match '[LRBU]$'){ continue }           # exclude leveraged/inverse/bond/futures ETFs
   if($chip[$c].n -lt 4){ continue }
-  if($px.ContainsKey($c) -and $px[$c].val -lt $ProfEtf.minDayValue){ continue }
+  # No quote = no liquidity evidence = not a candidate. This used to read
+  # `if($px.ContainsKey($c) -and $px[$c].val -lt ...)`, which SKIPPED the floor entirely for any
+  # ETF missing from $px instead of rejecting it - the one case where the check mattered most.
+  if(-not $px.ContainsKey($c)){ continue }
+  if($px[$c].val -lt $ProfEtf.minDayValue){ continue }
   $st=Get-ChipStats -Trust $chip[$c].t -Foreign $chip[$c].f
   if(-not (Test-ChipGate -Stats $st -Profile $ProfEtf)){ continue }
   $fd=$fin[$c]
   $mDown = [bool]($fd -and $null -ne $fd.today -and $null -ne $fd.prev -and $fd.today -lt $fd.prev)
-  $ecand += [pscustomobject]@{ code=$c; chip=(Get-ChipScore -Stats $st -MarginDown $mDown)
+  $cf=Get-ChipScore -Stats $st -MarginDown $mDown
+  $ecand += [pscustomobject]@{ code=$c; chip=[int]$cf.Raw; chipFace=$cf
                                tPos=$st.tPos; fPos=$st.fPos; tSum=$st.tSum; fSum=$st.fSum }
 }
 Write-Host "  etf candidates = $($ecand.Count)"
@@ -364,7 +362,11 @@ foreach($s in $eshort){
                        -Ma @{ ma20=$ma20; ma20p=$ma20p; ma60=$ma60; ret5=$ret5; dist=$dist } `
                        -Light $light -Profile $ProfEtf
   if($tsE.Drop){ Write-Host "  drop ETF $c $($tsE.Reason)"; continue }
-  $tech=$tsE.Score
+  $tech=[int]$tsE.Raw
+  # fund face is $null here: an ETF has no company financials. Get-CompositeScore redistributes
+  # its weight instead of scoring a zero, so an ETF's 0-100 is comparable with a stock's - they
+  # used to be 0-70 and 0-100 and were being read side by side anyway.
+  $compE = Get-CompositeScore -Tech $tsE -Chip $s.chipFace -Fund $null -Profile $ProfEtf
   $fd=$fin[$c]; $finDelta = if($fd -and $fd.today -ne $null -and $fd.prev -ne $null){ [int]($fd.today-$fd.prev) } else { $null }
   $nm = if($px.ContainsKey($c)){ $px[$c].name } else { $c }
   $spark=@(); $nS=[math]::Min(40,$ser.Count)
@@ -376,7 +378,7 @@ foreach($s in $eshort){
              elseif($lastChg -ne $null -and ($cl-$lastChg) -ne 0){ [math]::Round($lastChg/($cl-$lastChg)*100,2) } else { 0 })
   $etfPicks += [pscustomobject]@{
     code=$c; name=$nm; ind='ETF'; close=$cl; chgPct=$chgPctE
-    score=($s.chip+$tech); chip=$s.chip; tech=$tech
+    score=$compE.Total; chip=$s.chip; tech=$tech
     tPos=$s.tPos; fPos=$s.fPos; tSum=[math]::Round($s.tSum/1000,0); fSum=[math]::Round($s.fSum/1000,0)
     finDelta=$finDelta; ret5=[math]::Round($ret5*100,1); dist=[math]::Round($dist*100,1)
     ma20=[math]::Round($ma20,2); ma60=$(if($ma60 -ne $null){[math]::Round($ma60,2)}else{$null})
@@ -477,18 +479,28 @@ if($closedR.Count -gt 0 -or $openR.Count -gt 0){
   }
   if($byLight.Keys.Count -gt 0){ $perfSummary.byLight=$byLight }
 }
-# append today's picks: ONE snapshot per trade date (reruns never append), plus open-code dedupe
+# Append today's picks: ONE snapshot per trade date (reruns never append), plus open-code dedupe.
+#
+# Red-light days are NOT logged. This is the one attribution finding that has cleared the n>=10
+# bar and held its direction for four straight weeks (lessons.md 2026-08-14): entries made while
+# the index is below its 60-day line closed n=16, win rate 19%, avgAlpha -2.21%, against a +0.91%
+# overall average. Until now the light only nudged the scoring weights and got recorded on the
+# row - the picks were still booked and still counted, so the engine kept taking a bet it had
+# already proven it loses. The page still ranks and shows them (buildPicks renders the red banner
+# and the list), they simply stop entering the accountability log as if they were entries.
+$gateRed = -not (Test-RegimeEntryGate -Light $light)
 $openCodes=@{}; foreach($o in $norm){ if($o.status -eq 'open'){ $openCodes[$o.code]=$true } }
 $dateLogged=($norm | Where-Object { $_.date -eq $lastDate }).Count -gt 0
 $newLogged=0
-if(-not $dateLogged){
+if($gateRed){ Write-Host "  regime=red - watchlist only, no picks logged today (lessons.md: red entries n=16, 19% win, -2.21% alpha)" }
+if(-not $dateLogged -and -not $gateRed){
   foreach($p in $top5){
     if($openCodes.ContainsKey($p.code)){ continue }
     $norm += ,[ordered]@{ date=$lastDate; code=$p.code; name=$p.name; price=$p.close; score=$p.score; status='open'; light=$light
                  chipS=$p.chip; techS=$p.tech; fundS=$p.fund; ret5=$p.ret5; dist=$p.dist; yoy=$p.yoy; pe=$p.pe; dy=$p.dy; ind=$p.ind }
     $newLogged++
   }
-} else { Write-Host "  date $lastDate already logged - snapshot preserved, no append" }
+} elseif($dateLogged){ Write-Host "  date $lastDate already logged - snapshot preserved, no append" }
 
 # ---- retention + write. Both live in lib/picks-log.ps1: the fold's append-then-read-back
 # ordering, the [ordered] key stability and the -ErrorAction Stop on the write. Passing -Retain
@@ -497,7 +509,7 @@ Set-PicksLog -Path $logPath -Rows $norm -Retain $PicksLogRetainSettled `
              -ArchivePath (Join-Path $root 'data/picks-archive.jsonl')
 
 $regimeObj=[ordered]@{ light=$light; idx=[math]::Round($idxLast,2); ma20=[math]::Round($idxMA20,2); ma60=[math]::Round($idxMA60,2); instNet=$instNet; up=$upN; down=$dnN }
-$metaObj=[ordered]@{ candidates=$cands.Count; shortlist=@($short).Count; etfCand=$ecand.Count; newLogged=$newLogged; t86ok=$t86ok; tpexOk=$tpexOk; idxOk=$idxOk; revRows=$rev.Count }
+$metaObj=[ordered]@{ candidates=$cands.Count; shortlist=@($short).Count; etfCand=$ecand.Count; newLogged=$newLogged; redGated=$gateRed; t86ok=$t86ok; tpexOk=$tpexOk; idxOk=$idxOk; revRows=$rev.Count }
 $out=[ordered]@{
   date=$lastDate
   regime=$regimeObj
@@ -553,4 +565,4 @@ $kd | ConvertTo-Json -Depth 6 -Compress | Out-File (Join-Path $dataDir 'picks-kl
 Write-Host "  wrote data/picks.json + data/picks-kline.json"
 Write-Host "DONE. light=$light idx=$idxLast stocks=$($allPicks.Count) etf=$($etfTop.Count) newLogged=$newLogged openPos=$($openR.Count) closed=$($closedR.Count)"
 foreach($p in $top5){ Write-Host ("  TOP {0} {1} score={2} (chip{3}/tech{4}/fund{5})" -f $p.code,$p.name,$p.score,$p.chip,$p.tech,$p.fund) }
-foreach($p in $etfTop){ Write-Host ("  ETF {0} {1} score={2}/70 owned={3}" -f $p.code,$p.name,$p.score,$p.owned) }
+foreach($p in $etfTop){ Write-Host ("  ETF {0} {1} score={2}/100 owned={3}" -f $p.code,$p.name,$p.score,$p.owned) }

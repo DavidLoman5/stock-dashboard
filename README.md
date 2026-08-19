@@ -1,6 +1,6 @@
 # 台股投資報告 Dashboard
 
-每個交易日更新的台股投資儀表板：持股三面分析（籌碼／技術／基本）、量化選股引擎（上市＋上櫃）、ETF 動能榜、績效與風險指標、推薦追蹤問責、歸因週報與走前驗證回測。
+每個交易日更新的台股投資儀表板：持股三面分析（技術／籌碼／基本，三面互不越界、各有自己的數字列）、獨立的市場風向區、量化選股引擎（上市＋上櫃）、ETF 動能榜、績效與風險指標、推薦追蹤問責、歸因週報與走前驗證回測。
 
 - **線上網址**：https://davidloman5.github.io/stock-dashboard/ ← 這是**公開展示站**，持股是 demo 假資料
 - **資料來源**：台灣證券交易所＋櫃買中心官方 API（漲跌、法人、融資、月營收、本益比、除權息皆以此為準）
@@ -31,7 +31,8 @@ admin.py export-codes   DB 所有 active 使用者的代號聯集＋demo → dat
 admin.py export-owner   owner 持股（holdings.json 同格式）    → data/owner-holdings.json
 update-holdings.ps1  抓聯集行情(上市/上櫃自動路由) → splice DASH/META/HOLDINGS_META
                        → data/quotes.json（全體共用）＋ holdings-context.json（**只有 owner 的**）＋ stance-log.json
-      ↓ AI 讀 holdings-context.json + lessons.md → Write holdings-notes.json（含 _market 市場風向）
+      ↓ AI 讀 holdings-context.json + lessons.md → Write holdings-notes.json（三面：tech/chip/fund，互不越界）
+                       ＋ Write market-notes.json（市場風向，唯一可談大盤/美股/隔夜的地方）
 screen.ps1           全市場篩選評分 → splice PICKS_KLINE/PICKS_DATA → data/picks.json、screen-summary.json、picks-log.json（20日結案、含息、移動停利；保留最近 120 筆，更舊的移入 data/picks-archive.jsonl）
       ↓ AI 讀 screen-summary.json → Write picks-notes.json + ai-tags.json
 evaluate.ps1         （週五）歸因分組勝率 → eval-report.json → splice evaldata → AI 更新 lessons.md
@@ -58,7 +59,7 @@ server/test_server.py（改 server/ 後必跑）認證、權限、token 隔離
 | `server/` | 多使用者伺服器（Python 標準庫）：`server.py` 路由、`auth.py` 認證、`payload.py` 分級組裝、`admin.py` CLI、`static/` 登入與管理頁 | ✅ 改完跑 `unittest` |
 | `build-demo.ps1`／`run-daily.sh`／`config.example.json` | 公開頁重建／每日流程順序／設定範本 | ✅ |
 | `data/`、`config.json`、`*.db`（gitignored）| 使用者帳號與持股、每日共用產出、部署設定 | ❌ **絕不可 commit** |
-| `holdings-notes.json`／`picks-notes.json`／`ai-tags.json` | AI 每日判讀與標籤 | ❌ 每天覆寫 |
+| `holdings-notes.json`／`market-notes.json`／`picks-notes.json`／`ai-tags.json` | AI 每日判讀與標籤（前兩者 gitignored） | ❌ 每天覆寫 |
 | `holdings-context.json`／`screen-summary.json` | 給 AI 讀的精簡數據（幾 KB）| ❌ 自動產生 |
 | `picks-log.json`／`stance-log.json` | 推薦追蹤與判級**歷史**（讀取失敗 FATAL 保護、絕不清空）| ❌ 引擎維護 |
 | `data/picks-archive.jsonl`（gitignored）| picks-log 保留期外的已結案部位，只 append 不重寫；`evaluate.ps1` 讀 log＋封存 | ❌ 引擎維護 |
@@ -71,8 +72,8 @@ server/test_server.py（改 server/ 後必跑）認證、權限、token 隔離
 
 每日覆寫（手改必被蓋掉）：
 
-- 八個 splice 區塊：`<script id="dashdata">`、`holdingsmeta`、`holdingsnotes`（含 `_market`）、`pkdata`、`pkline`、`pknotes`、`evaldata`（週五）、`backtest`（月跑）
-- 頁面 JS 從資料自動算（別寫死）：Hero 市值/損益/**整體傾向**（heroStance）、大盤數字、**市場風向區**（windBox/miSox/miMood ← `_market`）、權重、今日訊號、績效曲線、集中度警示
+- 九個 splice 區塊：`<script id="dashdata">`、`holdingsmeta`、`holdingsnotes`、`marketnotes`（市場風向，獨立區塊）、`pkdata`、`pkline`、`pknotes`、`evaldata`（週五）、`backtest`（月跑）
+- 頁面 JS 從資料自動算（別寫死）：Hero 市值/損益/**整體傾向**（heroStance）、大盤數字、**市場風向卡**（windBox/nightBox/miSox/miMood ← `window.MARKET`）、個股基本面數字列（← `HOLDINGS_META[code].fund`）、權重、今日訊號、績效曲線、集中度警示
 - HTML 內殘留的行情文字只是 JS 失敗時的 fallback
 
 ✅ **可安全手改**：CSS、版面、圖表函式（`priceChart`/`candleChart`/`volChart`）、互動邏輯、渲染器、「📐 現行選股與評價邏輯」卡（logicCard，**規則改動時必須同步**）、免責文字。

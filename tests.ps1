@@ -53,7 +53,7 @@ Write-Host "[3] extract functions from screen.ps1..."
 $tok=$null;$err=$null
 $ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'screen.ps1'),[ref]$tok,[ref]$err)
 $fns=$ast.FindAll({param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]},$true)
-foreach($n in @('DivSumSince','CheckRevCols')){
+foreach($n in @('DivSumSince')){
   $fd=$fns | Where-Object { $_.Name -eq $n } | Select-Object -First 1
   Assert ($null -ne $fd) "function $n exists"
   if($fd){ Invoke-Expression $fd.Extent.Text }
@@ -273,10 +273,21 @@ try{
 Set-FeedTransport $null
 Remove-Item -Recurse -Force $tmp
 
-Write-Host "[6] CheckRevCols warns on layout change..."
-$fake=@([pscustomobject]@{ A=1; B=2; C=3; D=4; E=5; F=6; G=7; H=8; I=9; J=10 })
-$msgs=@(CheckRevCols $fake 'fixture' 6>&1)
-Assert ($msgs.Count -ge 1 -and "$($msgs[0])" -like '*WARN*') "wrong column names trigger WARN"
+Write-Host "[6] Test-FeedRowFields warns when an endpoint renames a field..."
+# Was CheckRevCols in screen.ps1, which could only detect that column 9 had stopped being called
+# 增減; the revenue endpoints are read by NAME now, so this checks the names we actually read.
+$revF=$FeedFields.Revenue
+$fakeBad=@([pscustomobject]@{ A=1; B=2; C=3; D=4; E=5; F=6; G=7; H=8; I=9; J=10 })
+$msgs=@(Test-FeedRowFields -Rows $fakeBad -Fields $revF -Label 'fixture' 6>&1)
+Assert (@($msgs | Where-Object { "$_" -like '*WARN*' }).Count -ge 1) "a renamed field triggers WARN"
+Assert (@($msgs | Where-Object { "$_" -like '*去年同月增減*' }).Count -ge 1) "the warning names the field that vanished"
+# a response that still carries every mapped name must stay quiet
+$fakeOk=@([pscustomobject]@{ '公司代號'='1101'; '公司名稱'='台泥'; '產業別'='水泥工業'
+                             '營業收入-去年同月增減(%)'='1.53'; '營業收入-上月比較增減(%)'='2.70'
+                             '累計營業收入-前期比較增減(%)'='1.54' })
+$msgsOk=@(Test-FeedRowFields -Rows $fakeOk -Fields $revF -Label 'fixture' 6>&1)
+Assert ((Test-FeedRowFields -Rows $fakeOk -Fields $revF -Label 'fixture') -and @($msgsOk | Where-Object { "$_" -like '*WARN*' }).Count -eq 0) "the real field names pass without warning"
+Assert ((Test-FeedRowFields -Rows @() -Fields $revF -Label 'fixture')) "an empty response is not a layout change"
 
 Write-Host "[7] history-wipe guards (behavioural, not a grep for a comment)..."
 # This used to be `Select-String screen.ps1 'FATAL: picks-log'` - green on a reworded comment,
@@ -381,24 +392,34 @@ Assert (@($hj.trades).Count -eq 0) "holdings.json demo carries no trades (found 
 # The field lists live in page-contract.json now, so assert the contract rather than the source.
 $contract = Get-PageContract
 Assert (@($contract.noteFields.guest).Count -gt 0) "contract declares guest note fields"
-foreach($f in @('rec','news','wind','night')){
+foreach($f in @('rec','news')){
   Assert (@($contract.noteFields.ownerOnly) -contains $f) "contract marks '$f' owner-only"
   Assert (@($contract.noteFields.guest) -notcontains $f) "contract never lets '$f' through to guests"
 }
-# _market has its own allowlist for the same reason; `wind` names owner holdings in prose, and
-# `night` is 若X則Y written against this portfolio's own levels - advice, not a market fact.
-Assert (@($contract.noteFields.marketPublic).Count -gt 0) "contract declares public _market fields"
+# The three guest fields ARE the analysis, one per face, each confined to its own evidence.
+Assert ((@($contract.noteFields.guest) -join ',') -eq 'tech,chip,fund') "contract's guest notes are exactly the three faces (got $(@($contract.noteFields.guest) -join ','))"
+# The market read is its own block with its own policy now, not a `_market` pseudo-code inside
+# the per-code notes; `wind` names owner holdings in prose and `night` is 若X則Y written against
+# this portfolio's own levels - advice, not a market fact.
+Assert (@($contract.marketFields.guest).Count -gt 0) "contract declares shareable market fields"
 foreach($f in @('wind','night')){
-  Assert (@($contract.noteFields.marketPublic) -notcontains $f) "contract keeps _market.$f private"
+  Assert (@($contract.marketFields.ownerOnly) -contains $f) "contract marks market.$f owner-only"
+  Assert (@($contract.marketFields.guest) -notcontains $f) "contract keeps market.$f private"
 }
+Assert ($null -eq $contract.noteFields.marketPublic) "the retired marketPublic list is gone, not left behind to be read by mistake"
+Assert (@($contract.blocks.PSObject.Properties.Name) -contains 'marketnotes') "contract declares the marketnotes block"
 $bd = Get-Content (Join-Path $root 'build-demo.ps1') -Raw
 Assert ($bd -match 'noteFields\.guest') "build-demo filters by the contract's guest field list"
-Assert ($bd -match 'noteFields\.marketPublic') "build-demo filters _market by the contract too"
+Assert ($bd -match 'marketFields\.guest') "build-demo filters the market block by the contract too"
 Assert ($bd -notmatch "@\('windLead','sox','mood','moodK'\)") "build-demo no longer hardcodes the _market list"
 Assert ($bd -notmatch "'rec'") "build-demo never publishes rec"
 # _prevStance's KEY SET is the union of every user's codes; per-demo-code values are fine,
 # publishing the map itself would leak which codes users hold
 Assert ($bd -notmatch "HOLDINGS_META\['_prevStance'\]") "build-demo never publishes the _prevStance union map"
+# `_fund` is the same shape of hazard: its VALUES are exchange figures and safe, but its key set
+# is every user's codes. Per-demo-code copies only, never the map.
+Assert ($bd -notmatch "HOLDINGS_META\['_fund'\]") "build-demo never publishes the _fund union map"
+Assert ($bd -match '_fund.*PSObject\.Properties\[\$c\]') "build-demo copies _fund per demo code, not wholesale"
 # The checks above only prove build-demo.ps1 *can* filter - they say nothing about whether its
 # output survives to the commit. On 2026-07-23/24 it did not: run-daily.sh called build-demo
 # first and publish.ps1's note splice then overwrote the filtered block with the owner's real
@@ -582,13 +603,44 @@ $gc4 = Get-StanceGrade $flat @(@{f=5},@{f=5},@{f=5},@{f=5},@{f=5}) @()
 Assert ($gc4.chip -eq 2 -and $gc4.score -eq 2 -and $gc4.level -eq 'addwatch') "stance: 5 straight buy days -> chip=+2, score +2 is still 'addwatch' (got $($gc4.chip)/$($gc4.score)/$($gc4.level))"
 $gc5 = Get-StanceGrade $flat @(@{f=9},@{f=-1},@{f=-1},@{f=-1},@{f=5}) @()
 Assert ($gc5.chip -eq 1 -and $gc5.level -eq 'addwatch') "stance: score +1 is 'addwatch' (got $($gc5.chip)/$($gc5.level))"
-# two-day confirmation: a new reading has to repeat before it becomes the level we show/log
+# Confirmation (v3). Hysteresis must swallow a one-day blip but ALWAYS make progress: v2 required
+# two identical raw readings, so a reading oscillating between adjacent levels froze the badge
+# forever (47% of live rows sat on a suppressed reading; worst case 9 trade days).
+# $down grades to raw='exit'; 'hold' is 3 rungs away, so it is a real move, not a blip.
 $gp1 = Get-StanceGrade $down @() @() 'hold' 'hold'
-Assert ($gp1.raw -eq 'exit' -and $gp1.level -eq 'hold' -and $gp1.pending) "stance: first day at a new reading keeps the previous level (got $($gp1.level)/raw $($gp1.raw))"
+Assert ($gp1.raw -eq 'exit' -and $gp1.level -eq 'exit') "stance: a jump of 2+ levels takes effect at once, it does not wait for confirmation (got $($gp1.level))"
 $gp2 = Get-StanceGrade $down @() @() 'hold' 'exit'
 Assert ($gp2.level -eq 'exit' -and -not $gp2.pending) "stance: the same reading two days running switches the level (got $($gp2.level))"
-$gp3 = Get-StanceGrade $down @() @() 'hold' 'cut'
-Assert ($gp3.level -eq 'hold') "stance: a different pending reading does not confirm (got $($gp3.level))"
+# an isolated ONE-rung blip is still suppressed - that is the part of v2 worth keeping
+$gp3 = Get-StanceGrade $flat @() @() 'addwatch' 'addwatch'
+Assert ($gp3.raw -eq 'hold' -and $gp3.level -eq 'addwatch' -and $gp3.pending) "stance: an isolated one-rung blip keeps the previous level (got $($gp3.level)/raw $($gp3.raw))"
+# ...but two consecutive days of disagreement resolve, even when they disagree with each other.
+# This is the exact shape that froze code 8150 for five trade days.
+$gp4 = Get-StanceGrade $flat @() @() 'addwatch' 'cut'
+Assert ($gp4.level -eq 'hold') "stance: two days of disagreement resolve even if the two readings differ - no indefinite freeze (got $($gp4.level))"
+# Regression fixture: code 8150's real raw readings, 2026-08-11..08-18, replayed through both
+# confirmation rules. v2 ("two IDENTICAL readings") never resolves once the readings start
+# oscillating, so the badge stayed on 加碼觀察 for all six days while the stock fell from 99.0 to
+# 89.1. v3 must track the bearish turn from 8/14, the day the reading first jumped two rungs.
+$freeze=@('addwatch','hold','addwatch','cut','cutwatch','cut')
+function Replay-Confirmation($readings,$startLevel,$rule){
+  $lvl=$startLevel; $prevRaw=$startLevel; $seen=@()
+  foreach($rw in $readings){
+    $next = & $rule $rw $lvl $prevRaw
+    $seen+=$next; $prevRaw=$rw; $lvl=$next
+  }
+  return $seen
+}
+$v2rule={ param($rw,$lvl,$prevRaw) if($lvl -and $rw -ne $lvl -and $prevRaw -ne $rw){ $lvl } else { $rw } }
+$v3rule={ param($rw,$lvl,$prevRaw)
+  $rk=Get-StanceLevelRank $rw; $rl=Get-StanceLevelRank $lvl; $pr=Get-StanceLevelRank $prevRaw
+  if($null -ne $rl -and $null -ne $rk -and $rk -ne $rl -and [math]::Abs($rk-$rl) -lt 2 -and ($null -eq $pr -or $pr -eq $rl)){ $lvl } else { $rw } }
+$oldSeq=Replay-Confirmation $freeze 'addwatch' $v2rule
+$newSeq=Replay-Confirmation $freeze 'addwatch' $v3rule
+Assert ((@($oldSeq | Where-Object { $_ -eq 'addwatch' }).Count) -eq 6) "stance: the v2 rule really did freeze this sequence for all six days (got $($oldSeq -join '->'))"
+Assert ($newSeq[3] -eq 'cut' -and $newSeq[4] -eq 'cut' -and $newSeq[5] -eq 'cut') "stance: v3 tracks 8150's bearish turn from the two-rung jump onward (got $($newSeq -join '->'))"
+Assert ($newSeq[1] -eq 'addwatch') "stance: v3 still suppresses the isolated one-rung blip on day 2 (got $($newSeq -join '->'))"
+Assert ($StanceEngineVersion -ge 3) "stance: the engine version is stamped so evaluate.ps1 never averages v2 and v3 together"
 # the page's display map must cover exactly the levels the engine can emit
 $idxJs = $idxAll
 foreach($lvl in @('add','addwatch','hold','cutwatch','cut','exit')){
@@ -620,6 +672,61 @@ for($i=0; $i -lt $idxLines.Count; $i++){
 }
 Assert ($unescapedName.Count -eq 0) "index.html escapes every interpolated holding name (unescaped at line(s): $($unescapedName -join ', '))"
 Assert ($idxAll -match 'const html=\(strings') "index.html has the escape-by-default html`` template"
+
+# --- Get-StanceAttribution: is the 判級 grade worth anything? ---------------------------------
+# The engine had no accuracy measurement at all: evaluate.ps1's old block asked for 20 forward
+# rows per code when each code had ~14, so the loop never ran once and the report silently
+# omitted the section for months. These tests pin the replacement's behaviour.
+function New-StanceFixture($code,$closes,$level,$ver,$startDay=10){
+  $rows=@()
+  for($i=0;$i -lt $closes.Count;$i++){
+    $rows += ,([ordered]@{ date=("202601{0:d2}" -f ($startDay+$i)); code=$code
+                           close=$closes[$i]; score=0; stance=$level; raw=$level; v=$ver })
+  }
+  return $rows
+}
+# a rising stock graded 'add' and a falling one graded 'exit' is the ordering holding perfectly
+$fxUp   = New-StanceFixture '1111' @(100,102,104,106,108,110,112,114) 'add'  2
+$fxDown = New-StanceFixture '2222' @(100,98,96,94,92,90,88,86)        'exit' 2
+$saGood = Get-StanceAttribution -Rows ($fxUp+$fxDown) -Windows @(5)
+Assert ($null -ne $saGood) "byStance: a non-empty log must produce a report (guards the case-insensitive local-vs-parameter collision that made this return null for every input)"
+Assert ($saGood.v2.windows.fwd5.monotonicity -eq 100) "byStance: correctly ordered grades score monotonicity 100 (got $($saGood.v2.windows.fwd5.monotonicity))"
+Assert ($saGood.v2.windows.fwd5.inversions -eq 0 -and $saGood.v2.windows.fwd5.pairs -eq 1) "byStance: one level pair, no inversions"
+Assert ($saGood.v2.windows.fwd5.levels.add.avgAlpha -gt 0 -and $saGood.v2.windows.fwd5.levels.exit.avgAlpha -lt 0) "byStance: alpha is cross-sectional, so add and exit land on opposite sides of the same-day mean"
+Assert ($saGood.v2.windows.fwd5.levels.add.provisional) "byStance: a bucket below MinN is flagged provisional, not silently quoted as evidence"
+# swap the labels and the same price action must score exactly inverted
+$fxUpBad   = New-StanceFixture '1111' @(100,102,104,106,108,110,112,114) 'exit' 2
+$fxDownBad = New-StanceFixture '2222' @(100,98,96,94,92,90,88,86)        'add'  2
+$saBad = Get-StanceAttribution -Rows ($fxUpBad+$fxDownBad) -Windows @(5)
+Assert ($saBad.v2.windows.fwd5.monotonicity -eq 0) "byStance: inverted grades score monotonicity 0 (got $($saBad.v2.windows.fwd5.monotonicity))"
+# engine versions are reported side by side and never averaged together - the whole point of `v`
+$saVer = Get-StanceAttribution -Rows ($fxUp + $fxDown +
+  (New-StanceFixture '3333' @(100,98,96,94,92,90,88,86) 'add' 3) +
+  (New-StanceFixture '4444' @(100,102,104,106,108,110,112,114) 'exit' 3)) -Windows @(5)
+Assert ($saVer.Contains('v2') -and $saVer.Contains('v3')) "byStance: each engine version gets its own block"
+Assert ($saVer.v2.windows.fwd5.monotonicity -eq 100 -and $saVer.v3.windows.fwd5.monotonicity -eq 0) "byStance: a good engine and a bad one are not blended into one average (got v2=$($saVer.v2.windows.fwd5.monotonicity) v3=$($saVer.v3.windows.fwd5.monotonicity))"
+# Forward windows count TRADE DAYS IN THE LOG, not rows of this code: a code missing for a day
+# must not be measured over a longer real horizon than the codes it is compared against.
+# Closes rise by 5 a day, and 20260113 is dropped from this code only. Counting trade days gives
+# 25%/23.8%/22.7% (avg 24); counting this code's own rows would skip to the next date and give
+# 30%/28.6% (avg 29). The two answers are far enough apart to tell which one ran.
+$fxGap = @(New-StanceFixture '1111' @(100,105,110,115,120,125,130,135) 'add' 2 | Where-Object { $_.date -ne '20260113' })
+$saGap = Get-StanceAttribution -Rows ($fxGap + $fxDown) -Windows @(5)
+Assert ([math]::Round($saGap.v2.windows.fwd5.levels.add.avgRet,0) -eq 24) "byStance: a one-day gap in a code does not stretch its forward window (trade-day counting gives ~24%, row counting ~29%; got $($saGap.v2.windows.fwd5.levels.add.avgRet)%)"
+# version inference for rows written before the stamp existed
+Assert ((Get-StanceRowVersion ([ordered]@{ date='20260101'; code='2330'; close=1; stance='hold' })) -eq 1) "byStance: a row with no raw is the four-level engine (v1)"
+Assert ((Get-StanceRowVersion ([ordered]@{ date='20260101'; code='2330'; close=1; stance='hold'; raw='hold' })) -eq 2) "byStance: raw but no stamp is the six-level engine (v2)"
+Assert ((Get-StanceRowVersion ([ordered]@{ date='20260101'; code='2330'; close=1; stance='hold'; raw='hold'; v=7 })) -eq 7) "byStance: an explicit v stamp wins over inference"
+# a window with only one level says nothing about order and must not pad the report
+$saOne = Get-StanceAttribution -Rows (New-StanceFixture '1111' @(100,101,102,103,104,105,106,107) 'hold' 2) -Windows @(5)
+Assert ($null -eq $saOne) "byStance: a single level carries no ordering information and is dropped"
+# idx is optional: rows written before it existed must still produce a report
+$noIdx = Get-StanceAttribution -Rows ($fxUp+$fxDown) -Windows @(5)
+Assert ($noIdx.v2.windows.fwd5.nIdx -eq 0 -and $noIdx.v2.windows.fwd5.baseline -eq 'cross-section') "byStance: rows without idx still report, on the cross-sectional baseline"
+# evaluate.ps1 must serialise deep enough for the nested level maps to survive
+$evalSrc = Get-Content (Join-Path $root 'evaluate.ps1') -Raw -Encoding UTF8
+Assert ($evalSrc -match 'ConvertTo-Json -Depth 8') "evaluate.ps1 serialises byStance at a depth that does not truncate levels to a type name"
+Assert ((Get-PageContract).blocks.evaldata.depth -ge 8) "page-contract evaldata depth covers the nested byStance block"
 
 Write-Host "[10] picks-log retention + JSON key stability..."
 # --- Move-SettledPicksToArchive (lib/picks-log.ps1) -------------------------------------------------
@@ -736,6 +843,15 @@ Assert ((Get-RegimeLight -IdxLast 100 -IdxMA20 90 -IdxMA60 80 -InstNet 5 -UpCoun
 Assert ((Get-RegimeLight -IdxLast 70 -IdxMA20 90 -IdxMA60 80 -InstNet 5 -UpCount 600 -DownCount 300) -eq 'red') "regime: below MA60 is red whatever the points say"
 Assert ((Get-RegimeLight -IdxLast 100 -IdxMA20 90 -IdxMA60 80 -InstNet $null -UpCount 200 -DownCount 600) -eq 'yellow') "regime: above MA60 but weak internals = yellow"
 
+# entry gate: red days rank and display as usual but must not be BOOKED as entries. The one
+# attribution finding past n>=10 and stable for four weeks (red: n=16, 19% win, -2.21% alpha).
+Assert (-not (Test-RegimeEntryGate -Light 'red')) "regime gate: red does not book entries"
+Assert ((Test-RegimeEntryGate -Light 'yellow') -and (Test-RegimeEntryGate -Light 'green')) "regime gate: yellow and green still book entries"
+# and screen.ps1 must actually consult it rather than re-deciding inline
+$scrSrc = Get-Content (Join-Path $root 'screen.ps1') -Raw -Encoding UTF8
+Assert ($scrSrc -match 'Test-RegimeEntryGate') "screen.ps1 books entries through the shared gate, not an inline light check"
+Assert ($scrSrc -match '-not \$dateLogged -and -not \$gateRed') "screen.ps1's picks-log append is guarded by the gate"
+
 # chip gate + score
 $stTrust = Get-ChipStats -Trust @(1e5,1e5,1e5,-1,-1) -Foreign @(-1,-1,-1,-1,-1)
 Assert ($stTrust.tPos -eq 3 -and $stTrust.tSum -eq 299998) "chip stats: counts positives, sums EVERY day (got tSum=$($stTrust.tSum))"
@@ -743,10 +859,10 @@ Assert (-not (Test-ChipGate -Stats $stTrust -Profile $PS)) "chip gate: 3 trust d
 $stTrust2 = Get-ChipStats -Trust @(2e5,2e5,2e5,-1,-1) -Foreign @(-1,-1,-1,-1,-1)
 Assert (Test-ChipGate -Stats $stTrust2 -Profile $PS) "chip gate: 3 trust days over the floor -> yes"
 Assert (Test-ChipGate -Stats $stTrust -Profile $PE_) "chip gate: the ETF profile has a lower floor, same shape"
-Assert ((Get-ChipScore -Stats $stTrust2) -eq 15) "chip score: 3 trust days = 15"
-Assert ((Get-ChipScore -Stats $stTrust2 -MarginDown $true) -eq 20) "chip score: margin falling adds 5"
+Assert ((Get-ChipScore -Stats $stTrust2).Raw -eq 15) "chip score: 3 trust days = 15 raw points"
+Assert ((Get-ChipScore -Stats $stTrust2 -MarginDown $true).Raw -eq 20) "chip score: margin falling adds 5"
 $stCap = Get-ChipStats -Trust @(1,1,1,1,1,1,1) -Foreign @(1,1,1,1,1,1,1)
-Assert ((Get-ChipScore -Stats $stCap) -eq 35) "chip score: caps at 25+10"
+Assert ((Get-ChipScore -Stats $stCap).Raw -eq 35) "chip score: caps at 25+10"
 
 # tech: rejections are rejections, not low scores
 $maOk = @{ ma20=90.0; ma20p=88.0; ma60=80.0; ret5=0.05; dist=-0.02 }
@@ -765,17 +881,58 @@ $r=Get-TechScore -Bar $barOk -Ma @{ ma20=90.0; ma20p=88.0; ma60=80.0; ret5=0.22;
 Assert ($r.Drop) "tech: ETF overheats earlier (0.20) than a stock (0.25)"
 # scoring and clamps
 $r=Get-TechScore -Bar $barOk -Ma $maOk -Light 'red' -Profile $PS
-Assert ($r.Score -eq 27) "tech: 10+8+5+4 above all lines, near the high (got $($r.Score))"
+Assert ($r.Raw -eq 27) "tech: 10+8+5+4 above all lines, near the high (got $($r.Raw))"
 $g=Get-TechScore -Bar $barOk -Ma @{ ma20=90.0; ma20p=88.0; ma60=80.0; ret5=0.05; dist=-0.02 } -Light 'green' -Profile $PS
-Assert ($g.Score -eq 30) "tech: green-light momentum reward, then clamped at 30 (got $($g.Score))"
+Assert ($g.Raw -eq 30) "tech: green-light momentum reward, then clamped at 30 (got $($g.Raw))"
 $n=Get-TechScore -Bar $barOk -Ma @{ ma20=90.0; ma20p=88.0; ma60=80.0; ret5=0.05; dist=-0.02 } -Light 'na' -Profile $PS
-Assert ($n.Score -eq 27) "tech: Light='na' (the backtest panel) skips the momentum reward"
+Assert ($n.Raw -eq 27) "tech: Light='na' (the backtest panel) skips the momentum reward"
 
 # fundamentals
-Assert ((Get-FundScore -YoY 120 -PE 12 -DividendYield 5 -Light 'green') -eq 30) "fund: strong on all three, capped at 30"
-Assert ((Get-FundScore -YoY $null -PE $null -DividendYield $null -Light 'red') -eq 0) "fund: nothing known = 0, never a guess"
-Assert ((Get-FundScore -YoY 5 -PE 12 -DividendYield 4 -Light 'red') -gt (Get-FundScore -YoY 5 -PE 12 -DividendYield 4 -Light 'green')) "fund: non-green regimes reward defensive traits"
-Assert ((Get-FundScore -YoY 0 -PE -3 -DividendYield 0 -Light 'red') -eq 0) "fund: a negative PE scores nothing (loss-making)"
+Assert ((Get-FundScore -YoY 120 -PE 12 -DividendYield 5 -Light 'green').Raw -eq 30) "fund: strong on all three, capped at 30"
+Assert ((Get-FundScore -YoY $null -PE $null -DividendYield $null -Light 'red').Raw -eq 0) "fund: nothing known = 0, never a guess"
+Assert ((Get-FundScore -YoY 5 -PE 12 -DividendYield 4 -Light 'red').Raw -gt (Get-FundScore -YoY 5 -PE 12 -DividendYield 4 -Light 'green').Raw) "fund: non-green regimes reward defensive traits"
+Assert ((Get-FundScore -YoY 0 -PE -3 -DividendYield 0 -Light 'red').Raw -eq 0) "fund: a negative PE scores nothing (loss-making)"
+# mom / yoyCum are surfaced as signals but must not (yet) move the score - they have no
+# out-of-sample validation, and fund factors cannot be backtested at all (no revenue history)
+$fA=Get-FundScore -YoY 40 -PE 20 -DividendYield 1 -Light 'red'
+$fB=Get-FundScore -YoY 40 -PE 20 -DividendYield 1 -Light 'red' -MoM -30 -YoYCum -15
+Assert ($fA.Raw -eq $fB.Raw) "fund: revenue acceleration is reported, not yet scored (needs backtest.ps1's gate)"
+Assert (@($fB.Signals | Where-Object { $_.key -eq 'mom' }).Count -eq 1 -and @($fB.Signals | Where-Object { $_.key -eq 'yoyCum' }).Count -eq 1) "fund: mom and cumulative YoY reach the signal list"
+Assert (@($fA.Signals | Where-Object { $_.key -eq 'mom' }).Count -eq 0) "fund: absent fundamentals emit no signal rather than a zero"
+
+# --- three-face normalisation + composite -----------------------------------------------------
+# The faces used to be scored out of 40/30/30 and summed, so a stock maxed at 100 and an ETF at
+# 70 - two different scales printed side by side in the same list. Each face is now 0-100 and the
+# composite is a weighted average.
+$fullChip=Get-ChipScore -Stats (Get-ChipStats -Trust @(1,1,1,1,1,1,1) -Foreign @(1,1,1,1,1,1,1)) -MarginDown $true
+Assert ($fullChip.Raw -eq 40 -and $fullChip.Score -eq 100) "faces: a maxed chip face is 40 raw = 100 normalised"
+Assert ((Get-FundScore -YoY 120 -PE 12 -DividendYield 5 -Light 'green').Score -eq 100) "faces: a maxed fund face normalises to 100"
+Assert ($r.Score -eq [math]::Round(27/30*100,1)) "faces: tech normalises against its own 30-point maximum (got $($r.Score))"
+# THE property that made this rewrite safe to ship: with weights set to the old maxima as
+# fractions, the composite is arithmetically identical to the sum it replaced. Any future weight
+# change breaks this equality on purpose - and must go through backtest.ps1's out-of-sample gate.
+$cS=Get-ChipScore -Stats $stTrust2                                   # raw 15
+$tS=$r                                                                # raw 27
+$fS=Get-FundScore -YoY 40 -PE 20 -DividendYield 1 -Light 'red'        # raw 16
+$comp=Get-CompositeScore -Tech $tS -Chip $cS -Fund $fS -Profile $PS
+Assert ([math]::Abs($comp.Total-($cS.Raw+$tS.Raw+$fS.Raw)) -lt 0.05) "composite: stock weights reproduce the old chip+tech+fund sum exactly (got $($comp.Total) vs $($cS.Raw+$tS.Raw+$fS.Raw))"
+# ETF: no fund face at all, and its weight is redistributed rather than scored as zero
+$compE=Get-CompositeScore -Tech $tS -Chip $cS -Fund $null -Profile $PE_
+Assert ($compE.Total -gt 0 -and $compE.Total -le 100) "composite: an ETF still lands on the 0-100 scale (got $($compE.Total))"
+$compEzero=Get-CompositeScore -Tech $tS -Chip $cS -Fund (New-FaceScore -Raw 0 -Face 'fund') -Profile $PS
+Assert ($compE.Total -gt $compEzero.Total) "composite: a missing fund face is redistributed, not scored as a zero"
+Assert ([math]::Abs($compE.Total-((($cS.Raw+$tS.Raw)/70)*100)) -lt 0.05) "composite: ETF weights are a pure rescale of chip+tech, so ETF ranking is unchanged (got $($compE.Total))"
+# signals are the page's number row: every scoring factor must be itemised
+foreach($k in @('trustDays','foreignDays','marginDown')){
+  Assert (@($fullChip.Signals | Where-Object { $_.key -eq $k }).Count -eq 1) "signals: chip itemises '$k'"
+}
+foreach($k in @('ma20','ma60','ma20slope','distHigh40')){
+  Assert (@($r.Signals | Where-Object { $_.key -eq $k }).Count -eq 1) "signals: tech itemises '$k'"
+}
+Assert ((@($r.Signals | Measure-Object -Property pts -Sum).Sum) -eq $r.Raw) "signals: the itemised points add up to the face's raw score (got $((@($r.Signals | Measure-Object -Property pts -Sum).Sum)) vs $($r.Raw))"
+# a rejection stays a rejection, and carries no misleading signal list
+$dropF=Get-TechScore -Bar $barOk -Ma @{ ma20=90.0; ma20p=88.0; ma60=80.0; ret5=0.30; dist=-0.02 } -Light 'red' -Profile $PS
+Assert ($dropF.Drop -and $dropF.Score -eq 0 -and @($dropF.Signals).Count -eq 0) "faces: a dropped name scores 0 with no signals to read"
 
 # total-return series: the dividend add-back that keeps an ex-div gap from faking a break
 $bars=@(
