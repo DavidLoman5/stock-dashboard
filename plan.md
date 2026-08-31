@@ -139,6 +139,14 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
   未使用可能有誤的 `instNet`。候選解法：先加一支離線測試餵入已知 BFI82U 回應、比對
   `Get-FeedInstitutional`／`Get-FeedMarketInstAmount` 解析出的 instNet 是否與已知正確值相符，
   藉此判斷是解析欄位錯位還是抓取到舊快取。
+  **2026-08-31 三度重現、且根因已確認（不是解析錯位）**：當日 `screen-summary.json` 的
+  `regime.instNet=458`（億元，買超），但新聞查證當天三大法人實際**賣超約267億元**，方向相反。
+  根因是 `screen.ps1:207`（`Get-FeedMarketInstAmount -Date $lastDate`）與「選股基準日落後行情一天」
+  是同一個 `$lastDate`（取自 `STOCK_DAY_ALL`，當天仍停在前一交易日 8/28）——`instNet=458` 其實是
+  **8/28（前一日）的三大法人買超金額**（8/28 大盤大漲356點收高，買超數字合理），不是當天的。
+  這證實候選解法方向正確：`Get-FeedMarketInstAmount` 應該用「已抓到最新的交易日期」而非
+  `STOCK_DAY_ALL` 的 `$lastDate`，兩者本來就該用同一個修法（見下方「選股基準日落後行情一天」）。
+  當日 `_market.wind` 已改用新聞查證後的正確買賣超數字寫作，未使用 `screen-summary.regime.instNet`。
 
 兩處「同一份頁面混用兩個交易日」的問題，都不影響數字正確性，但會讓文字敘述失準：
 
