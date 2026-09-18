@@ -1,11 +1,11 @@
 {
-  "generated": "2026-09-11",
-  "closedN": 87,
+  "generated": "2026-09-18",
+  "closedN": 90,
   "overall": {
-    "n": 87,
-    "winRate": 47.0,
-    "avgAlpha": 0.61,
-    "avgRet": 1.49
+    "n": 90,
+    "winRate": 48.0,
+    "avgAlpha": 0.62,
+    "avgRet": 1.46
   },
   "byReason": {
     "20日到期": {
@@ -15,10 +15,10 @@
       "avgRet": 18.26
     },
     "外資連2日轉賣": {
-      "n": 63,
+      "n": 65,
       "winRate": 43.0,
-      "avgAlpha": -0.08,
-      "avgRet": 1.44
+      "avgAlpha": -0.07,
+      "avgRet": 1.43
     },
     "移動停利（獲利15%+回檔破10日線）": {
       "n": 1,
@@ -27,10 +27,10 @@
       "avgRet": 19.3
     },
     "跌破月線": {
-      "n": 19,
-      "winRate": 47.0,
-      "avgAlpha": -1.43,
-      "avgRet": -2.82
+      "n": 20,
+      "winRate": 50.0,
+      "avgAlpha": -1.24,
+      "avgRet": -2.68
     }
   },
   "byLight": {
@@ -47,13 +47,19 @@
       "avgRet": 3.49
     },
     "yellow": {
-      "n": 38,
-      "winRate": 50.0,
-      "avgAlpha": -0.23,
+      "n": 41,
+      "winRate": 51.0,
+      "avgAlpha": -0.15,
       "avgRet": 0.66
     }
   },
   "byInd": {
+    "其他": {
+      "n": 3,
+      "winRate": 0.0,
+      "avgAlpha": -2.5,
+      "avgRet": -0.57
+    },
     "半導體業": {
       "n": 8,
       "winRate": 25.0,
@@ -73,10 +79,10 @@
       "avgRet": 0.91
     },
     "航運業": {
-      "n": 10,
-      "winRate": 70.0,
-      "avgAlpha": 2.7,
-      "avgRet": 4.83
+      "n": 11,
+      "winRate": 73.0,
+      "avgAlpha": 2.66,
+      "avgRet": 4.39
     },
     "金融保險業": {
       "n": 15,
@@ -105,10 +111,10 @@
       "avgRet": 2.85
     },
     "sustainable": {
-      "n": 57,
-      "winRate": 46.0,
-      "avgAlpha": 0.31,
-      "avgRet": 1.28
+      "n": 60,
+      "winRate": 47.0,
+      "avgAlpha": 0.33,
+      "avgRet": 1.25
     }
   },
   "byChip": {
@@ -119,16 +125,16 @@
       "avgRet": -0.76
     },
     "chip30-37": {
-      "n": 64,
-      "winRate": 45.0,
-      "avgAlpha": -0.11,
-      "avgRet": 1.16
+      "n": 66,
+      "winRate": 47.0,
+      "avgAlpha": -0.04,
+      "avgRet": 1.12
     },
     "chip38+": {
-      "n": 11,
-      "winRate": 18.0,
-      "avgAlpha": -0.26,
-      "avgRet": 2.82
+      "n": 12,
+      "winRate": 17.0,
+      "avgAlpha": -0.43,
+      "avgRet": 2.76
     }
   },
   "byTech": {
@@ -139,16 +145,16 @@
       "avgRet": 1.64
     },
     "tech15-24": {
-      "n": 18,
-      "winRate": 56.0,
-      "avgAlpha": -0.35,
-      "avgRet": 0.26
+      "n": 20,
+      "winRate": 60.0,
+      "avgAlpha": -0.09,
+      "avgRet": 0.23
     },
     "tech25+": {
-      "n": 56,
-      "winRate": 38.0,
-      "avgAlpha": -0.19,
-      "avgRet": 1.68
+      "n": 57,
+      "winRate": 37.0,
+      "avgAlpha": -0.23,
+      "avgRet": 1.69
     }
   },
   "byFund": {
@@ -159,10 +165,10 @@
       "avgRet": 1.38
     },
     "fund20+": {
-      "n": 52,
-      "winRate": 48.0,
-      "avgAlpha": -0.38,
-      "avgRet": 1.33
+      "n": 55,
+      "winRate": 49.0,
+      "avgAlpha": -0.32,
+      "avgRet": 1.29
     }
   },
   "byYoy": {
@@ -173,16 +179,16 @@
       "avgRet": 1.63
     },
     "yoy0-30": {
-      "n": 30,
-      "winRate": 43.0,
-      "avgAlpha": -1.52,
-      "avgRet": 0.02
+      "n": 31,
+      "winRate": 42.0,
+      "avgAlpha": -1.55,
+      "avgRet": 0.09
     },
     "yoy30+": {
-      "n": 41,
-      "winRate": 46.0,
-      "avgAlpha": 0.98,
-      "avgRet": 2.27
+      "n": 43,
+      "winRate": 49.0,
+      "avgAlpha": 1.04,
+      "avgRet": 2.17
     }
   },
   "byStance": {
@@ -282,16 +288,16 @@
         "fwd20": {
           "levels": {
             "add": {
-              "n": 69,
-              "avgRet": 3.88,
-              "avgAlpha": 1.8,
-              "winRate": 68.0
+              "n": 101,
+              "avgRet": 1.96,
+              "avgAlpha": 1.1,
+              "winRate": 63.0
             },
             "addwatch": {
-              "n": 32,
-              "avgRet": 3.14,
-              "avgAlpha": -0.85,
-              "winRate": 53.0
+              "n": 40,
+              "avgRet": 2.36,
+              "avgAlpha": -0.46,
+              "winRate": 50.0
             },
             "hold": {
               "n": 13,
@@ -300,22 +306,22 @@
               "winRate": 62.0
             },
             "cutwatch": {
-              "n": 16,
-              "avgRet": 4.49,
-              "avgAlpha": -0.19,
-              "winRate": 38.0
+              "n": 18,
+              "avgRet": 3.13,
+              "avgAlpha": -0.82,
+              "winRate": 33.0
             },
             "cut": {
-              "n": 16,
-              "avgRet": 0.34,
-              "avgAlpha": -4.9,
-              "winRate": 38.0
+              "n": 18,
+              "avgRet": -0.03,
+              "avgAlpha": -4.48,
+              "winRate": 39.0
             },
             "exit": {
-              "n": 100,
-              "avgRet": 7.6,
-              "avgAlpha": -0.99,
-              "winRate": 38.0
+              "n": 104,
+              "avgRet": 7.41,
+              "avgAlpha": -0.79,
+              "winRate": 40.0
             }
           },
           "pairs": 15,
@@ -327,121 +333,121 @@
       }
     },
     "v3": {
-      "n": 449,
+      "n": 499,
       "windows": {
         "fwd5": {
           "levels": {
             "add": {
-              "n": 104,
-              "avgRet": 0.83,
-              "avgAlpha": -0.42,
-              "winRate": 38.0,
-              "nIdx": 104,
-              "avgAlphaIdx": -0.37
+              "n": 132,
+              "avgRet": 0.15,
+              "avgAlpha": -0.18,
+              "winRate": 45.0,
+              "nIdx": 132,
+              "avgAlphaIdx": -0.44
             },
             "addwatch": {
-              "n": 62,
-              "avgRet": 1.88,
-              "avgAlpha": 0.31,
-              "winRate": 56.0,
-              "nIdx": 62,
-              "avgAlphaIdx": 0.2
+              "n": 71,
+              "avgRet": 1.07,
+              "avgAlpha": 0.04,
+              "winRate": 55.0,
+              "nIdx": 71,
+              "avgAlphaIdx": -0.24
             },
             "hold": {
-              "n": 36,
-              "avgRet": 2.71,
-              "avgAlpha": 0.01,
-              "winRate": 50.0,
-              "nIdx": 36,
-              "avgAlphaIdx": 0.21
+              "n": 42,
+              "avgRet": 1.54,
+              "avgAlpha": -0.43,
+              "winRate": 45.0,
+              "nIdx": 42,
+              "avgAlphaIdx": -0.48
             },
             "cutwatch": {
-              "n": 25,
-              "avgRet": 3.32,
-              "avgAlpha": 1.77,
+              "n": 27,
+              "avgRet": 2.86,
+              "avgAlpha": 1.64,
               "winRate": 44.0,
-              "nIdx": 25,
-              "avgAlphaIdx": 1.86
+              "nIdx": 27,
+              "avgAlphaIdx": 1.61
             },
             "cut": {
-              "n": 13,
-              "avgRet": 4.23,
-              "avgAlpha": 1.81,
-              "winRate": 62.0,
-              "nIdx": 13,
-              "avgAlphaIdx": 1.72
+              "n": 14,
+              "avgRet": 4.22,
+              "avgAlpha": 2.07,
+              "winRate": 64.0,
+              "nIdx": 14,
+              "avgAlphaIdx": 1.88
             },
             "exit": {
-              "n": 69,
-              "avgRet": 1.54,
-              "avgAlpha": -0.63,
-              "winRate": 45.0,
-              "nIdx": 69,
-              "avgAlphaIdx": -0.4
+              "n": 73,
+              "avgRet": 1.41,
+              "avgAlpha": -0.48,
+              "winRate": 47.0,
+              "nIdx": 73,
+              "avgAlphaIdx": -0.34
             }
           },
           "pairs": 15,
-          "inversions": 9,
-          "monotonicity": 40.0,
+          "inversions": 8,
+          "monotonicity": 47.0,
           "baseline": "cross-section",
-          "nIdx": 309
+          "nIdx": 359
         },
         "fwd10": {
           "levels": {
             "add": {
-              "n": 47,
-              "avgRet": 1.62,
-              "avgAlpha": -0.11,
-              "winRate": 47.0,
-              "nIdx": 47,
-              "avgAlphaIdx": -0.4
+              "n": 79,
+              "avgRet": 0.42,
+              "avgAlpha": -0.25,
+              "winRate": 52.0,
+              "nIdx": 79,
+              "avgAlphaIdx": -0.79
             },
             "addwatch": {
-              "n": 47,
-              "avgRet": 3.48,
-              "avgAlpha": 0.7,
-              "winRate": 53.0,
-              "nIdx": 47,
-              "avgAlphaIdx": 0.58
+              "n": 50,
+              "avgRet": 3.1,
+              "avgAlpha": 0.56,
+              "winRate": 52.0,
+              "nIdx": 50,
+              "avgAlphaIdx": 0.39
             },
             "hold": {
-              "n": 19,
-              "avgRet": 4.73,
-              "avgAlpha": 0.5,
-              "winRate": 47.0,
-              "nIdx": 19,
-              "avgAlphaIdx": 1.04
+              "n": 21,
+              "avgRet": 3.6,
+              "avgAlpha": -0.14,
+              "winRate": 43.0,
+              "nIdx": 21,
+              "avgAlphaIdx": 0.26
             },
             "cutwatch": {
-              "n": 14,
-              "avgRet": 0.78,
-              "avgAlpha": -2.28,
-              "winRate": 36.0,
-              "nIdx": 14,
-              "avgAlphaIdx": -2.22
+              "n": 16,
+              "avgRet": 2.4,
+              "avgAlpha": -0.15,
+              "winRate": 44.0,
+              "nIdx": 16,
+              "avgAlphaIdx": -0.21
             },
             "cut": {
-              "n": 11,
-              "avgRet": 5.17,
-              "avgAlpha": 1.56,
-              "winRate": 64.0,
-              "nIdx": 11,
-              "avgAlphaIdx": 1.63
+              "n": 13,
+              "avgRet": 4.43,
+              "avgAlpha": 1.62,
+              "winRate": 62.0,
+              "nIdx": 13,
+              "avgAlphaIdx": 1.53
             },
             "exit": {
-              "n": 37,
-              "avgRet": 2.87,
-              "avgAlpha": -0.61,
-              "winRate": 41.0,
-              "nIdx": 37,
-              "avgAlphaIdx": -0.46
+              "n": 46,
+              "avgRet": 2.06,
+              "avgAlpha": -0.53,
+              "winRate": 43.0,
+              "nIdx": 46,
+              "avgAlphaIdx": -0.6
             }
           },
           "pairs": 15,
           "inversions": 7,
           "monotonicity": 53.0,
           "baseline": "cross-section",
-          "nIdx": 175
+          "nIdx": 225
         }
       }
     }
