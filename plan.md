@@ -357,6 +357,29 @@ briefing 開跑 57 秒就被砍（日誌裡那個有 START 沒 END 的孤兒）�
 **沒做的事**：沒有補跑 09-21～09-25 那 5 天。頁面是當日快照不是逐日報告，
 今晚 20:00 的正常 run 就會把它帶到最新；那幾天的 picks-log／stance-log 條目無法回填。
 
+**後續（同一天發現）：這個 timer 自己的第一次正式點火（09-28 20:00）當場又壞了一次，
+這次是這次遷移自己引入的新 bug**——`stock-briefing.service` 帶了 `NoNewPrivileges=true`
+（合理的 systemd 加固慣例，但沒人拿它跑過一次真的 `pwsh`）。`pwsh` 是 classic confinement
+的 snap，仍要靠 `snap-confine` 透過 file capability（`security.capability` xattr，
+內含 `cap_dac_override`／`cap_setuid` 等）在 `execve()` 時取得權限；核心規則是
+`no_new_privs` 一旦被設定就**擋死所有靠 setuid／file-capability 在 exec 時升權的路徑**，
+不分這個 binary 實際上需不需要那些權限——`snap-confine` 因此直接拒絕啟動
+（`required permitted capability cap_dac_override not found`），連 `sudo` 在同一個
+service 底下也是一樣的死法。這條路徑上的每一支 `pwsh -File ...`（`update-holdings.ps1`／
+`screen.ps1`／`overnight.ps1`／`publish.ps1`⋯）當場全部failed。
+
+**修法沒有動 `NoNewPrivileges=true`**（那個加固沒有錯，錯在沒人知道它會連坐 snap）：
+`/snap/bin/pwsh` 只是個經 `snap run`／`snap-confine` 的殼；真正的執行檔在
+`/snap/powershell/current/opt/powershell/pwsh`（`current` 是 snapd 維護的版本無關符號連結，
+不會因為 revision 升級跟著斷），這支 ELF 本身跑 PowerShell 不需要任何額外 capability，
+只有 snap 自己的 confinement 機外殼需要、而它偏偏走不通。做法：
+`ln -s /snap/powershell/current/opt/powershell/pwsh ~/.local/bin/pwsh`。
+`run-stock-briefing.sh` 第 2 行的 `PATH="$HOME/.local/bin:/snap/bin:..."` 早就把
+`~/.local/bin` 排在 `/snap/bin` 前面（原因不明，但正好接住這個修法），所以不必改
+wrapper 也不必改任何 repo 內腳本——純粹是 `~/` 底下加一個符號連結。
+2026-09-28 當天用這個修法手動跑完整套 `--phase fetch` → `--phase publish --no-push`
+驗證過，往後每天的排程都會自動吃到。
+
 ### 2026-08-19 三面分析重寫：基本面補料、進出場修正、市場風向獨立
 
 使用者的要求是「只用技術面、籌碼面、基本面分析，風向那些獨立一欄我自己讀就好」，追加「現在的進出場建議我覺得不準」。
