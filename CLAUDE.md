@@ -26,8 +26,11 @@
 ## 執行環境：Ubuntu + pwsh 7.6（2026-07-22 起，不再是 Windows PS5.1）
 - 一律 `pwsh -File xxx.ps1`；`-ExecutionPolicy` 在 Linux 無作用；路徑大小寫敏感；`$env:TEMP` 為空（用 `[IO.Path]::GetTempPath()`）
 - PS7 差異（刻意不改程式）：`Out-File -Encoding UTF8` 不寫 BOM（新 JSON 無 BOM、舊檔有，兩者皆可讀）；`ConvertFrom-Json` 陣列 pipeline 陷阱已修，`@()` 包裹留著當跨版本保險
-- 排程：crontab `0 20 * * 1-5 /home/felix/run-stock-briefing.sh`（該 wrapper 以 `claude -p --output-format json --permission-mode auto` 跑 SKILL.md，日誌 `~/stock-briefing-cron.log`）；20:00 已收盤，當日流程用的是**當日**收盤資料。
+- 排程：**systemd user timer `stock-briefing.timer`**（2026-09-28 起，取代 crontab；`~/.config/systemd/user/`，crontab 那行已註解但留著指路）→ `/home/felix/run-stock-briefing.sh`，該 wrapper 以 `claude -p --output-format json --permission-mode auto` 跑 SKILL.md，日誌 `~/stock-briefing-cron.log`；20:00 已收盤，當日流程用的是**當日**收盤資料。
   SKILL.md 步驟四被排程專用提示詞要求用 `run-daily.sh --phase publish --no-push`（commit 但不 push）；`claude -p` 結束後 wrapper 解析 `--output-format json` 讀到今日 token 用量，呼叫 `finish-daily-push.ps1`（deterministic、非 AI）把用量 amend 進那個還沒推的 commit 並完成 push——這樣「今日 token 用量」才能跟今日的儀表板更新同一個 commit 出去，見 `lib/publish-gate.ps1` 的 `-NoPush` 與 `plan.md` 2026-07-25。互動執行（非排程）仍走一般 `--phase publish`，會直接 push，不受影響
+  - 改用 timer 的唯一理由是 **`Persistent=true`**：cron 沒有補跑機制，**每個「20:00 機器剛好沒開」的交易日會零痕跡消失**——沒有日誌、沒有 exit code、沒有 `ALERT.txt`。2026-09 就這樣吃掉 09-21/22/23，而告警檔只記錄到 09-24/25 的 OAuth 失敗，顯示 `consecutive: 2`，實際是連續 5 個交易日沒更新
+  - 另有 **`stock-briefing-staleness.timer`** → `/home/felix/stock-briefing-staleness.sh`（開機後 4 分鐘＋每日 21:30）：直接比對 `window.META.lastTrade` 與日曆來判定過期，**不依賴 run 是否發生過**，所以補得到上面那個盲點。它不會覆寫 wrapper 寫的告警（那個原因更具體），也只清除自己寫的。路徑可用 `SB_PAGE`／`SB_ALERT`／`SB_LOG`／`SB_THRESHOLD` 注入以離線驗證
+  - **查排程狀態一律 `systemctl --user list-timers 'stock-briefing*'`**，不要再看 `crontab -l`
 
 ## 共用模組（2026-07-25 起，`lib/` 與 `page-contract.json`）
 從前每支腳本各自帶一份同樣的邏輯，改一處要記得改六處。現在有單一來源：

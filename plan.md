@@ -318,6 +318,45 @@ v2.2 相對 v2.1 的升級（**數字不可與 v2.1 比較**）：
 
 ## ✅ 已完成
 
+### 2026-09-28 排程改 systemd timer：補上「機器沒開 → 那天零痕跡消失」的盲點
+
+**症狀**：頁面凍結在 2026-09-18，隔了 5 個交易日才被發現。`~/stock-briefing-ALERT.txt` 說
+是 OAuth 過期、`consecutive: 2`，`/login` 之後看起來就修好了——**但那只解釋了 5 天裡的 2 天**。
+
+**真正的拆解**（用 `journalctl --list-boots` 對照每個缺掉的交易日 20:00）：
+
+| 交易日 | 原因 | 痕跡 |
+|---|---|---|
+| 09-21 / 09-22 | 20:00 機器是關機狀態，cron 沒觸發 | **無** |
+| 09-23 | 機器 21:59 才開機，錯過 20:00 | **無** |
+| 09-24 / 09-25 | OAuth 過期，`claude -p` exit 1 | ALERT.txt ＋ 日誌 |
+
+同月 09-15 還有一次更難看的：機器在 **20:00:57** 被正常 `systemd-poweroff` 關掉，
+briefing 開跑 57 秒就被砍（日誌裡那個有 START 沒 END 的孤兒）。九月共 8 次沒跑成。
+
+**根因不是 OAuth，是告警的位置**：wrapper 的告警機制活在 run 裡面，所以它結構上只看得見
+「跑起來又失敗」。`consecutive` 因此會**嚴重低估**凍結長度，而「從來沒跑」這個模式
+完全靜默——沒日誌、沒 exit code、沒告警檔。跟 `publish-allowlist` 那次是同一種錯誤形狀：
+**檢查放在事件旁邊，而不是放在它要守的那個不變式上**。
+
+**做法**（兩者都在 repo 外，`~/.config/systemd/user/` 與 `/home/felix/`）：
+- `stock-briefing.timer`：`OnCalendar=Mon..Fri 20:00` ＋ **`Persistent=true`**，錯過的那次
+  下次開機補跑一次。crontab 那行改成註解並留下指路字句（`crontab -l` 還是有人會先看）。
+  啟用前先 `touch ~/.local/share/systemd/timers/stamp-stock-briefing.timer`——
+  **沒有 stamp 檔時 `Persistent=true` 會在啟用當下立刻補跑一次**，那會在盤中用前一交易日的
+  資料燒掉一次完整 run，晚上再被蓋掉
+- `stock-briefing-staleness.timer` → `stock-briefing-staleness.sh`（開機後 4 分鐘＋每日 21:30）：
+  從 `window.META.lastTrade` 與日曆算過期，**不依賴 run 發生過**，所以補得到上面那個盲點。
+  門檻 5 個日曆日，與 wrapper 既有的檢查同一個數字與同一個取捨（清得掉週末＋假日，
+  農曆年會誤報一次，那個代價比靜默凍結便宜）
+- 兩者的互動有明確分工：staleness **不覆寫** wrapper 寫的告警（那個原因更具體），
+  也**只清除自己寫的**（不替 wrapper 判定已解決）。七個分支都用注入路徑
+  （`SB_PAGE`／`SB_ALERT`／`SB_LOG`／`SB_THRESHOLD`）離線驗過
+- `TimeoutStartSec=45min` 是必須明寫的：`Type=oneshot` 的預設逾時會把跑 13–21 分鐘的 briefing 砍掉
+
+**沒做的事**：沒有補跑 09-21～09-25 那 5 天。頁面是當日快照不是逐日報告，
+今晚 20:00 的正常 run 就會把它帶到最新；那幾天的 picks-log／stance-log 條目無法回填。
+
 ### 2026-08-19 三面分析重寫：基本面補料、進出場修正、市場風向獨立
 
 使用者的要求是「只用技術面、籌碼面、基本面分析，風向那些獨立一欄我自己讀就好」，追加「現在的進出場建議我覺得不準」。

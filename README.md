@@ -99,7 +99,7 @@ server/test_server.py（改 server/ 後必跑）認證、權限、token 隔離
 
 讓每天的 Claude「做什麼」的指令**不在這個 repo**，而在使用者本機 `~/.claude/scheduled-tasks/daily-tw-stock-briefing/SKILL.md`。所以**只看 GitHub 的 AI 改得到「程式與資料」，改不到「流程指令本身」**。
 
-排程現況（2026-07-22 遷移 Ubuntu 後重建）：使用者 crontab `0 20 * * 1-5 /home/felix/run-stock-briefing.sh`，wrapper 以 `claude -p --permission-mode auto` 執行上述 SKILL.md，日誌寫 `~/stock-briefing-cron.log`。時段由舊機的 08:30（跑前一日收盤）改為**收盤後 20:00**（當日收盤資料當天就進頁面）。
+排程現況（2026-07-22 遷移 Ubuntu 後重建，2026-09-28 由 crontab 改為 systemd user timer）：`stock-briefing.timer`（`OnCalendar=Mon..Fri 20:00`＋`Persistent=true`，開機會補跑錯過的那次）觸發 `/home/felix/run-stock-briefing.sh`，wrapper 以 `claude -p --permission-mode auto` 執行上述 SKILL.md，日誌寫 `~/stock-briefing-cron.log`。另有 `stock-briefing-staleness.timer` 獨立偵測「頁面靜默凍結」——它從頁面自己的 `lastTrade` 判斷，不依賴 run 發生過。時段由舊機的 08:30（跑前一日收盤）改為**收盤後 20:00**（當日收盤資料當天就進頁面）。
 
 ## 技術棧
 
