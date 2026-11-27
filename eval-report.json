@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-20",
+  "generated": "2026-11-27",
   "closedN": 153,
   "overall": {
     "n": 153,
@@ -357,7 +357,7 @@
       }
     },
     "v3": {
-      "n": 1218,
+      "n": 1243,
       "windows": {
         "fwd5": {
           "levels": {
@@ -386,35 +386,35 @@
               "avgAlphaIdx": -0.69
             },
             "cutwatch": {
-              "n": 106,
-              "avgRet": -3.44,
-              "avgAlpha": -0.12,
+              "n": 110,
+              "avgRet": -3.35,
+              "avgAlpha": -0.23,
               "winRate": 40.0,
-              "nIdx": 106,
-              "avgAlphaIdx": -0.5
+              "nIdx": 110,
+              "avgAlphaIdx": -0.57
             },
             "cut": {
-              "n": 52,
-              "avgRet": -4.23,
-              "avgAlpha": -0.45,
-              "winRate": 50.0,
-              "nIdx": 52,
-              "avgAlphaIdx": -1.03
+              "n": 54,
+              "avgRet": -4.33,
+              "avgAlpha": -0.51,
+              "winRate": 48.0,
+              "nIdx": 54,
+              "avgAlphaIdx": -1.06
             },
             "exit": {
-              "n": 238,
-              "avgRet": -4.13,
-              "avgAlpha": -0.4,
-              "winRate": 42.0,
-              "nIdx": 238,
-              "avgAlphaIdx": -0.92
+              "n": 257,
+              "avgRet": -3.79,
+              "avgAlpha": -0.3,
+              "winRate": 44.0,
+              "nIdx": 257,
+              "avgAlphaIdx": -0.76
             }
           },
           "pairs": 15,
-          "inversions": 3,
-          "monotonicity": 80.0,
+          "inversions": 4,
+          "monotonicity": 73.0,
           "baseline": "cross-section",
-          "nIdx": 1063
+          "nIdx": 1088
         },
         "fwd10": {
           "levels": {
@@ -427,85 +427,85 @@
               "avgAlphaIdx": -1.07
             },
             "addwatch": {
-              "n": 144,
-              "avgRet": 0.63,
-              "avgAlpha": 2.02,
+              "n": 150,
+              "avgRet": 0.14,
+              "avgAlpha": 1.96,
               "winRate": 62.0,
-              "nIdx": 144,
-              "avgAlphaIdx": 1.49
+              "nIdx": 150,
+              "avgAlphaIdx": 1.39
             },
             "hold": {
-              "n": 112,
-              "avgRet": -4.44,
-              "avgAlpha": -0.99,
-              "winRate": 44.0,
-              "nIdx": 112,
-              "avgAlphaIdx": -1.74
+              "n": 115,
+              "avgRet": -4.75,
+              "avgAlpha": -1.03,
+              "winRate": 43.0,
+              "nIdx": 115,
+              "avgAlphaIdx": -1.8
             },
             "cutwatch": {
-              "n": 82,
-              "avgRet": -4.55,
-              "avgAlpha": -1.03,
-              "winRate": 39.0,
-              "nIdx": 82,
-              "avgAlphaIdx": -1.65
+              "n": 87,
+              "avgRet": -4.92,
+              "avgAlpha": -0.89,
+              "winRate": 43.0,
+              "nIdx": 87,
+              "avgAlphaIdx": -1.55
             },
             "cut": {
-              "n": 39,
-              "avgRet": -2.64,
-              "avgAlpha": 2.19,
-              "winRate": 69.0,
-              "nIdx": 39,
-              "avgAlphaIdx": 1.56
+              "n": 40,
+              "avgRet": -2.87,
+              "avgAlpha": 2.07,
+              "winRate": 68.0,
+              "nIdx": 40,
+              "avgAlphaIdx": 1.45
             },
             "exit": {
-              "n": 187,
-              "avgRet": -5.92,
-              "avgAlpha": -0.79,
+              "n": 197,
+              "avgRet": -6.68,
+              "avgAlpha": -0.75,
               "winRate": 47.0,
-              "nIdx": 187,
-              "avgAlphaIdx": -1.39
+              "nIdx": 197,
+              "avgAlphaIdx": -1.5
             }
           },
           "pairs": 15,
-          "inversions": 7,
-          "monotonicity": 53.0,
+          "inversions": 8,
+          "monotonicity": 47.0,
           "baseline": "cross-section",
-          "nIdx": 914
+          "nIdx": 939
         },
         "fwd20": {
           "levels": {
             "add": {
-              "n": 262,
-              "avgRet": -6.67,
-              "avgAlpha": -0.41,
-              "winRate": 52.0,
-              "nIdx": 262,
-              "avgAlphaIdx": -2.48
+              "n": 273,
+              "avgRet": -7.68,
+              "avgAlpha": -0.46,
+              "winRate": 51.0,
+              "nIdx": 273,
+              "avgAlphaIdx": -2.75
             },
             "addwatch": {
-              "n": 110,
-              "avgRet": 0.51,
-              "avgAlpha": 2.58,
-              "winRate": 65.0,
-              "nIdx": 110,
-              "avgAlphaIdx": 0.87
+              "n": 113,
+              "avgRet": -0.08,
+              "avgAlpha": 2.75,
+              "winRate": 66.0,
+              "nIdx": 113,
+              "avgAlphaIdx": 0.88
             },
             "hold": {
-              "n": 89,
-              "avgRet": -5.04,
-              "avgAlpha": -2.91,
-              "winRate": 37.0,
-              "nIdx": 89,
-              "avgAlphaIdx": -4.78
+              "n": 97,
+              "avgRet": -7.02,
+              "avgAlpha": -2.75,
+              "winRate": 38.0,
+              "nIdx": 97,
+              "avgAlphaIdx": -5.09
             },
             "cutwatch": {
-              "n": 55,
-              "avgRet": -4.65,
-              "avgAlpha": -0.35,
+              "n": 57,
+              "avgRet": -5.41,
+              "avgAlpha": -0.36,
               "winRate": 49.0,
-              "nIdx": 55,
-              "avgAlphaIdx": -2.4
+              "nIdx": 57,
+              "avgAlphaIdx": -2.59
             },
             "cut": {
               "n": 23,
@@ -516,19 +516,19 @@
               "avgAlphaIdx": 4.75
             },
             "exit": {
-              "n": 113,
-              "avgRet": -1.1,
-              "avgAlpha": -0.4,
-              "winRate": 51.0,
-              "nIdx": 113,
-              "avgAlphaIdx": -1.9
+              "n": 114,
+              "avgRet": -1.31,
+              "avgAlpha": -0.39,
+              "winRate": 52.0,
+              "nIdx": 114,
+              "avgAlphaIdx": -1.95
             }
           },
           "pairs": 15,
           "inversions": 9,
           "monotonicity": 40.0,
           "baseline": "cross-section",
-          "nIdx": 652
+          "nIdx": 677
         }
       }
     }
